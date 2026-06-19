@@ -1696,7 +1696,7 @@ client.on('messageCreate', async (message) => {
     try {
       const roles = await message.guild.roles.fetch();
       for (const [id, role] of roles) {
-        if (role.isRawPositionWithoutGuildEveryoneAndEveryone() || role.managed || botMember.roles.cache.has(role.id)) {
+        if (role.position >= botMember.roles.highest.position || role.managed || botMember.roles.cache.has(role.id)) {
           continue;
         }
 
@@ -2852,7 +2852,7 @@ const apiServer = http.createServer((req, res) => {
             const roleStates = {};
             const roles = await guild.roles.fetch();
             for (const [id, role] of roles) {
-              if (role.isRawPositionWithoutGuildEveryoneAndEveryone() || role.managed || botMember.roles.cache.has(role.id)) {
+              if (role.position >= botMember.roles.highest.position || role.managed || botMember.roles.cache.has(role.id)) {
                 continue;
               }
               if (role.id === guild.roles.everyone.id) {
