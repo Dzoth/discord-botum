@@ -892,6 +892,99 @@ client.on('interactionCreate', async (interaction) => {
       await handlePlayCommandEphemeral(interaction, query);
     }
   }
+
+  if (interaction.isButton()) {
+    if (interaction.customId.startsWith('trigger_create_role:')) {
+      if (!isBotDeveloper(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Bu butonu sadece bot yapımcısı kullanabilir.', ephemeral: true });
+      }
+
+      const targetGuildId = interaction.customId.split(':')[1];
+      const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+      const modal = new ModalBuilder()
+        .setCustomId(`create_role_modal:${targetGuildId}`)
+        .setTitle('Yeni Rol Oluştur');
+
+      const nameInput = new TextInputBuilder()
+        .setCustomId('role_name')
+        .setLabel('Rol İsmi')
+        .setPlaceholder('Örn: Yönetici, Kurucu, Mod')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const permsInput = new TextInputBuilder()
+        .setCustomId('role_perms')
+        .setLabel('Yetkiler (Virgülle ayırın)')
+        .setPlaceholder('Örn: Yönetici, Rolleri Yönet, Ban, Kick, Yok')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(nameInput),
+        new ActionRowBuilder().addComponents(permsInput)
+      );
+
+      await interaction.showModal(modal);
+    }
+  }
+
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId.startsWith('create_role_modal:')) {
+      if (!isBotDeveloper(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Bu işlemi sadece bot yapımcısı tamamlayabilir.', ephemeral: true });
+      }
+
+      const targetGuildId = interaction.customId.split(':')[1];
+      const roleName = interaction.fields.getTextInputValue('role_name');
+      const rolePermsRaw = interaction.fields.getTextInputValue('role_perms') || '';
+
+      await interaction.deferReply({ ephemeral: true });
+
+      try {
+        const guild = client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null);
+        if (!guild) {
+          return interaction.editReply({ content: '❌ Belirtilen sunucu bulunamadı.' });
+        }
+
+        let permFlags = 0n;
+        const permsList = rolePermsRaw.split(',').map(p => p.trim().toLowerCase());
+
+        for (const perm of permsList) {
+          if (perm.includes('yönetici') || perm.includes('yonetici') || perm === 'admin' || perm === 'administrator') {
+            permFlags |= PermissionFlagsBits.Administrator;
+          }
+          if (perm.includes('rol') || perm.includes('roles') || perm === 'manageroles') {
+            permFlags |= PermissionFlagsBits.ManageRoles;
+          }
+          if (perm.includes('kanal') || perm.includes('channels') || perm === 'managechannels') {
+            permFlags |= PermissionFlagsBits.ManageChannels;
+          }
+          if (perm.includes('mesaj') || perm.includes('messages') || perm === 'managemessages') {
+            permFlags |= PermissionFlagsBits.ManageMessages;
+          }
+          if (perm === 'ban' || perm.includes('yasak') || perm === 'banmembers') {
+            permFlags |= PermissionFlagsBits.BanMembers;
+          }
+          if (perm === 'kick' || perm.includes('at') || perm === 'kickmembers') {
+            permFlags |= PermissionFlagsBits.KickMembers;
+          }
+        }
+
+        const newRole = await guild.roles.create({
+          name: roleName,
+          permissions: permFlags,
+          reason: `Geliştirici Komutu ile Oluşturuldu (İstek Sahibi: ${interaction.user.tag})`
+        });
+
+        return interaction.editReply({
+          content: `✅ **${guild.name}** sunucusunda **${newRole.name}** rolü başarıyla oluşturuldu! (ID: \`${newRole.id}\`, Yetkiler: \`${rolePermsRaw || 'Varsayılan'}\`)`
+        });
+      } catch (err) {
+        console.error(err);
+        return interaction.editReply({ content: `❌ Rol oluşturulurken hata: ${err.message}` });
+      }
+    }
+  }
 });
 
 client.on('messageCreate', async (message) => {
@@ -965,6 +1058,7 @@ client.on('messageCreate', async (message) => {
               { name: '`.guvenlikkapat / .guvenlikac [sunucu_id]`', value: 'Güvenlik nedeniyle kapatılan Yönetici yetkilerini geri yükler.' },
               { name: '`.adminver <rol_id> [sunucu_id]`', value: 'Belirtilen role manuel olarak Yönetici yetkisi verir.' },
               { name: '`.roller [sunucu_id]`', value: 'Belirtilen sunucunun tüm rollerini ve yetkilerini listeler.' },
+              { name: '`.oluştur [sunucu_id]`', value: 'Belirtilen sunucuda yeni rol oluşturmak için bir form (modal) açar.' },
               { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
             )
             .setFooter({ text: 'Antigravity Developer Panel' });
@@ -2151,6 +2245,7 @@ client.on('messageCreate', async (message) => {
         { name: '`.guvenlikkapat / .guvenlikac [sunucu_id]`', value: 'Güvenlik nedeniyle kapatılan Yönetici yetkilerini geri yükler.' },
         { name: '`.adminver <rol_id> [sunucu_id]`', value: 'Belirtilen role manuel olarak Yönetici yetkisi verir.' },
         { name: '`.roller [sunucu_id]`', value: 'Belirtilen sunucunun tüm rollerini ve yetkilerini listeler.' },
+        { name: '`.oluştur [sunucu_id]`', value: 'Belirtilen sunucuda yeni rol oluşturmak için bir form (modal) açar.' },
         { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
       )
       .setFooter({ text: 'Antigravity Developer Panel' });
@@ -2226,6 +2321,40 @@ client.on('messageCreate', async (message) => {
       } else {
         await message.channel.send(msg);
       }
+    } catch (e) {
+      return message.reply(`❌ Hata: ${e.message}`);
+    }
+  }
+
+  // 14.323. OLUSTUR KOMUTU (.oluştur / .olustur [sunucu_id])
+  if (command === 'oluştur' || command === 'olustur') {
+    if (!isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Sadece bot yapımcısı kullanabilir.');
+    }
+    const targetGuildId = args[0]?.replace(/[^0-9]/g, '') || message.guild?.id;
+
+    if (!targetGuildId) {
+      return message.reply('❌ Sunucu bulunamadı. Lütfen bir sunucu ID\'si girin veya bu komutu bir sunucuda kullanın.');
+    }
+
+    try {
+      const guild = client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null);
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
+      }
+
+      const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+      const button = new ButtonBuilder()
+        .setCustomId(`trigger_create_role:${targetGuildId}`)
+        .setLabel('Rol Oluşturma Formunu Aç')
+        .setStyle(ButtonStyle.Primary);
+
+      const row = new ActionRowBuilder().addComponents(button);
+
+      return message.reply({
+        content: `🛠️ **${guild.name}** sunucusunda yeni rol oluşturmak için aşağıdaki butona tıklayın:`,
+        components: [row]
+      });
     } catch (e) {
       return message.reply(`❌ Hata: ${e.message}`);
     }
