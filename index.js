@@ -26,6 +26,14 @@ function isBotDeveloper(userId) {
   return botOwners.includes(userId);
 }
 
+function formatMsTime(ms) {
+  if (isNaN(ms) || ms < 0) return '00:00';
+  const totalSecs = Math.floor(ms / 1000);
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
 function loadSicil() {
   try {
     if (fs.existsSync('sicil.json')) {
@@ -1390,10 +1398,43 @@ client.on('messageCreate', async (message) => {
     }
 
     const trackName = spotify.details;
-    const artists = spotify.state;
+    const artists = spotify.state ? spotify.state.replace(/;/g, ', ') : 'Bilinmiyor';
     const album = spotify.assets ? spotify.assets.largeText : 'Bilinmiyor';
 
-    return message.reply(`🎵 **${member.displayName}** şu anda Spotify dinliyor:\n**Şarkı:** ${trackName}\n**Sanatçı:** ${artists}\n**Albüm:** ${album}`);
+    // Get cover image URL
+    let coverUrl = '';
+    if (spotify.assets && spotify.assets.largeImage) {
+      if (spotify.assets.largeImage.startsWith('spotify:')) {
+        coverUrl = `https://i.scdn.co/image/${spotify.assets.largeImage.replace('spotify:', '')}`;
+      } else {
+        coverUrl = spotify.assets.largeImageURL();
+      }
+    }
+
+    // Timestamps and progress bar calculations
+    let duration = 0;
+    let elapsed = 0;
+    let progress = 0;
+    if (spotify.timestamps && spotify.timestamps.start && spotify.timestamps.end) {
+      duration = spotify.timestamps.end - spotify.timestamps.start;
+      elapsed = Math.min(Date.now() - spotify.timestamps.start, duration);
+      progress = duration > 0 ? elapsed / duration : 0;
+    }
+
+    const totalBars = 22;
+    const progressIndex = Math.min(Math.floor(progress * totalBars), totalBars);
+    const progressBar = '─'.repeat(progressIndex) + '●' + '─'.repeat(Math.max(0, totalBars - progressIndex - 1));
+
+    const embed = new EmbedBuilder()
+      .setColor('#1db954')
+      .setTitle(trackName)
+      .setDescription(`**${artists}**\n*${album}*\n\n${progressBar}\n\`${formatMsTime(elapsed)}\`${' '.repeat(34)}\`${formatMsTime(duration)}\``);
+
+    if (coverUrl) {
+      embed.setThumbnail(coverUrl);
+    }
+
+    return message.reply({ embeds: [embed] });
   }
 
   // 10. SICIL KOMUTU (.sicil <id>)
