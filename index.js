@@ -582,8 +582,8 @@ client.on('guildAuditLogEntryCreate', async (entry, guild) => {
 // Helper to resolve user ID from mention or plain ID
 function resolveUserId(arg) {
   if (!arg) return null;
-  const match = arg.match(/^<@!?(\d+)>$/) || arg.match(/^(\d+)$/);
-  return match ? match[1] : null;
+  const cleaned = arg.replace(/[^0-9]/g, '');
+  return cleaned || null;
 }
 
 async function getYTInstance() {
@@ -1201,7 +1201,7 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen yasaklamak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.ban @kullanıcı` veya `.ban 1234567890`');
     }
 
-    const targetGuildId = args[1];
+    const targetGuildId = args[1]?.replace(/[^0-9]/g, '');
     if (targetGuildId && !isBotDeveloper(message.author.id)) {
       return message.reply('❌ Farklı bir sunucuda ban işlemi yapmak sadece bot yapımcısına özeldir.');
     }
@@ -1234,7 +1234,7 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen yasağını kaldırmak istediğiniz kullanıcının ID\'sini girin. Örnek: `.unban 1234567890`');
     }
 
-    const targetGuildId = args[1];
+    const targetGuildId = args[1]?.replace(/[^0-9]/g, '');
     if (targetGuildId && !isBotDeveloper(message.author.id)) {
       return message.reply('❌ Farklı bir sunucuda ban kaldırma işlemi yapmak sadece bot yapımcısına özeldir.');
     }
@@ -1384,7 +1384,7 @@ client.on('messageCreate', async (message) => {
 
     const userId = resolveUserId(args[0]);
     const durationStr = args[1];
-    const targetGuildId = args[2];
+    const targetGuildId = args[2]?.replace(/[^0-9]/g, '');
 
     if (!userId || !durationStr) {
       return message.reply('⚠️ Yanlış kullanım! Örnek: `.mute @kullanıcı 10m` veya `.mute 1234567890 1h` (m: dakika, h: saat, d: gün)');
@@ -1440,7 +1440,7 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen zaman aşımını kaldırmak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.unmute @kullanıcı`');
     }
 
-    const targetGuildId = args[1];
+    const targetGuildId = args[1]?.replace(/[^0-9]/g, '');
     if (targetGuildId && !isBotDeveloper(message.author.id)) {
       return message.reply('❌ Farklı bir sunucuda mute kaldırma işlemi yapmak sadece bot yapımcısına özeldir.');
     }
@@ -1771,7 +1771,7 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen rol vermek istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.rolver @kullanıcı`');
     }
 
-    const targetGuildId = args[1];
+    const targetGuildId = args[1]?.replace(/[^0-9]/g, '');
     if (targetGuildId && !isBotDeveloper(message.author.id)) {
       return message.reply('❌ Farklı bir sunucuda rol yönetimi yapmak sadece bot yapımcısına özeldir.');
     }
@@ -1883,7 +1883,7 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen rolünü almak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.rolal @kullanıcı`');
     }
 
-    const targetGuildId = args[1];
+    const targetGuildId = args[1]?.replace(/[^0-9]/g, '');
     if (targetGuildId && !isBotDeveloper(message.author.id)) {
       return message.reply('❌ Farklı bir sunucuda rol yönetimi yapmak sadece bot yapımcısına özeldir.');
     }
@@ -2071,7 +2071,7 @@ client.on('messageCreate', async (message) => {
     }
 
     const roleToMoveId = args[0]?.replace(/[^0-9]/g, '');
-    const targetGuildId = args[1];
+    const targetGuildId = args[1]?.replace(/[^0-9]/g, '');
 
     if (!roleToMoveId) {
       return message.reply('⚠️ Kullanım: `.üst <taşınacak_rol_id> [sunucu_id]`');
