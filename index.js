@@ -871,6 +871,47 @@ client.on('messageCreate', async (message) => {
   console.log(`[Mesaj Alindi] Gonderen: ${message.author.tag} | Icerik: '${message.content}'`);
   if (message.author.bot) return;
 
+  // Handle DM messages for developer
+  if (message.guild === null) {
+    if (isBotDeveloper(message.author.id)) {
+      if (message.content.startsWith(config.prefix)) {
+        const args = message.content.slice(config.prefix.length).trim().split(/ +/);
+        const command = args.shift().toLowerCase();
+
+        if (command === 'yaz') {
+          const channelId = args[0];
+          const msgContent = args.slice(1).join(' ');
+
+          if (!channelId || !msgContent) {
+            return message.author.send('⚠️ Kullanım: `.yaz <kanal_id> <mesaj>`').catch(() => null);
+          }
+
+          try {
+            const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(() => null);
+            if (!channel) {
+              return message.author.send('❌ Belirtilen kanal bulunamadı veya bot bu kanala erişemiyor.').catch(() => null);
+            }
+
+            if (!channel.isTextBased()) {
+              return message.author.send('❌ Belirtilen kanal bir yazı kanalı değil.').catch(() => null);
+            }
+
+            await channel.send({
+              content: msgContent,
+              allowedMentions: { parse: ['everyone', 'users', 'roles'] }
+            });
+
+            return message.author.send(`✅ Mesaj başarıyla <#${channelId}> kanalına gönderildi.`).catch(() => null);
+          } catch (error) {
+            console.error(error);
+            return message.author.send('❌ Mesaj gönderilirken bir hata oluştu.').catch(() => null);
+          }
+        }
+      }
+    }
+    return;
+  }
+
   updateAktiviteStreak(message.author.id);
 
   // Autoresponder trigger check
@@ -1853,6 +1894,45 @@ client.on('messageCreate', async (message) => {
     } catch (error) {
       console.error(error);
       return message.reply('❌ Kullanıcı bilgileri veya roller yüklenirken bir hata oluştu.');
+    }
+  }
+
+  // 14.31. YAZ KOMUTU (.yaz <kanal_id> <mesaj>)
+  if (command === 'yaz') {
+    if (!isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Bu komut sadece bot yapımcısına özeldir.');
+    }
+
+    const channelId = args[0];
+    const msgContent = args.slice(1).join(' ');
+
+    if (!channelId || !msgContent) {
+      return message.reply('⚠️ Kullanım: `.yaz <kanal_id> <mesaj>`');
+    }
+
+    try {
+      const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(() => null);
+      if (!channel) {
+        return message.reply('❌ Belirtilen kanal bulunamadı veya bot bu kanala erişemiyor.');
+      }
+
+      if (!channel.isTextBased()) {
+        return message.reply('❌ Belirtilen kanal bir yazı kanalı değil.');
+      }
+
+      await channel.send({
+        content: msgContent,
+        allowedMentions: { parse: ['everyone', 'users', 'roles'] }
+      });
+
+      // Send confirmation to Developer DM
+      await message.author.send(`✅ Mesaj başarıyla <#${channelId}> kanalına gönderildi.`).catch(() => null);
+      
+      // Delete the command message in the current server channel so nobody sees it
+      await message.delete().catch(() => null);
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Mesaj gönderilirken bir hata oluştu.');
     }
   }
 
