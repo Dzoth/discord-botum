@@ -15,7 +15,7 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('uncaughtException', (err, origin) => {
   console.error('Uncaught Exception:', err, 'origin:', origin);
 });
-const { Client, GatewayIntentBits, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, PermissionFlagsBits, EmbedBuilder, Partials } = require('discord.js');
 const ms = require('ms');
 const config = require('./config');
 const fs = require('fs');
@@ -381,8 +381,10 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildPresences,
-    GatewayIntentBits.GuildVoiceStates
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.DirectMessages
   ],
+  partials: [Partials.Channel],
   presence: {
     status: 'dnd'
   }
@@ -1472,7 +1474,7 @@ client.on('messageCreate', async (message) => {
     const embed = new EmbedBuilder()
       .setColor('#1db954')
       .setTitle(trackName)
-      .setDescription(`${artists}\n${album}\n\n${progressBar}\n\`${formatMsTime(elapsed)}\`${' '.repeat(30)}\`${formatMsTime(duration)}\`\n\n    🔀    ⏮    ⏸    ⏭    🔁`);
+      .setDescription(`${artists}\n${album}\n\n${progressBar}\n\`${formatMsTime(elapsed)}\`${' '.repeat(30)}\`${formatMsTime(duration)}\``);
 
     if (coverUrl) {
       embed.setThumbnail(coverUrl);
