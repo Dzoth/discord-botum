@@ -132,6 +132,31 @@ function saveLimitTakip(data) {
   } catch (e) {}
 }
 
+function loadGuvenlikDurum() {
+  try {
+    if (fs.existsSync('guvenlik_durum.json')) {
+      return JSON.parse(fs.readFileSync('guvenlik_durum.json', 'utf8'));
+    }
+  } catch (e) {
+    console.error('Error loading guvenlik_durum.json:', e);
+  }
+  return {};
+}
+
+function saveGuvenlikDurum(data) {
+  try {
+    if (Object.keys(data).length === 0) {
+      if (fs.existsSync('guvenlik_durum.json')) {
+        fs.unlinkSync('guvenlik_durum.json');
+      }
+    } else {
+      fs.writeFileSync('guvenlik_durum.json', JSON.stringify(data, null, 2), 'utf8');
+    }
+  } catch (e) {
+    console.error('Error saving guvenlik_durum.json:', e);
+  }
+}
+
 function logEvent(level, module, message) {
   const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
   const logLine = `[${timestamp}] [${level}] [${module}] ${message}\n`;
@@ -936,7 +961,8 @@ client.on('messageCreate', async (message) => {
               { name: '`.üst <taşınacak_rol_id> [sunucu_id]`', value: 'Rolü taşımak için butonlar ve hedef rol seçimi içeren bir arayüz açar. Sunucu ID girilirse o sunucuda yapar.' },
               { name: '`.koru`', value: 'Acil durum korumasını açar (tüm kanalları kilitler).' },
               { name: '`.korumayıkapat` / `.koruac`', value: 'Acil durum korumasını kapatır (kanal kilitlerini kaldırır).' },
-              { name: '`.guvenlik`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır/kaldırır.' },
+              { name: '`.guvenlik [sunucu_id]`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır.' },
+              { name: '`.guvenlikkapat / .guvenlikac [sunucu_id]`', value: 'Güvenlik nedeniyle kapatılan Yönetici yetkilerini geri yükler.' },
               { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
             )
             .setFooter({ text: 'Antigravity Developer Panel' });
@@ -1168,7 +1194,7 @@ client.on('messageCreate', async (message) => {
   logEvent('INFO', 'Command', `User: ${message.author.tag} (ID: ${message.author.id}) invoked command: .${command} in channel: #${message.channel.name} (ID: ${message.channel.id})`);
 
   const modCommands = ['ban', 'unban', 'kick', 'e', 'k', 'vip', 'mute', 'unmute', 'lock', 'unlock', 'sil', 'engelle', 'kod', 'rolver', 'rolal'];
-  const ownerCommands = ['koru', 'korumayikapat', 'korumayıkapat', 'koruac', 'guvenlik', 'guvenlikac', 'limit'];
+  const ownerCommands = ['koru', 'korumayikapat', 'korumayıkapat', 'koruac', 'guvenlik', 'guvenlikac', 'guvenlikkapat', 'limit'];
 
   // Developer Bypass
   const isDev = isBotDeveloper(message.author.id);
@@ -1682,23 +1708,42 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // 13. GUVENLIK KOMUTU (.guvenlik)
+  // 13. GUVENLIK KOMUTU (.guvenlik [sunucu_id])
   if (command === 'guvenlik') {
-    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return message.reply('❌ Bu komutu kullanmak için **Yönetici** (Administrator) yetkisine sahip olmalısınız.');
+    const targetGuildId = args[0]?.replace(/[^0-9]/g, '');
+
+    if (targetGuildId && !isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Farklı bir sunucuda güvenlik işlemi yapmak sadece bot yapımcısına özeldir.');
     }
 
-    await message.channel.send('🚨 **Rol Güvenlik Modu Aktif Ediliyor!** Tüm rollerin Yönetici (Administrator) yetkileri kapatılıyor...');
+    if (!targetGuildId) {
+      if (!message.guild) {
+        return message.reply('❌ Bu komut sadece sunucularda kullanılabilir.');
+      }
+      if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return message.reply('❌ Bu komutu kullanmak için **Yönetici** (Administrator) yetkisine sahip olmalısınız.');
+      }
+    }
 
     try {
-      const botMember = message.guild.members.me || await message.guild.members.fetch(client.user.id).catch(() => null);
+      const guild = targetGuildId 
+        ? (client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null))
+        : message.guild;
+
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
+      }
+
+      await message.channel.send(`🚨 **Rol Güvenlik Modu Aktif Ediliyor (${guild.name})!** Tüm rollerin Yönetici (Administrator) yetkileri kapatılıyor...`);
+
+      const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
       if (!botMember) {
         throw new Error('Botun sunucudaki üye bilgileri alınamadı.');
       }
 
       const botHighestPos = botMember.roles.highest ? botMember.roles.highest.position : 0;
       const roleStates = {};
-      const roles = await message.guild.roles.fetch();
+      const roles = await guild.roles.fetch();
 
       for (const [id, role] of roles) {
         if (role.position >= botHighestPos || role.managed || botMember.roles.cache.has(role.id)) {
@@ -1706,7 +1751,7 @@ client.on('messageCreate', async (message) => {
         }
 
         // @everyone rolünü elle geç
-        if (role.id === message.guild.roles.everyone.id) {
+        if (role.id === guild.roles.everyone.id) {
           continue;
         }
 
@@ -1721,29 +1766,52 @@ client.on('messageCreate', async (message) => {
         }
       }
 
-      fs.writeFileSync('guvenlik_durum.json', JSON.stringify(roleStates, null, 2), 'utf8');
-      return message.channel.send('🔒 **İşlem Tamamlandı!** Yetkili rollerin Yönetici izinleri geçici olarak alındı.');
+      const allStates = loadGuvenlikDurum();
+      allStates[guild.id] = roleStates;
+      saveGuvenlikDurum(allStates);
+
+      return message.channel.send(`🔒 **İşlem Tamamlandı!** **${guild.name}** sunucusundaki yetkili rollerin Yönetici izinleri geçici olarak alındı.`);
     } catch (e) {
       console.error(e);
       return message.reply(`❌ Roller düzenlenirken bir hata oluştu: ${e.message}`);
     }
   }
 
-  // 14. GUVENLIKAC KOMUTU (.guvenlikac)
-  if (command === 'guvenlikac') {
-    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return message.reply('❌ Bu komutu kullanmak için **Yönetici** (Administrator) yetkisine sahip olmalısınız.');
+  // 14. GUVENLIKAC / GUVENLIKKAPAT KOMUTU (.guvenlikac / .guvenlikkapat [sunucu_id])
+  if (command === 'guvenlikac' || command === 'guvenlikkapat') {
+    const targetGuildId = args[0]?.replace(/[^0-9]/g, '');
+
+    if (targetGuildId && !isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Farklı bir sunucuda güvenlik işlemi yapmak sadece bot yapımcısına özeldir.');
     }
 
-    if (!fs.existsSync('guvenlik_durum.json')) {
-      return message.reply('❌ Kayıtlı bir güvenlik durumu bulunamadı.');
+    if (!targetGuildId) {
+      if (!message.guild) {
+        return message.reply('❌ Bu komut sadece sunucularda kullanılabilir.');
+      }
+      if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return message.reply('❌ Bu komutu kullanmak için **Yönetici** (Administrator) yetkisine sahip olmalısınız.');
+      }
     }
-
-    await message.channel.send('🔓 **Rol Güvenlik Modu Kapatılıyor...** Yönetici yetkileri geri yükleniyor...');
 
     try {
-      const roleStates = JSON.parse(fs.readFileSync('guvenlik_durum.json', 'utf8'));
-      const roles = await message.guild.roles.fetch();
+      const guild = targetGuildId 
+        ? (client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null))
+        : message.guild;
+
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
+      }
+
+      const allStates = loadGuvenlikDurum();
+      if (!allStates[guild.id]) {
+        return message.reply(`❌ **${guild.name}** sunucusu için kayıtlı bir güvenlik durumu bulunamadı.`);
+      }
+
+      await message.channel.send(`🔓 **Rol Güvenlik Modu Kapatılıyor (${guild.name})...** Yönetici yetkileri geri yükleniyor...`);
+
+      const roleStates = allStates[guild.id];
+      const roles = await guild.roles.fetch();
 
       for (const roleId in roleStates) {
         const role = roles.get(roleId);
@@ -1757,8 +1825,10 @@ client.on('messageCreate', async (message) => {
         }
       }
 
-      fs.unlinkSync('guvenlik_durum.json');
-      return message.channel.send('✅ **İşlem Tamamlandı!** Tüm yetkili rollerin Yönetici izinleri geri yüklendi.');
+      delete allStates[guild.id];
+      saveGuvenlikDurum(allStates);
+
+      return message.channel.send(`✅ **İşlem Tamamlandı!** **${guild.name}** sunucusundaki tüm yetkili rollerin Yönetici izinleri geri yüklendi.`);
     } catch (e) {
       console.error(e);
       return message.reply(`❌ Roller geri yüklenirken bir hata oluştu: ${e.message}`);
@@ -2059,7 +2129,8 @@ client.on('messageCreate', async (message) => {
         { name: '`.üst <taşınacak_rol_id> [sunucu_id]`', value: 'Rolü taşımak için butonlar ve hedef rol seçimi içeren bir arayüz açar. Sunucu ID girilirse o sunucuda yapar.' },
         { name: '`.koru`', value: 'Acil durum korumasını açar (tüm kanalları kilitler).' },
         { name: '`.korumayıkapat` / `.koruac`', value: 'Acil durum korumasını kapatır (kanal kilitlerini kaldırır).' },
-        { name: '`.guvenlik`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır/kaldırır.' },
+        { name: '`.guvenlik [sunucu_id]`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır.' },
+        { name: '`.guvenlikkapat / .guvenlikac [sunucu_id]`', value: 'Güvenlik nedeniyle kapatılan Yönetici yetkilerini geri yükler.' },
         { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
       )
       .setFooter({ text: 'Antigravity Developer Panel' });
@@ -2851,7 +2922,8 @@ const apiServer = http.createServer((req, res) => {
           const guild = client.guilds.cache.get(guildId);
           if (!guild) return sendJSON(404, { error: 'Guild not found' });
 
-          const botMember = guild.members.me;
+          const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
+          if (!botMember) return sendJSON(500, { error: 'Bot member fetch failed' });
 
           if (enabled) {
             const roleStates = {};
@@ -2874,12 +2946,15 @@ const apiServer = http.createServer((req, res) => {
                 }
               }
             }
-            fs.writeFileSync('guvenlik_durum.json', JSON.stringify(roleStates, null, 2), 'utf8');
-            logEvent("INFO", "Security", `Role Security enabled via website`);
+            const allStates = loadGuvenlikDurum();
+            allStates[guild.id] = roleStates;
+            saveGuvenlikDurum(allStates);
+            logEvent("INFO", "Security", `Role Security enabled via website for guild ${guild.name} (${guild.id})`);
           } else {
-            if (fs.existsSync('guvenlik_durum.json')) {
+            const allStates = loadGuvenlikDurum();
+            if (allStates[guild.id]) {
               try {
-                const roleStates = JSON.parse(fs.readFileSync('guvenlik_durum.json', 'utf8'));
+                const roleStates = allStates[guild.id];
                 const roles = await guild.roles.fetch();
 
                 for (const roleId in roleStates) {
@@ -2893,12 +2968,13 @@ const apiServer = http.createServer((req, res) => {
                     }
                   }
                 }
-                fs.unlinkSync('guvenlik_durum.json');
+                delete allStates[guild.id];
+                saveGuvenlikDurum(allStates);
               } catch (err) {
                 console.error(err);
               }
             }
-            logEvent("INFO", "Security", `Role Security disabled via website`);
+            logEvent("INFO", "Security", `Role Security disabled via website for guild ${guild.name} (${guild.id})`);
           }
           return sendJSON(200, { success: true });
         }
