@@ -2951,6 +2951,12 @@ const apiServer = http.createServer((req, res) => {
     res.end(JSON.stringify(data));
   };
 
+  if (req.method === 'GET' && req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Bot API is running!');
+    return;
+  }
+
   if (req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
