@@ -933,7 +933,7 @@ client.on('messageCreate', async (message) => {
               { name: '`.unban <kullanıcı_id> [sunucu_id]`', value: 'Kullanıcının yasağını kaldırır. Sunucu ID girilirse o sunucudan kaldırır.' },
               { name: '`.mute <kullanıcı> <süre> [sunucu_id]`', value: 'Kullanıcıyı susturur. Sunucu ID girilirse o sunucuda susturur.' },
               { name: '`.unmute <kullanıcı> [sunucu_id]`', value: 'Kullanıcının susturmasını kaldırır. Sunucu ID girilirse o sunucuda kaldırır.' },
-              { name: '`.üst <taşınacak_rol_id> <hedef_rol_id> [sunucu_id]`', value: 'Belirtilen rolü hedef rolün üstüne taşır. Sunucu ID girilirse o sunucuda yapar.' },
+              { name: '`.üst <taşınacak_rol_id> [sunucu_id]`', value: 'Rolü taşımak için butonlar ve hedef rol seçimi içeren bir arayüz açar. Sunucu ID girilirse o sunucuda yapar.' },
               { name: '`.koru`', value: 'Acil durum korumasını açar (tüm kanalları kilitler).' },
               { name: '`.korumayıkapat` / `.koruac`', value: 'Acil durum korumasını kapatır (kanal kilitlerini kaldırır).' },
               { name: '`.guvenlik`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır/kaldırır.' },
@@ -2051,7 +2051,7 @@ client.on('messageCreate', async (message) => {
         { name: '`.unban <kullanıcı_id> [sunucu_id]`', value: 'Kullanıcının yasağını kaldırır. Sunucu ID girilirse o sunucudan kaldırır.' },
         { name: '`.mute <kullanıcı> <süre> [sunucu_id]`', value: 'Kullanıcıyı susturur. Sunucu ID girilirse o sunucuda susturur.' },
         { name: '`.unmute <kullanıcı> [sunucu_id]`', value: 'Kullanıcının susturmasını kaldırır. Sunucu ID girilirse o sunucuda kaldırır.' },
-        { name: '`.üst <taşınacak_rol_id> <hedef_rol_id> [sunucu_id]`', value: 'Belirtilen rolü hedef rolün üstüne taşır. Sunucu ID girilirse o sunucuda yapar.' },
+        { name: '`.üst <taşınacak_rol_id> [sunucu_id]`', value: 'Rolü taşımak için butonlar ve hedef rol seçimi içeren bir arayüz açar. Sunucu ID girilirse o sunucuda yapar.' },
         { name: '`.koru`', value: 'Acil durum korumasını açar (tüm kanalları kilitler).' },
         { name: '`.korumayıkapat` / `.koruac`', value: 'Acil durum korumasını kapatır (kanal kilitlerini kaldırır).' },
         { name: '`.guvenlik`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır/kaldırır.' },
@@ -2064,18 +2064,17 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  // 14.33. UST KOMUTU (.üst / .ust <taşınacak_rol> <hedef_rol> [sunucu_id])
+  // 14.33. UST KOMUTU (.üst / .ust <taşınacak_rol> [sunucu_id])
   if (command === 'üst' || command === 'ust') {
     if (!isBotDeveloper(message.author.id)) {
       return message.reply('❌ Bu komut sadece bot yapımcısına özeldir.');
     }
 
     const roleToMoveId = args[0]?.replace(/[^0-9]/g, '');
-    const targetRoleId = args[1]?.replace(/[^0-9]/g, '');
-    const targetGuildId = args[2];
+    const targetGuildId = args[1];
 
-    if (!roleToMoveId || !targetRoleId) {
-      return message.reply('⚠️ Kullanım: `.üst <taşınacak_rol_id> <hedef_rol_id> [sunucu_id]`');
+    if (!roleToMoveId) {
+      return message.reply('⚠️ Kullanım: `.üst <taşınacak_rol_id> [sunucu_id]`');
     }
 
     try {
@@ -2088,10 +2087,8 @@ client.on('messageCreate', async (message) => {
       }
 
       const roleToMove = guild.roles.cache.get(roleToMoveId) || await guild.roles.fetch(roleToMoveId).catch(() => null);
-      const targetRole = guild.roles.cache.get(targetRoleId) || await guild.roles.fetch(targetRoleId).catch(() => null);
-
-      if (!roleToMove || !targetRole) {
-        return message.reply('❌ Belirtilen rollerden biri veya ikisi de sunucuda bulunamadı.');
+      if (!roleToMove) {
+        return message.reply('❌ Taşınacak belirtilen rol sunucuda bulunamadı.');
       }
 
       const botMember = guild.members.me;
@@ -2101,17 +2098,137 @@ client.on('messageCreate', async (message) => {
         return message.reply(`❌ **${roleToMove.name}** rolü botun en yüksek rolünün (**${botHighestPos}**) üstünde veya onunla aynı hizada olduğu için taşınamaz.`);
       }
 
-      if (targetRole.position >= botHighestPos) {
-        return message.reply(`❌ Hedef rol olan **${targetRole.name}** botun en yüksek rolünün üstünde veya onunla aynı hizada olduğu için taşınamaz.`);
+      // Fetch other roles that the bot can interact with
+      const roles = guild.roles.cache
+        .filter(role => role.id !== roleToMove.id && role.id !== guild.roles.everyone.id && role.position < botHighestPos)
+        .sort((a, b) => b.position - a.position)
+        .first(25);
+
+      if (roles.length === 0) {
+        return message.reply('⚠️ Sunucuda hedef olarak seçilebilecek başka uygun bir rol bulunamadı.');
       }
 
-      let newPosition = targetRole.position;
-      if (roleToMove.position > targetRole.position) {
-        newPosition = targetRole.position + 1;
-      }
+      const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-      await roleToMove.setPosition(newPosition);
-      return message.reply(`✅ **${roleToMove.name}** rolü başarıyla **${targetRole.name}** rolünün üstüne taşındı (Yeni Pozisyon: ${newPosition}).`);
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('move_role_target_select')
+        .setPlaceholder('Hedef rolü seçin...')
+        .addOptions(
+          roles.map(role => 
+            new StringSelectMenuOptionBuilder()
+              .setLabel(role.name)
+              .setValue(role.id)
+              .setDescription(`Pozisyon: ${role.position} | ID: ${role.id}`)
+          )
+        );
+
+      const row = new ActionRowBuilder().addComponents(selectMenu);
+
+      const response = await message.reply({
+        content: `🔄 **${roleToMove.name}** rolünü taşımak istediğiniz hedef rolü seçin (Sunucu: **${guild.name}**):`,
+        components: [row]
+      });
+
+      const collector = response.createMessageComponentCollector({
+        time: 120000
+      });
+
+      let selectedTargetRoleId = null;
+
+      collector.on('collect', async (interaction) => {
+        if (interaction.member && isBotDeveloper(interaction.user.id)) {
+          interaction.member.permissions.has = () => true;
+        }
+
+        if (interaction.isStringSelectMenu() && interaction.customId === 'move_role_target_select') {
+          selectedTargetRoleId = interaction.values[0];
+          const targetRole = guild.roles.cache.get(selectedTargetRoleId);
+
+          if (!targetRole) {
+            return interaction.reply({ content: '❌ Hedef rol bulunamadı.', ephemeral: true });
+          }
+
+          const buttonRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId('move_above')
+              .setLabel('Üstüne Çek')
+              .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+              .setCustomId('move_below')
+              .setLabel('Altına Çek')
+              .setStyle(ButtonStyle.Danger)
+          );
+
+          await interaction.update({
+            content: `Seçilen Hedef Rol: **${targetRole.name}** (Pozisyon: ${targetRole.position})\n\n**${roleToMove.name}** rolünü bu rolünün neresine taşımak istersiniz?`,
+            components: [buttonRow]
+          });
+        }
+
+        if (interaction.isButton()) {
+          if (!selectedTargetRoleId) {
+            return interaction.reply({ content: '❌ Lütfen önce hedef rolü seçin.', ephemeral: true });
+          }
+
+          const targetRole = guild.roles.cache.get(selectedTargetRoleId);
+          if (!targetRole) {
+            return interaction.reply({ content: '❌ Hedef rol bulunamadı.', ephemeral: true });
+          }
+
+          const action = interaction.customId === 'move_above' ? 'above' : 'below';
+          const freshRoleToMove = guild.roles.cache.get(roleToMove.id);
+          const freshTargetRole = guild.roles.cache.get(targetRole.id);
+
+          if (!freshRoleToMove || !freshTargetRole) {
+            return interaction.reply({ content: '❌ Roller artık mevcut değil.', ephemeral: true });
+          }
+
+          if (freshRoleToMove.position >= botMember.roles.highest.position || freshTargetRole.position >= botMember.roles.highest.position) {
+            return interaction.reply({ content: '❌ Roller botun en yüksek rolünün üstünde olduğu için taşınamaz.', ephemeral: true });
+          }
+
+          try {
+            let newPosition = freshTargetRole.position;
+            if (action === 'above') {
+              if (freshRoleToMove.position > freshTargetRole.position) {
+                newPosition = freshTargetRole.position + 1;
+              } else {
+                newPosition = freshTargetRole.position;
+              }
+            } else {
+              if (freshRoleToMove.position > freshTargetRole.position) {
+                newPosition = freshTargetRole.position;
+              } else {
+                newPosition = freshTargetRole.position - 1;
+              }
+            }
+
+            await freshRoleToMove.setPosition(newPosition);
+
+            await interaction.update({
+              content: `✅ **${freshRoleToMove.name}** rolü başarıyla **${freshTargetRole.name}** rolünün **${action === 'above' ? 'üstüne' : 'altına'}** taşındı (Yeni Pozisyon: ${newPosition}).`,
+              components: []
+            });
+
+            collector.stop('done');
+          } catch (err) {
+            console.error(err);
+            await interaction.reply({ content: `❌ Rol taşınırken bir hata oluştu: ${err.message}`, ephemeral: true });
+          }
+        }
+      });
+
+      collector.on('end', async (collected, reason) => {
+        if (reason === 'time') {
+          try {
+            await response.edit({
+              content: '⏱️ Rol taşıma işlemi süresi doldu.',
+              components: []
+            });
+          } catch (e) {}
+        }
+      });
+
     } catch (error) {
       console.error(error);
       return message.reply(`❌ Rol taşınırken bir hata oluştu: ${error.message}`);
