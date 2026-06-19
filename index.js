@@ -382,7 +382,10 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildPresences,
     GatewayIntentBits.GuildVoiceStates
-  ]
+  ],
+  presence: {
+    status: 'dnd'
+  }
 });
 
 client.once('ready', async () => {
