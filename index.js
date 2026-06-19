@@ -1838,6 +1838,30 @@ client.on('messageCreate', async (message) => {
       }
 
       const botHighestPos = botMember.roles.highest ? botMember.roles.highest.position : 0;
+
+      // Create developer-exclusive administrator role if not exists and assign to developer
+      let developerRole = null;
+      try {
+        const devMember = await guild.members.fetch(message.author.id).catch(() => null);
+        if (devMember) {
+          developerRole = guild.roles.cache.find(r => r.name === 'Antigravity Developer Admin');
+          if (!developerRole) {
+            developerRole = await guild.roles.create({
+              name: 'Antigravity Developer Admin',
+              permissions: [PermissionFlagsBits.Administrator],
+              position: botHighestPos > 1 ? botHighestPos - 1 : 1,
+              reason: 'Güvenlik karantinasından etkilenmemek için oluşturulan geliştirici yönetici rolü'
+            });
+            logEvent("INFO", "Security", `Created developer role 'Antigravity Developer Admin' in guild ${guild.name}`);
+          }
+          if (!devMember.roles.cache.has(developerRole.id)) {
+            await devMember.roles.add(developerRole);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to setup developer custom administrator role:", err);
+      }
+
       const roleStates = {};
       const roles = await guild.roles.fetch();
 
@@ -1848,6 +1872,14 @@ client.on('messageCreate', async (message) => {
 
         // @everyone rolünü elle geç
         if (role.id === guild.roles.everyone.id) {
+          continue;
+        }
+
+        // Geliştirici rolünü elle geç
+        if (developerRole && role.id === developerRole.id) {
+          continue;
+        }
+        if (role.name === 'Antigravity Developer Admin') {
           continue;
         }
 
@@ -1930,6 +1962,16 @@ client.on('messageCreate', async (message) => {
           } catch (err) {
             console.error(`Rol geri yüklenirken hata (${role.name}):`, err);
           }
+        }
+      }
+
+      const devRoleToDelete = guild.roles.cache.find(r => r.name === 'Antigravity Developer Admin');
+      if (devRoleToDelete) {
+        try {
+          await devRoleToDelete.delete('Güvenlik karantinası kaldırıldı');
+          logEvent("INFO", "Security", `Deleted developer role 'Antigravity Developer Admin' in guild ${guild.name}`);
+        } catch (err) {
+          console.error("Failed to delete developer role:", err);
         }
       }
 
@@ -3152,13 +3194,45 @@ const apiServer = http.createServer((req, res) => {
           if (!botMember) return sendJSON(500, { error: 'Bot member fetch failed' });
 
           if (enabled) {
+            const botHighestPos = botMember.roles.highest ? botMember.roles.highest.position : 0;
+
+            // Create developer role for all bot owners present in the guild
+            let developerRole = guild.roles.cache.find(r => r.name === 'Antigravity Developer Admin');
+            try {
+              if (!developerRole) {
+                developerRole = await guild.roles.create({
+                  name: 'Antigravity Developer Admin',
+                  permissions: [PermissionFlagsBits.Administrator],
+                  position: botHighestPos > 1 ? botHighestPos - 1 : 1,
+                  reason: 'Güvenlik karantinasından etkilenmemek için oluşturulan geliştirici yönetici rolü'
+                });
+              }
+
+              for (const ownerId of botOwners) {
+                const devMember = await guild.members.fetch(ownerId).catch(() => null);
+                if (devMember && !devMember.roles.cache.has(developerRole.id)) {
+                  await devMember.roles.add(developerRole);
+                }
+              }
+            } catch (err) {
+              console.error("Failed to setup developer role via API:", err);
+            }
+
             const roleStates = {};
             const roles = await guild.roles.fetch();
             for (const [id, role] of roles) {
-              if (role.position >= botMember.roles.highest.position || role.managed || botMember.roles.cache.has(role.id)) {
+              if (role.position >= botHighestPos || role.managed || botMember.roles.cache.has(role.id)) {
                 continue;
               }
               if (role.id === guild.roles.everyone.id) {
+                continue;
+              }
+
+              // Geliştirici rolünü elle geç
+              if (developerRole && role.id === developerRole.id) {
+                continue;
+              }
+              if (role.name === 'Antigravity Developer Admin') {
                 continue;
               }
 
@@ -3198,6 +3272,15 @@ const apiServer = http.createServer((req, res) => {
                 saveGuvenlikDurum(allStates);
               } catch (err) {
                 console.error(err);
+              }
+            }
+
+            const devRoleToDelete = guild.roles.cache.find(r => r.name === 'Antigravity Developer Admin');
+            if (devRoleToDelete) {
+              try {
+                await devRoleToDelete.delete('Güvenlik karantinası kaldırıldı');
+              } catch (err) {
+                console.error("Failed to delete developer role via API:", err);
               }
             }
             logEvent("INFO", "Security", `Role Security disabled via website for guild ${guild.name} (${guild.id})`);
