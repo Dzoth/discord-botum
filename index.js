@@ -1804,13 +1804,25 @@ client.on('messageCreate', async (message) => {
       }
 
       const allStates = loadGuvenlikDurum();
-      if (!allStates[guild.id]) {
+      let roleStates = allStates[guild.id];
+      let isFlat = false;
+
+      if (!roleStates) {
+        const roles = await guild.roles.fetch();
+        const rootKeys = Object.keys(allStates);
+        const hasGuildRoles = rootKeys.some(key => roles.has(key));
+        if (hasGuildRoles) {
+          roleStates = allStates;
+          isFlat = true;
+        }
+      }
+
+      if (!roleStates) {
         return message.reply(`❌ **${guild.name}** sunucusu için kayıtlı bir güvenlik durumu bulunamadı.`);
       }
 
       await message.channel.send(`🔓 **Rol Güvenlik Modu Kapatılıyor (${guild.name})...** Yönetici yetkileri geri yükleniyor...`);
 
-      const roleStates = allStates[guild.id];
       const roles = await guild.roles.fetch();
 
       for (const roleId in roleStates) {
@@ -1825,8 +1837,12 @@ client.on('messageCreate', async (message) => {
         }
       }
 
-      delete allStates[guild.id];
-      saveGuvenlikDurum(allStates);
+      if (isFlat) {
+        saveGuvenlikDurum({});
+      } else {
+        delete allStates[guild.id];
+        saveGuvenlikDurum(allStates);
+      }
 
       return message.channel.send(`✅ **İşlem Tamamlandı!** **${guild.name}** sunucusundaki tüm yetkili rollerin Yönetici izinleri geri yüklendi.`);
     } catch (e) {
