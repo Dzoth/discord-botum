@@ -1690,13 +1690,18 @@ client.on('messageCreate', async (message) => {
 
     await message.channel.send('🚨 **Rol Güvenlik Modu Aktif Ediliyor!** Tüm rollerin Yönetici (Administrator) yetkileri kapatılıyor...');
 
-    const roleStates = {};
-    const botMember = message.guild.members.me;
-
     try {
+      const botMember = message.guild.members.me || await message.guild.members.fetch(client.user.id).catch(() => null);
+      if (!botMember) {
+        throw new Error('Botun sunucudaki üye bilgileri alınamadı.');
+      }
+
+      const botHighestPos = botMember.roles.highest ? botMember.roles.highest.position : 0;
+      const roleStates = {};
       const roles = await message.guild.roles.fetch();
+
       for (const [id, role] of roles) {
-        if (role.position >= botMember.roles.highest.position || role.managed || botMember.roles.cache.has(role.id)) {
+        if (role.position >= botHighestPos || role.managed || botMember.roles.cache.has(role.id)) {
           continue;
         }
 
@@ -1720,7 +1725,7 @@ client.on('messageCreate', async (message) => {
       return message.channel.send('🔒 **İşlem Tamamlandı!** Yetkili rollerin Yönetici izinleri geçici olarak alındı.');
     } catch (e) {
       console.error(e);
-      return message.reply('❌ Roller düzenlenirken bir hata oluştu.');
+      return message.reply(`❌ Roller düzenlenirken bir hata oluştu: ${e.message}`);
     }
   }
 
@@ -1756,7 +1761,7 @@ client.on('messageCreate', async (message) => {
       return message.channel.send('✅ **İşlem Tamamlandı!** Tüm yetkili rollerin Yönetici izinleri geri yüklendi.');
     } catch (e) {
       console.error(e);
-      return message.reply('❌ Roller geri yüklenirken bir hata oluştu.');
+      return message.reply(`❌ Roller geri yüklenirken bir hata oluştu: ${e.message}`);
     }
   }
 
