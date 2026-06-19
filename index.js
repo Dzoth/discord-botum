@@ -1467,12 +1467,12 @@ client.on('messageCreate', async (message) => {
 
     const totalBars = 22;
     const progressIndex = Math.min(Math.floor(progress * totalBars), totalBars);
-    const progressBar = '─'.repeat(progressIndex) + '●' + '─'.repeat(Math.max(0, totalBars - progressIndex - 1));
+    const progressBar = '▬'.repeat(progressIndex) + '⚪' + '▬'.repeat(Math.max(0, totalBars - progressIndex - 1));
 
     const embed = new EmbedBuilder()
       .setColor('#1db954')
       .setTitle(trackName)
-      .setDescription(`**${artists}**\n*${album}*\n\n${progressBar}\n\`${formatMsTime(elapsed)}\`${' '.repeat(34)}\`${formatMsTime(duration)}\``);
+      .setDescription(`${artists}\n${album}\n\n${progressBar}\n\`${formatMsTime(elapsed)}\`${' '.repeat(30)}\`${formatMsTime(duration)}\``);
 
     if (coverUrl) {
       embed.setThumbnail(coverUrl);
