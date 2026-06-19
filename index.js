@@ -1472,7 +1472,7 @@ client.on('messageCreate', async (message) => {
     const embed = new EmbedBuilder()
       .setColor('#1db954')
       .setTitle(trackName)
-      .setDescription(`${artists}\n${album}\n\n${progressBar}\n\`${formatMsTime(elapsed)}\`${' '.repeat(30)}\`${formatMsTime(duration)}\``);
+      .setDescription(`${artists}\n${album}\n\n${progressBar}\n\`${formatMsTime(elapsed)}\`${' '.repeat(30)}\`${formatMsTime(duration)}\`\n\n    🔀    ⏮    ⏸    ⏭    🔁`);
 
     if (coverUrl) {
       embed.setThumbnail(coverUrl);
