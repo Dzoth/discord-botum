@@ -1629,7 +1629,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // 14.2. ROLVER KOMUTU (.rolver <@id>)
+  // 14.2. ROLVER KOMUTU (.rolver <@id> [sunucu_id])
   if (command === 'rolver') {
     if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
       return message.reply('❌ Bu komutu kullanmak için **Rolleri Yönet** (Manage Roles) yetkisine sahip olmalısınız.');
@@ -1640,15 +1640,28 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen rol vermek istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.rolver @kullanıcı`');
     }
 
+    const targetGuildId = args[1];
+    if (targetGuildId && !isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Farklı bir sunucuda rol yönetimi yapmak sadece bot yapımcısına özeldir.');
+    }
+
     try {
-      const member = await message.guild.members.fetch(userId);
-      if (!member) {
-        return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
+      const guild = targetGuildId 
+        ? (client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null))
+        : message.guild;
+
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
       }
 
-      const botMember = message.guild.members.me;
-      const roles = message.guild.roles.cache
-        .filter(role => !role.managed && role.id !== message.guild.roles.everyone.id && role.position < botMember.roles.highest.position)
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) {
+        return message.reply('⚠️ Bu kullanıcı belirtilen sunucuda bulunamadı.');
+      }
+
+      const botMember = guild.members.me;
+      const roles = guild.roles.cache
+        .filter(role => !role.managed && role.id !== guild.roles.everyone.id && role.position < botMember.roles.highest.position)
         .sort((a, b) => b.position - a.position)
         .first(25);
 
@@ -1673,7 +1686,7 @@ client.on('messageCreate', async (message) => {
       const row = new ActionRowBuilder().addComponents(selectMenu);
 
       const response = await message.reply({
-        content: `👤 <@${userId}> kullanıcısına vermek istediğiniz rolü seçin:`,
+        content: `👤 <@${userId}> kullanıcısına **${guild.name}** sunucusunda vermek istediğiniz rolü seçin:`,
         components: [row]
       });
 
@@ -1691,7 +1704,7 @@ client.on('messageCreate', async (message) => {
         }
 
         const selectedRoleId = interaction.values[0];
-        const role = message.guild.roles.cache.get(selectedRoleId);
+        const role = guild.roles.cache.get(selectedRoleId);
 
         if (!role) {
           return interaction.reply({ content: '❌ Rol bulunamadı.', ephemeral: true });
@@ -1700,7 +1713,7 @@ client.on('messageCreate', async (message) => {
         try {
           await member.roles.add(role);
           await interaction.update({
-            content: `✅ <@${userId}> kullanıcısına **${role.name}** rolü başarıyla verildi.`,
+            content: `✅ <@${userId}> kullanıcısına **${guild.name}** sunucusunda **${role.name}** rolü başarıyla verildi.`,
             components: []
           });
         } catch (err) {
@@ -1728,7 +1741,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // 14.3. ROLAL KOMUTU (.rolal <@id>)
+  // 14.3. ROLAL KOMUTU (.rolal <@id> [sunucu_id])
   if (command === 'rolal') {
     if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
       return message.reply('❌ Bu komutu kullanmak için **Rolleri Yönet** (Manage Roles) yetkisine sahip olmalısınız.');
@@ -1739,20 +1752,33 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen rolünü almak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.rolal @kullanıcı`');
     }
 
+    const targetGuildId = args[1];
+    if (targetGuildId && !isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Farklı bir sunucuda rol yönetimi yapmak sadece bot yapımcısına özeldir.');
+    }
+
     try {
-      const member = await message.guild.members.fetch(userId);
-      if (!member) {
-        return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
+      const guild = targetGuildId 
+        ? (client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null))
+        : message.guild;
+
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
       }
 
-      const botMember = message.guild.members.me;
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) {
+        return message.reply('⚠️ Bu kullanıcı belirtilen sunucuda bulunamadı.');
+      }
+
+      const botMember = guild.members.me;
       const roles = member.roles.cache
-        .filter(role => !role.managed && role.id !== message.guild.roles.everyone.id && role.position < botMember.roles.highest.position)
+        .filter(role => !role.managed && role.id !== guild.roles.everyone.id && role.position < botMember.roles.highest.position)
         .sort((a, b) => b.position - a.position)
         .first(25);
 
       if (roles.length === 0) {
-        return message.reply(`⚠️ <@${userId}> kullanıcısının botun alabileceği hiçbir rolü bulunmuyor.`);
+        return message.reply(`⚠️ <@${userId}> kullanıcısının **${guild.name}** sunucusunda botun alabileceği hiçbir rolü bulunmuyor.`);
       }
 
       const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
@@ -1772,7 +1798,7 @@ client.on('messageCreate', async (message) => {
       const row = new ActionRowBuilder().addComponents(selectMenu);
 
       const response = await message.reply({
-        content: `👤 <@${userId}> kullanıcısından almak istediğiniz rolü seçin:`,
+        content: `👤 <@${userId}> kullanıcısından **${guild.name}** sunucusunda almak istediğiniz rolü seçin:`,
         components: [row]
       });
 
@@ -1790,7 +1816,7 @@ client.on('messageCreate', async (message) => {
         }
 
         const selectedRoleId = interaction.values[0];
-        const role = message.guild.roles.cache.get(selectedRoleId);
+        const role = guild.roles.cache.get(selectedRoleId);
 
         if (!role) {
           return interaction.reply({ content: '❌ Rol bulunamadı.', ephemeral: true });
@@ -1799,7 +1825,7 @@ client.on('messageCreate', async (message) => {
         try {
           await member.roles.remove(role);
           await interaction.update({
-            content: `✅ <@${userId}> kullanıcısından **${role.name}** rolü başarıyla alındı.`,
+            content: `✅ <@${userId}> kullanıcısından **${guild.name}** sunucusunda **${role.name}** rolü başarıyla alındı.`,
             components: []
           });
         } catch (err) {
