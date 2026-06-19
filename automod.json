@@ -1,0 +1,18 @@
+{
+  "reklam": {
+    "enabled": true,
+    "action": "delete",
+    "exemptChannels": [],
+    "exemptRoles": []
+  },
+  "kufur": {
+    "enabled": true,
+    "exemptChannels": [],
+    "exemptRoles": []
+  },
+  "link": {
+    "enabled": true,
+    "exemptChannels": [],
+    "exemptRoles": []
+  }
+}

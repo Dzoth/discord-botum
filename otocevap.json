@@ -1,0 +1,10 @@
+[
+  {
+    "trigger": "sa",
+    "response": "Aleyküm selam, hoş geldin!"
+  },
+  {
+    "trigger": "discord",
+    "response": "Discord davet linkimiz: discord.gg/sunucu"
+  }
+]

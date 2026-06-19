@@ -1,0 +1,2446 @@
+require('dotenv').config();
+process.env.FFMPEG_PATH = require('ffmpeg-static');
+
+try {
+  const { Platform } = require('youtubei.js');
+  Platform.shim.eval = async (data) => {
+    return new Function(data.output)();
+  };
+} catch (e) {
+  console.error("Failed to shim youtubei.js platform:", e);
+}
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+process.on('uncaughtException', (err, origin) => {
+  console.error('Uncaught Exception:', err, 'origin:', origin);
+});
+const { Client, GatewayIntentBits, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const ms = require('ms');
+const config = require('./config');
+const fs = require('fs');
+
+function loadSicil() {
+  try {
+    if (fs.existsSync('sicil.json')) {
+      return JSON.parse(fs.readFileSync('sicil.json', 'utf8'));
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  return {};
+}
+
+function saveSicil(data) {
+  try {
+    fs.writeFileSync('sicil.json', JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function loadAktivite() {
+  try {
+    if (fs.existsSync('aktivite.json')) {
+      const content = fs.readFileSync('aktivite.json', 'utf8').trim();
+      return content ? JSON.parse(content) : {};
+    }
+  } catch (e) {
+    console.error("loadAktivite error, returning empty object:", e);
+  }
+  return {};
+}
+
+function saveAktivite(data) {
+  try {
+    fs.writeFileSync('aktivite.json', JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function updateAktiviteStreak(userId) {
+  const data = loadAktivite();
+  if (!data[userId]) {
+    data[userId] = { games: {}, streak: 1, last_seen: "" };
+  }
+  const userData = data[userId];
+  const todayStr = new Date().toISOString().split('T')[0];
+  const lastSeenStr = userData.last_seen;
+
+  if (lastSeenStr) {
+    const lastSeenDate = new Date(lastSeenStr);
+    const todayDate = new Date(todayStr);
+    const diffTime = Math.abs(todayDate - lastSeenDate);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 1) {
+      userData.streak = (userData.streak || 0) + 1;
+      userData.last_seen = todayStr;
+    } else if (diffDays > 1) {
+      userData.streak = 1;
+      userData.last_seen = todayStr;
+    }
+  } else {
+    userData.streak = 1;
+    userData.last_seen = todayStr;
+  }
+  saveAktivite(data);
+}
+
+function loadLimitler() {
+  try {
+    if (fs.existsSync('limitler.json')) {
+      return JSON.parse(fs.readFileSync('limitler.json', 'utf8'));
+    }
+  } catch (e) {}
+  return {};
+}
+
+function saveLimitler(data) {
+  try {
+    fs.writeFileSync('limitler.json', JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {}
+}
+
+function loadLimitTakip() {
+  try {
+    if (fs.existsSync('limit_takip.json')) {
+      return JSON.parse(fs.readFileSync('limit_takip.json', 'utf8'));
+    }
+  } catch (e) {}
+  return {};
+}
+
+function saveLimitTakip(data) {
+  try {
+    fs.writeFileSync('limit_takip.json', JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {}
+}
+
+function logEvent(level, module, message) {
+  const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const logLine = `[${timestamp}] [${level}] [${module}] ${message}\n`;
+  console.log(logLine.trim());
+  try {
+    fs.appendFileSync('bot.log', logLine, 'utf8');
+  } catch (e) {
+    console.error('Log writing error:', e);
+  }
+}
+
+let autoresponders = [];
+function loadAutoresponders() {
+  try {
+    if (fs.existsSync('otocevap.json')) {
+      const content = fs.readFileSync('otocevap.json', 'utf8').trim();
+      autoresponders = content ? JSON.parse(content) : [];
+    } else {
+      autoresponders = [
+        { trigger: "sa", response: "Aleyküm selam, hoş geldin!" },
+        { trigger: "discord", response: "Discord davet linkimiz: discord.gg/sunucu" }
+      ];
+      saveAutoresponders();
+    }
+  } catch (e) {
+    console.error("loadAutoresponders error:", e);
+    autoresponders = [];
+  }
+}
+
+function saveAutoresponders() {
+  try {
+    fs.writeFileSync('otocevap.json', JSON.stringify(autoresponders, null, 2), 'utf8');
+  } catch (e) {
+    console.error("saveAutoresponders error:", e);
+  }
+}
+
+loadAutoresponders();
+
+let savedEmbeds = [];
+function loadSavedEmbeds() {
+  try {
+    if (fs.existsSync('gomulu_mesajlar.json')) {
+      const content = fs.readFileSync('gomulu_mesajlar.json', 'utf8').trim();
+      savedEmbeds = content ? JSON.parse(content) : [];
+    }
+  } catch (e) {
+    console.error("loadSavedEmbeds error:", e);
+    savedEmbeds = [];
+  }
+}
+
+function saveSavedEmbeds() {
+  try {
+    fs.writeFileSync('gomulu_mesajlar.json', JSON.stringify(savedEmbeds, null, 2), 'utf8');
+  } catch (e) {
+    console.error("saveSavedEmbeds error:", e);
+  }
+}
+
+loadSavedEmbeds();
+
+let automodConfig = {
+  reklam: { enabled: false, action: "delete", exemptChannels: [], exemptRoles: [] },
+  kufur: { enabled: false, exemptChannels: [], exemptRoles: [] },
+  link: { enabled: false, exemptChannels: [], exemptRoles: [] }
+};
+function loadAutomodConfig() {
+  try {
+    if (fs.existsSync('automod.json')) {
+      const content = fs.readFileSync('automod.json', 'utf8').trim();
+      automodConfig = content ? JSON.parse(content) : automodConfig;
+    }
+  } catch (e) {
+    console.error("loadAutomodConfig error:", e);
+  }
+}
+function saveAutomodConfig() {
+  try {
+    fs.writeFileSync('automod.json', JSON.stringify(automodConfig, null, 2), 'utf8');
+  } catch (e) {
+    console.error("saveAutomodConfig error:", e);
+  }
+}
+loadAutomodConfig();
+
+let swearWords = [];
+function loadSwearWords() {
+  try {
+    if (fs.existsSync('kufurler.json')) {
+      const content = fs.readFileSync('kufurler.json', 'utf8').trim();
+      swearWords = content ? JSON.parse(content) : [];
+    }
+  } catch (e) {
+    console.error("loadSwearWords error:", e);
+  }
+}
+loadSwearWords();
+
+let spotifySongs = [];
+function loadSpotifySongs() {
+  try {
+    if (fs.existsSync('spotify_sarkilar.json')) {
+      const content = fs.readFileSync('spotify_sarkilar.json', 'utf8').trim();
+      spotifySongs = content ? JSON.parse(content) : [];
+    }
+  } catch (e) {
+    console.error("loadSpotifySongs error:", e);
+  }
+}
+loadSpotifySongs();
+
+function exportServerData() {
+  if (!client) return;
+  const data = {
+    guilds: [],
+    autoresponders: autoresponders,
+    savedEmbeds: savedEmbeds,
+    automod: automodConfig
+  };
+  
+  client.guilds.cache.forEach(guild => {
+    const channels = [];
+    guild.channels.cache.forEach(channel => {
+      if (channel.type === 0) {
+        channels.push({
+          id: channel.id,
+          name: channel.name
+        });
+      }
+    });
+
+    const roles = [];
+    guild.roles.cache.forEach(role => {
+      roles.push({
+        id: role.id,
+        name: role.name
+      });
+    });
+
+    data.guilds.push({
+      id: guild.id,
+      name: guild.name,
+      channels: channels,
+      roles: roles
+    });
+  });
+
+  try {
+    fs.writeFileSync('website/server_data.json', JSON.stringify(data, null, 2), 'utf8');
+    fs.writeFileSync('website/server_data.js', `window.guildsData = ${JSON.stringify(data, null, 2)};`, 'utf8');
+  } catch (e) {
+    console.error("Failed to export server data:", e);
+  }
+}
+
+const activeGames = new Map();
+let HANGMAN_WORDS = [
+  "yazılım", "sunucu", "kodlama", "discord", "bilgisayar", "teknoloji", "internet", "klavye", "telefon",
+  "oyuncu", "kulaklık", "televizyon", "mühendis", "yapayzeka", "veritabanı"
+];
+try {
+  if (fs.existsSync('kelimeler.txt')) {
+    const data = fs.readFileSync('kelimeler.txt', 'utf8');
+    const loadedWords = data.split(/\r?\n/).map(line => line.trim().toLowerCase()).filter(line => line.length > 0);
+    if (loadedWords.length > 0) {
+      HANGMAN_WORDS = loadedWords;
+    }
+  }
+} catch (e) {
+  console.error(e);
+}
+const HANGMAN_STAGES = [
+  `\`\`\`
+  +---+
+  |   |
+      |
+      |
+      |
+      |
+=========
+\`\`\``,
+  `\`\`\`
+  +---+
+  |   |
+  O   |
+      |
+      |
+      |
+=========
+\`\`\``,
+  `\`\`\`
+  +---+
+  |   |
+  O   |
+  |   |
+      |
+      |
+=========
+\`\`\``,
+  `\`\`\`
+  +---+
+  |   |
+  O   |
+ /|   |
+      |
+      |
+=========
+\`\`\``,
+  `\`\`\`
+  +---+
+  |   |
+  O   |
+ /|\\  |
+      |
+      |
+=========
+\`\`\``,
+  `\`\`\`
+  +---+
+  |   |
+  O   |
+ /|\\  |
+ /    |
+      |
+=========
+\`\`\``,
+  `\`\`\`
+  +---+
+  |   |
+  O   |
+ /|\\  |
+ / \\  |
+      |
+=========
+\`\`\``
+];
+
+let linkFilterActive = false;
+const urlPattern = /https?:\/\/\S+|discord\.gg\/\S+/i;
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildPresences,
+    GatewayIntentBits.GuildVoiceStates
+  ]
+});
+
+client.once('ready', async () => {
+  console.log(`Bot başarıyla giriş yaptı: ${client.user.tag}`);
+  logEvent('INFO', 'System', `Bot ready as ${client.user.tag}. Guilds: ${client.guilds.cache.size}`);
+  exportServerData();
+
+  // Register slash command globally
+  try {
+    const commandsData = [
+      {
+        name: 'play',
+        description: 'Spotify müzik çalar',
+        options: [
+          {
+            name: 'link-or-query',
+            description: 'Link or search query',
+            type: 3, // STRING type
+            required: false
+          }
+        ]
+      }
+    ];
+    await client.application.commands.set(commandsData);
+    console.log('Slash komutları başarıyla kaydedildi!');
+  } catch (error) {
+    console.error('Slash komutları kaydedilirken hata:', error);
+  }
+});
+
+client.on('guildCreate', () => exportServerData());
+client.on('guildDelete', () => exportServerData());
+client.on('channelCreate', () => exportServerData());
+client.on('channelDelete', () => exportServerData());
+client.on('roleCreate', () => exportServerData());
+client.on('roleDelete', () => exportServerData());
+
+client.on('guildMemberAdd', (member) => {
+  const data = loadSicil();
+  const userId = member.id;
+  if (!data[userId]) {
+    data[userId] = { joins: 0, leaves: 0, nicknames: [] };
+  }
+  data[userId].joins += 1;
+  saveSicil(data);
+});
+
+client.on('guildMemberRemove', (member) => {
+  const data = loadSicil();
+  const userId = member.id;
+  if (!data[userId]) {
+    data[userId] = { joins: 0, leaves: 0, nicknames: [] };
+  }
+  data[userId].leaves += 1;
+  saveSicil(data);
+});
+
+client.on('guildMemberUpdate', (oldMember, newMember) => {
+  if (oldMember.nickname !== newMember.nickname) {
+    const data = loadSicil();
+    const userId = newMember.id;
+    if (!data[userId]) {
+      data[userId] = { joins: 0, leaves: 0, nicknames: [] };
+    }
+    const newNick = newMember.nickname || newMember.user.username;
+    if (!data[userId].nicknames.includes(newNick)) {
+      data[userId].nicknames.push(newNick);
+    }
+    saveSicil(data);
+  }
+});
+
+client.on('presenceUpdate', (oldPresence, newPresence) => {
+  if (!newPresence || !newPresence.member || newPresence.user.bot) return;
+
+  const userId = newPresence.member.id;
+  const getGameName = (presence) => {
+    if (!presence || !presence.activities) return null;
+    const game = presence.activities.find(act => act.type === 0);
+    return game ? game.name : null;
+  };
+
+  const oldGame = getGameName(oldPresence);
+  const newGame = getGameName(newPresence);
+
+  if (oldGame !== newGame) {
+    const data = loadAktivite();
+    if (!data[userId]) {
+      data[userId] = { games: {}, streak: 1, last_seen: "" };
+    }
+    const userData = data[userId];
+    if (!userData.games) userData.games = {};
+
+    const nowTs = Math.floor(Date.now() / 1000);
+
+    if (userData.current_game && oldGame && userData.current_game.name === oldGame) {
+      const start = userData.current_game.start || nowTs;
+      const elapsed = nowTs - start;
+      if (elapsed > 0) {
+        userData.games[oldGame] = (userData.games[oldGame] || 0) + elapsed;
+      }
+      delete userData.current_game;
+    }
+
+    if (newGame) {
+      userData.current_game = { name: newGame, start: nowTs };
+    }
+
+    saveAktivite(data);
+  }
+});
+
+client.on('guildAuditLogEntryCreate', async (entry, guild) => {
+  if (entry.action !== 22 && entry.action !== 20) return;
+
+  const executor = entry.executor;
+  if (!executor || executor.bot || executor.id === guild.ownerId) return;
+
+  const executorIdStr = executor.id;
+  const actionType = entry.action === 22 ? 'ban' : 'kick';
+
+  const limits = loadLimitler();
+  const member = await guild.members.fetch(executorIdStr).catch(() => null);
+  if (!member) return;
+
+  const relevantLimits = [];
+  member.roles.cache.forEach(role => {
+    if (limits[role.id]) {
+      const roleLimit = limits[role.id][`${actionType}_limit`];
+      if (roleLimit !== undefined && roleLimit !== null) {
+        relevantLimits.push(roleLimit);
+      }
+    }
+  });
+
+  if (relevantLimits.length === 0) return;
+
+  const maxAllowed = Math.max(...relevantLimits);
+
+  const takip = loadLimitTakip();
+  if (!takip[executorIdStr]) {
+    takip[executorIdStr] = { ban: [], kick: [] };
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  takip[executorIdStr][actionType] = (takip[executorIdStr][actionType] || []).filter(ts => now - ts < 3600);
+  takip[executorIdStr][actionType].push(now);
+  saveLimitTakip(takip);
+
+  const actionCount = takip[executorIdStr][actionType].length;
+  logEvent('INFO', 'Anti-Nuke', `Action detected: ${actionType} by User ${executor.tag} (ID: ${executorIdStr}). Count in last 1 hour: ${actionCount}/${maxAllowed}`);
+
+  if (actionCount > maxAllowed) {
+    logEvent('WARNING', 'Anti-Nuke', `Limit exceeded by ${executor.tag} (ID: ${executorIdStr})! Action: ${actionType}, Count: ${actionCount}/${maxAllowed}. Stripping roles and reversing action.`);
+    try {
+      const rolesToRemove = member.roles.cache.filter(role => !role.managed && role.id !== guild.roles.everyone.id);
+      if (rolesToRemove.size > 0) {
+        await member.roles.remove(rolesToRemove, 'Anti-Nuke: Ban/Kick limitini aşma');
+      }
+
+      if (actionType === 'ban') {
+        await guild.members.unban(entry.targetId, 'Anti-Nuke: Yetkisiz Ban İptali');
+      }
+
+      const channel = guild.systemChannel || guild.channels.cache.find(c => c.isTextBased());
+      if (channel) {
+        channel.send(`🚨 **Anti-Nuke Koruması Tetiklendi!**\n` +
+          `⚠️ <@${executorIdStr}> yetkilisi 1 saat içinde izin verilen maksimum **${actionType}** limitini (**${maxAllowed}**) aştı!\n` +
+          `🔒 Üyenin tüm rolleri geri alındı ve son yapılan ban işlemi iptal edildi.`);
+      }
+    } catch (err) {
+      logEvent('ERROR', 'Anti-Nuke', `Failed to enforce anti-nuke for ${executorIdStr}: ${err.message}`);
+    }
+  }
+});
+
+// Helper to resolve user ID from mention or plain ID
+function resolveUserId(arg) {
+  if (!arg) return null;
+  const match = arg.match(/^<@!?(\d+)>$/) || arg.match(/^(\d+)$/);
+  return match ? match[1] : null;
+}
+
+async function getYTInstance() {
+  const { Innertube } = require('youtubei.js');
+  return await Innertube.create();
+}
+
+const players = new Map();
+
+// Helper to handle Spotify Play Command with Ephemeral Search & Selection
+async function handlePlayCommandEphemeral(ctx, query) {
+  const member = ctx.member;
+  const voiceChannel = member?.voice?.channel;
+  if (!voiceChannel) {
+    const errorMsg = '⚠️ Bu komutu kullanmak için bir ses kanalında olmalısınız!';
+    return ctx.reply({ content: errorMsg, ephemeral: true });
+  }
+
+  const createPlayEmbed = (song) => {
+    return new EmbedBuilder()
+      .setTitle(`▶️ Oynatılıyor: ${song.title}`)
+      .setDescription(
+        `👤 **Sanatçı:** ${song.artist}\n` +
+        `🎵 **Kaynak:** Spotify Premium`
+      )
+      .setColor('#1DB954')
+      .setThumbnail(song.thumbnail || 'https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png');
+  };
+
+  if (!query) {
+    return ctx.reply({ content: '⚠️ Şarkı adı aranamadı. Arama iptal edildi.', ephemeral: true });
+  }
+
+  let matches = [];
+  try {
+    const yts = require('yt-search');
+    const searchResult = await yts(query);
+    matches = searchResult && searchResult.videos ? searchResult.videos.slice(0, 10) : [];
+  } catch (err) {
+    console.error("yt-search error:", err);
+  }
+
+  if (matches.length === 0) {
+    const errorEmbed = new EmbedBuilder()
+      .setTitle('❌ Arama Sonucu')
+      .setDescription(`Spotify veritabanında veya YouTube'da **'${query}'** araması ile eşleşen bir şarkı bulunamadı.`)
+      .setColor('#FF0000');
+    return ctx.reply({ embeds: [errorEmbed], ephemeral: true });
+  }
+
+  // Multiple matches: show ephemeral list and select menu
+  const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } = require('discord.js');
+  
+  const listText = matches.map((song, i) => `**${i+1}.** ${song.title} - *${song.author.name}*`).join('\n');
+  const embed = new EmbedBuilder()
+    .setTitle('🎵 Spotify Arama Sonuçları')
+    .setDescription(`**'${query}'** araması için birden fazla sonuç bulundu. Lütfen çalmak istediğiniz şarkıyı aşağıdaki menüden seçin:\n\n${listText}`)
+    .setColor('#1DB954');
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId('play_song_select_ephemeral')
+    .setPlaceholder('Çalmak istediğiniz şarkıyı seçin...')
+    .addOptions(
+      matches.map((song, index) => 
+        new StringSelectMenuOptionBuilder()
+          .setLabel(`${song.title}`.substring(0, 100))
+          .setValue(`play_idx_${index}_${Date.now()}`)
+          .setDescription(`${song.author.name}`.substring(0, 100))
+      )
+    );
+
+  const row = new ActionRowBuilder().addComponents(selectMenu);
+  
+  // Reply ephemerally!
+  const response = await ctx.reply({ embeds: [embed], components: [row], ephemeral: true, fetchReply: true });
+
+  const collector = response.createMessageComponentCollector({
+    filter: (interaction) => interaction.user.id === ctx.user.id,
+    time: 60000
+  });
+
+  collector.on('collect', async (interaction) => {
+    const val = interaction.values[0];
+    if (val.startsWith('play_idx_')) {
+      const parts = val.split('_');
+      const idx = parseInt(parts[2]);
+      const selectedSong = matches[idx];
+      
+      // Acknowledge interaction immediately, informing the user we are downloading & preparing the track
+      await interaction.update({
+        content: `⏳ **${selectedSong.title}** indiriliyor ve hazırlanıyor...`,
+        embeds: [],
+        components: []
+      });
+
+      const guildId = voiceChannel.guild.id;
+      const tempFilePath = require('path').join(__dirname, `temp_${guildId}.mp3`);
+
+      // Download the audio file to a local temp file
+      let downloadSuccess = false;
+      try {
+        const { Readable } = require('stream');
+        const fs = require('fs');
+
+        const videoId = selectedSong.videoId || selectedSong.id || (selectedSong.url && selectedSong.url.split('v=')[1]?.split('&')[0]);
+        if (!videoId) {
+          throw new Error("Could not extract YouTube video ID");
+        }
+
+        let info = null;
+        let stream = null;
+        let attempts = 3;
+        
+        for (let i = 0; i < attempts; i++) {
+          try {
+            console.log(`[DOWNLOAD] Attempt ${i + 1} - Fetching audio for Video ID: ${videoId} using youtubei.js (client: TV)`);
+            const yt = await getYTInstance();
+            info = await yt.getInfo(videoId, { client: 'TV' });
+            stream = await info.download({
+              type: 'audio',
+              quality: 'best'
+            });
+            break; // Succeeded!
+          } catch (err) {
+            console.error(`[DOWNLOAD] Attempt ${i + 1} failed:`, err.message || err);
+            if (i === attempts - 1) throw err;
+            await new Promise(r => setTimeout(r, 1000));
+          }
+        }
+
+        const nodeStream = Readable.fromWeb(stream);
+        const writeStream = fs.createWriteStream(tempFilePath);
+        
+        await new Promise((resolve, reject) => {
+          nodeStream.pipe(writeStream);
+          nodeStream.on('error', (err) => reject(err));
+          writeStream.on('error', (err) => reject(err));
+          writeStream.on('finish', () => resolve());
+        });
+        
+        downloadSuccess = true;
+        console.log(`[DOWNLOAD] Successfully saved to ${tempFilePath}`);
+      } catch (err) {
+        console.error("Audio download error:", err);
+        try {
+          await interaction.followUp({
+            content: `❌ **${selectedSong.title}** indirilirken bir hata oluştu! Hata: ${err.message || err}`,
+            ephemeral: true
+          });
+        } catch (e) {}
+      }
+
+      if (downloadSuccess) {
+        // Play the downloaded local file in the voice channel
+        try {
+          const { joinVoiceChannel, createAudioPlayer, createAudioResource, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
+
+          const connection = joinVoiceChannel({
+            channelId: voiceChannel.id,
+            guildId: voiceChannel.guild.id,
+            adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+          });
+
+          // Wait up to 15 seconds for the connection to be fully ready to avoid dropped packets and speaking indicator lag
+          await entersState(connection, VoiceConnectionStatus.Ready, 15000);
+
+          let player = players.get(guildId);
+          if (!player) {
+            player = createAudioPlayer();
+            player.on('error', error => {
+              console.error('[AudioPlayer Error]', error.message);
+            });
+            players.set(guildId, player);
+          }
+          connection.subscribe(player);
+
+          // Load the local temp file as audio resource
+          const resource = createAudioResource(tempFilePath);
+          player.play(resource);
+
+          const playEmbed = createPlayEmbed({
+            title: selectedSong.title,
+            artist: selectedSong.author.name,
+            thumbnail: selectedSong.thumbnail || 'https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png'
+          });
+          
+          // Send public play message to channel
+          await ctx.channel.send({
+            content: `🎶 **${selectedSong.title} - ${selectedSong.author.name}** oynatılıyor...`,
+            embeds: [playEmbed]
+          });
+
+          // Update the ephemeral message to indicate selection complete and playing
+          try {
+            await interaction.editReply({
+              content: `✅ **${selectedSong.title}** başarıyla ses kanalında çalınıyor!`,
+              embeds: [],
+              components: []
+            });
+          } catch (e) {}
+
+        } catch (err) {
+          console.error("Voice connection/playback error:", err);
+          try {
+            await interaction.followUp({
+              content: `❌ Ses kanalına bağlanırken veya çalarken bir hata oluştu!`,
+              ephemeral: true
+            });
+          } catch (e) {}
+        }
+      }
+
+      collector.stop('selected');
+    }
+  });
+
+  collector.on('end', async (collected, reason) => {
+    if (reason !== 'selected') {
+      try {
+        await ctx.editReply({
+          content: '⏱️ Şarkı seçme süresi doldu.',
+          embeds: [],
+          components: []
+        });
+      } catch (e) {}
+    }
+  });
+}
+
+client.on('interactionCreate', async (interaction) => {
+  if (interaction.isChatInputCommand()) {
+    if (interaction.commandName === 'play') {
+      const query = interaction.options.getString('link-or-query');
+      if (query) {
+        await handlePlayCommandEphemeral(interaction, query);
+      } else {
+        const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+        const modal = new ModalBuilder()
+          .setCustomId('play_search_modal')
+          .setTitle('Spotify Şarkı Arama');
+
+        const songInput = new TextInputBuilder()
+          .setCustomId('song_query')
+          .setLabel('Şarkı veya Sanatçı Adı')
+          .setPlaceholder('Örn: Yalnızlık / Duman')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true);
+
+        const firstActionRow = new ActionRowBuilder().addComponents(songInput);
+        modal.addComponents(firstActionRow);
+
+        await interaction.showModal(modal);
+      }
+    }
+  }
+
+  if (interaction.isButton()) {
+    if (interaction.customId === 'play_search_btn') {
+      const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+      const modal = new ModalBuilder()
+        .setCustomId('play_search_modal')
+        .setTitle('Spotify Şarkı Arama');
+
+      const songInput = new TextInputBuilder()
+        .setCustomId('song_query')
+        .setLabel('Şarkı veya Sanatçı Adı')
+        .setPlaceholder('Örn: Yalnızlık / Duman')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const firstActionRow = new ActionRowBuilder().addComponents(songInput);
+      modal.addComponents(firstActionRow);
+
+      await interaction.showModal(modal);
+    }
+  }
+
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId === 'play_search_modal') {
+      const query = interaction.fields.getTextInputValue('song_query');
+      await handlePlayCommandEphemeral(interaction, query);
+    }
+  }
+});
+
+client.on('messageCreate', async (message) => {
+  console.log(`[Mesaj Alindi] Gonderen: ${message.author.tag} | Icerik: '${message.content}'`);
+  if (message.author.bot) return;
+
+  updateAktiviteStreak(message.author.id);
+
+  // Autoresponder trigger check
+  const msgLower = message.content.toLowerCase().trim();
+  const arRule = autoresponders.find(rule => rule.trigger.toLowerCase() === msgLower);
+  if (arRule) {
+    const embed = new EmbedBuilder()
+      .setTitle(arRule.trigger)
+      .setDescription(arRule.response)
+      .setColor('#5865f2');
+    await message.reply({ embeds: [embed] });
+    return;
+  }
+
+  // Saved Embeds trigger check
+  const matchingEmbed = savedEmbeds.find(emb => 
+    emb.guildId === message.guild.id && 
+    emb.title && 
+    emb.title.toLowerCase().trim() === msgLower
+  );
+  if (matchingEmbed) {
+    if (!matchingEmbed.channelId || matchingEmbed.channelId === 'all' || matchingEmbed.channelId === message.channel.id) {
+      const embed = new EmbedBuilder()
+        .setColor(matchingEmbed.color || '#ffffff');
+      
+      if (matchingEmbed.author && matchingEmbed.author !== 'Üst bilgi' && matchingEmbed.author.trim() !== '') {
+        embed.setAuthor({ name: matchingEmbed.author });
+      }
+      if (matchingEmbed.title && matchingEmbed.title !== 'Başlık' && matchingEmbed.title.trim() !== '') {
+        embed.setTitle(matchingEmbed.title);
+      }
+      if (matchingEmbed.description && matchingEmbed.description !== 'Açıklama...' && matchingEmbed.description.trim() !== '') {
+        embed.setDescription(matchingEmbed.description);
+      }
+      if (matchingEmbed.thumbnail && matchingEmbed.thumbnail.trim() !== '') {
+        embed.setThumbnail(matchingEmbed.thumbnail);
+      }
+      if (matchingEmbed.image && matchingEmbed.image.trim() !== '') {
+        embed.setImage(matchingEmbed.image);
+      }
+      if (matchingEmbed.footer && matchingEmbed.footer !== 'Alt bilgi' && matchingEmbed.footer.trim() !== '') {
+        embed.setFooter({ text: matchingEmbed.footer });
+      }
+
+      await message.reply({ embeds: [embed] });
+      return;
+    }
+  }
+
+  // Redesigned Automod System
+  const isExemptByPermission = message.member && (
+    message.member.permissions.has(PermissionFlagsBits.Administrator) ||
+    message.member.permissions.has(PermissionFlagsBits.ManageMessages)
+  );
+
+  if (message.member && !isExemptByPermission) {
+    // 1. Reklam Filtresi
+    if (automodConfig.reklam && automodConfig.reklam.enabled) {
+      const isExempt = automodConfig.reklam.exemptChannels.includes(message.channel.id) ||
+                       message.member.roles.cache.some(role => automodConfig.reklam.exemptRoles.includes(role.id));
+      
+      if (!isExempt) {
+        const invitePattern = /(discord\.gg|discord\.com\/invite)\/[a-zA-Z0-9\-]+/i;
+        if (invitePattern.test(message.content)) {
+          try {
+            await message.delete();
+            const action = automodConfig.reklam.action || 'delete';
+            
+            if (action === 'warn') {
+              const warn = await message.channel.send(`⚠️ <@${message.author.id}>, bu sunucuda reklam davet linkleri paylaşmak yasaktır!`);
+              setTimeout(() => warn.delete().catch(console.error), 5000);
+            } else if (action === 'mute') {
+              try {
+                await message.member.timeout(10 * 60 * 1000, 'Automod: Reklam Paylaşımı');
+                const warn = await message.channel.send(`🔇 <@${message.author.id}> reklam paylaştığı için 10 dakika susturuldu.`);
+                setTimeout(() => warn.delete().catch(console.error), 8000);
+              } catch (timeoutErr) {
+                console.error("Failed to timeout user:", timeoutErr);
+                const warn = await message.channel.send(`⚠️ <@${message.author.id}>, reklam paylaşmak yasaktır!`);
+                setTimeout(() => warn.delete().catch(console.error), 5000);
+              }
+            } else {
+              // Just delete, no warning
+            }
+            logEvent("INFO", "Automod", `Deleted invite link from ${message.author.tag} in #${message.channel.name} (Action: ${action})`);
+            return;
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      }
+    }
+
+    // 2. Küfür Filtresi
+    if (automodConfig.kufur && automodConfig.kufur.enabled) {
+      const isExempt = automodConfig.kufur.exemptChannels.includes(message.channel.id) ||
+                       message.member.roles.cache.some(role => automodConfig.kufur.exemptRoles.includes(role.id));
+      
+      if (!isExempt) {
+        const contentLower = message.content.toLowerCase();
+        const hasSwear = swearWords.some(word => {
+          if (word.length <= 3) {
+            const regex = new RegExp(`\\b${word}\\b`, 'i');
+            return regex.test(contentLower);
+          }
+          return contentLower.includes(word);
+        });
+
+        if (hasSwear) {
+          try {
+            await message.delete();
+            const warn = await message.channel.send(`⚠️ <@${message.author.id}>, lütfen kelimelerinize dikkat edin! Küfür/hakaret yasaktır.`);
+            setTimeout(() => warn.delete().catch(console.error), 5000);
+            logEvent("INFO", "Automod", `Deleted message containing swear word from ${message.author.tag} in #${message.channel.name}`);
+            return;
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      }
+    }
+
+    // 3. Link Filtresi
+    if (automodConfig.link && automodConfig.link.enabled) {
+      const isExempt = automodConfig.link.exemptChannels.includes(message.channel.id) ||
+                       message.member.roles.cache.some(role => automodConfig.link.exemptRoles.includes(role.id));
+      
+      if (!isExempt) {
+        if (urlPattern.test(message.content)) {
+          try {
+            await message.delete();
+            const warn = await message.channel.send(`⚠️ <@${message.author.id}>, bu kanalda harici link paylaşılması yasaktır!`);
+            setTimeout(() => warn.delete().catch(console.error), 5000);
+            logEvent("INFO", "Automod", `Deleted link from ${message.author.tag} in #${message.channel.name}`);
+            return;
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      }
+    }
+  }
+
+  const channelId = message.channel.id;
+  if (activeGames.has(channelId) && !message.content.startsWith(config.prefix)) {
+    const guess = message.content.toLowerCase().trim();
+    if (guess.length === 1 && /[a-zçğışöü]/i.test(guess)) {
+      const game = activeGames.get(channelId);
+      const word = game.word;
+
+      if (game.guessed.includes(guess)) {
+        return message.reply(`⚠️ \`${guess.toUpperCase()}\` harfini zaten tahmin etmiştiniz.`);
+      }
+
+      game.guessed.push(guess);
+
+      if (word.includes(guess)) {
+        await message.react('✅');
+      } else {
+        game.attempts -= 1;
+        await message.react('❌');
+      }
+
+      let displayList = [];
+      let won = true;
+      for (const char of word) {
+        if (game.guessed.includes(char)) {
+          displayList.push(char.toUpperCase());
+        } else {
+          displayList.push('_');
+          won = false;
+        }
+      }
+
+      const display = displayList.join(' ');
+      const stageIndex = 6 - game.attempts;
+
+      if (won) {
+        message.channel.send(`🎉 **Tebrikler!** Kelimeyi doğru tahmin ettiniz: **${word.toUpperCase()}**\nOyunu kazandınız! 🏆`);
+        activeGames.delete(channelId);
+        return;
+      } else if (game.attempts <= 0) {
+        message.channel.send(HANGMAN_STAGES[6] + `\n💀 **Oyun Bitti!** Adam asıldı. Doğru kelime: **${word.toUpperCase()}** idi.`);
+        activeGames.delete(channelId);
+        return;
+      } else {
+        return message.channel.send(`Kelime: \`${display}\`\nKalan Hak: \`${game.attempts}\`\n` + HANGMAN_STAGES[stageIndex]);
+      }
+    } else if (guess.length > 1 && /^[a-zçğışöü]+$/i.test(guess)) {
+      const game = activeGames.get(channelId);
+      const word = game.word;
+
+      if (guess === word) {
+        message.channel.send(`🎉 **Tebrikler!** Kelimeyi doğru tahmin ettiniz: **${word.toUpperCase()}**\nOyunu kazandınız! 🏆`);
+        activeGames.delete(channelId);
+        return;
+      } else {
+        game.attempts -= 1;
+        await message.react('❌');
+        const stageIndex = 6 - game.attempts;
+
+        if (game.attempts <= 0) {
+          message.channel.send(HANGMAN_STAGES[6] + `\n💀 **Oyun Bitti!** Adam asıldı. Doğru kelime: **${word.toUpperCase()}** idi.`);
+          activeGames.delete(channelId);
+          return;
+        } else {
+          return message.reply(`❌ Yanlış kelime tahmini! Kalan Hak: \`${game.attempts}\`\n` + HANGMAN_STAGES[stageIndex]);
+        }
+      }
+    }
+  }
+
+  if (!message.content.startsWith(config.prefix)) return;
+
+  const args = message.content.slice(config.prefix.length).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
+
+  logEvent('INFO', 'Command', `User: ${message.author.tag} (ID: ${message.author.id}) invoked command: .${command} in channel: #${message.channel.name} (ID: ${message.channel.id})`);
+
+  const modCommands = ['ban', 'unban', 'kick', 'e', 'k', 'vip', 'mute', 'unmute', 'lock', 'unlock', 'sil', 'engelle', 'kod', 'rolver', 'rolal'];
+  const ownerCommands = ['koru', 'korumayikapat', 'korumayıkapat', 'koruac', 'guvenlik', 'guvenlikac', 'limit'];
+
+  if (modCommands.includes(command)) {
+    if (!message.member.permissions.has(PermissionFlagsBits.UseApplicationCommands)) {
+      logEvent('WARNING', 'Command', `User: ${message.author.tag} (ID: ${message.author.id}) lack application command permission for command: .${command}`);
+      return message.reply('❌ Bu komutu kullanmak için **Uygulama Komutlarını Kullan** yetkisine sahip olmalısınız.');
+    }
+  }
+
+  if (ownerCommands.includes(command)) {
+    if (message.author.id !== message.guild.ownerId) {
+      logEvent('WARNING', 'Command', `User: ${message.author.tag} (ID: ${message.author.id}) lack owner permission for command: .${command}`);
+      return message.reply('❌ Bu komutu sadece sunucu sahibi (taç sahibi) kullanabilir!');
+    }
+  }
+
+  // 1. BAN KOMUTU (.ban <@id>)
+  if (command === 'ban') {
+    if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için **Üyeleri Yasakla** yetkisine sahip olmalısınız.');
+    }
+
+    const userId = resolveUserId(args[0]);
+    if (!userId) {
+      return message.reply('⚠️ Lütfen yasaklamak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.ban @kullanıcı` veya `.ban 1234567890`');
+    }
+
+    try {
+      await message.guild.members.ban(userId, { reason: `Yetkili: ${message.author.tag}` });
+      return message.reply(`✅ <@${userId}> (ID: ${userId}) başarıyla sunucudan yasaklandı.`);
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Kullanıcı yasaklanırken bir hata oluştu. Botun yetkilerinin tam olduğundan ve kullanıcının rolünün botun rolünden daha düşük olduğundan emin olun.');
+    }
+  }
+
+  // 1.5. UNBAN KOMUTU (.unban <id>)
+  if (command === 'unban') {
+    if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için **Üyeleri Yasakla** yetkisine sahip olmalısınız.');
+    }
+
+    const userId = resolveUserId(args[0]);
+    if (!userId) {
+      return message.reply('⚠️ Lütfen yasağını kaldırmak istediğiniz kullanıcının ID\'sini girin. Örnek: `.unban 1234567890`');
+    }
+
+    try {
+      await message.guild.members.unban(userId, `Yetkili: ${message.author.tag}`);
+      return message.reply(`✅ <@${userId}> (ID: ${userId}) kullanıcısının yasaklaması başarıyla kaldırıldı.`);
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Kullanıcının yasaklaması kaldırılırken bir hata oluştu. Kullanıcının banlı olduğundan emin olun.');
+    }
+  }
+
+  // 2. KICK KOMUTU (.kick <@id>)
+  if (command === 'kick') {
+    if (!message.member.permissions.has(PermissionFlagsBits.KickMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için **Üyeleri At** yetkisine sahip olmalısınız.');
+    }
+
+    const userId = resolveUserId(args[0]);
+    if (!userId) {
+      return message.reply('⚠️ Lütfen atmak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.kick @kullanıcı` veya `.kick 1234567890`');
+    }
+
+    try {
+      const member = await message.guild.members.fetch(userId);
+      if (!member) {
+        return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
+      }
+      if (!member.kickable) {
+        return message.reply('❌ Bu üyeyi atamıyorum. Botun yetkilerinin üyenin rolünden yüksek olduğundan emin olun.');
+      }
+      await member.kick(`Yetkili: ${message.author.tag}`);
+      return message.reply(`✅ <@${userId}> başarıyla sunucudan atıldı.`);
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Kullanıcı atılırken bir hata oluştu.');
+    }
+  }
+
+  // 3. ERKEK KAYIT KOMUTU (.e <@id>)
+  if (command === 'e') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+      return message.reply('❌ Bu komutu kullanmak için **Rolleri Yönet** yetkisine sahip olmalısınız.');
+    }
+
+    const userId = resolveUserId(args[0]);
+    if (!userId) {
+      return message.reply('⚠️ Lütfen kayıt etmek istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.e @kullanıcı`');
+    }
+
+    try {
+      const member = await message.guild.members.fetch(userId);
+      if (!member) {
+        return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
+      }
+      
+      const roleId = config.roles.erkek;
+      const role = message.guild.roles.cache.get(roleId);
+      if (!role) {
+        return message.reply(`❌ Belirtilen Erkek rolü (ID: ${roleId}) sunucuda bulunamadı.`);
+      }
+
+      await member.roles.add(role);
+      return message.reply(`✅ <@${userId}> kullanıcısı Erkek olarak kaydedildi ve <@&${roleId}> rolü verildi.`);
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Rol verilirken bir hata oluştu. Botun rolünün verilecek rolden daha üstte olduğundan emin olun.');
+    }
+  }
+
+  // 4. KIZ KAYIT KOMUTU (.k <@id>)
+  if (command === 'k') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+      return message.reply('❌ Bu komutu kullanmak için **Rolleri Yönet** yetkisine sahip olmalısınız.');
+    }
+
+    const userId = resolveUserId(args[0]);
+    if (!userId) {
+      return message.reply('⚠️ Lütfen kayıt etmek istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.k @kullanıcı`');
+    }
+
+    try {
+      const member = await message.guild.members.fetch(userId);
+      if (!member) {
+        return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
+      }
+      
+      const roleId = config.roles.kiz;
+      const role = message.guild.roles.cache.get(roleId);
+      if (!role) {
+        return message.reply(`❌ Belirtilen Kız rolü (ID: ${roleId}) sunucuda bulunamadı.`);
+      }
+
+      await member.roles.add(role);
+      return message.reply(`✅ <@${userId}> kullanıcısı Kız olarak kaydedildi ve <@&${roleId}> rolü verildi.`);
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Rol verilirken bir hata oluştu. Botun rolünün verilecek rolden daha üstte olduğundan emin olun.');
+    }
+  }
+
+  // 4.5. VIP KAYIT KOMUTU (.vip <@id>)
+  if (command === 'vip') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+      return message.reply('❌ Bu komutu kullanmak için **Rolleri Yönet** yetkisine sahip olmalısınız.');
+    }
+
+    const userId = resolveUserId(args[0]);
+    if (!userId) {
+      return message.reply('⚠️ Lütfen VIP yapmak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.vip @kullanıcı`');
+    }
+
+    try {
+      const member = await message.guild.members.fetch(userId);
+      if (!member) {
+        return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
+      }
+      
+      const roleId = '1517317107266752512';
+      const role = message.guild.roles.cache.get(roleId);
+      if (!role) {
+        return message.reply(`❌ Belirtilen VIP rolü (ID: ${roleId}) sunucuda bulunamadı.`);
+      }
+
+      await member.roles.add(role);
+      return message.reply(`✅ <@${userId}> kullanıcısı VIP olarak kaydedildi ve <@&${roleId}> rolü verildi.`);
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Rol verilirken bir hata oluştu. Botun rolünün verilecek rolden daha üstte olduğundan emin olun.');
+    }
+  }
+
+  // 5. MUTE / ZAMAN AŞIMI KOMUTU (.mute <@id> <süre>)
+  if (command === 'mute') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için **Üyeleri Zaman Aşımına Uğrat** (Moderate Members) yetkisine sahip olmalısınız.');
+    }
+
+    const userId = resolveUserId(args[0]);
+    const durationStr = args[1];
+
+    if (!userId || !durationStr) {
+      return message.reply('⚠️ Yanlış kullanım! Örnek: `.mute @kullanıcı 10m` veya `.mute 1234567890 1h` (m: dakika, h: saat, d: gün)');
+    }
+
+    try {
+      const durationMs = ms(durationStr);
+      if (!durationMs || durationMs < 0) {
+        return message.reply('⚠️ Geçersiz süre formatı! Lütfen geçerli bir süre girin (örn: 10m, 1h, 1d).');
+      }
+
+      // Discord max timeout duration is 28 days
+      if (durationMs > ms('28d')) {
+        return message.reply('❌ Discord kuralları gereği zaman aşımı süresi en fazla 28 gün olabilir.');
+      }
+
+      const member = await message.guild.members.fetch(userId);
+      if (!member) {
+        return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
+      }
+
+      if (!member.moderatable) {
+        return message.reply('❌ Bu üyeye zaman aşımı uygulayamıyorum. Botun yetkilerinin üyenin rolünden yüksek olduğundan emin olun.');
+      }
+
+      await member.timeout(durationMs, `Yetkili: ${message.author.tag}`);
+      return message.reply(`✅ <@${userId}> kullanıcısı **${durationStr}** süreyle zaman aşımına uğratıldı.`);
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Zaman aşımı uygulanırken bir hata oluştu.');
+    }
+  }
+
+  // 6. UNMUTE / ZAMAN AŞIMINI KALDIRMA KOMUTU (.unmute <@id>)
+  if (command === 'unmute') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için **Üyeleri Zaman Aşımına Uğrat** (Moderate Members) yetkisine sahip olmalısınız.');
+    }
+
+    const userId = resolveUserId(args[0]);
+    if (!userId) {
+      return message.reply('⚠️ Lütfen zaman aşımını kaldırmak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.unmute @kullanıcı`');
+    }
+
+    try {
+      const member = await message.guild.members.fetch(userId);
+      if (!member) {
+        return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
+      }
+
+      if (!member.communicationDisabledUntilTimestamp) {
+        return message.reply('⚠️ Bu kullanıcının zaten aktif bir zaman aşımı bulunmuyor.');
+      }
+
+      await member.timeout(null, `Yetkili: ${message.author.tag}`);
+      return message.reply(`✅ <@${userId}> kullanıcısının zaman aşımı kaldırıldı.`);
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Zaman aşımı kaldırılırken bir hata oluştu.');
+    }
+  }
+
+  // 7. LOCK KOMUTU (.lock)
+  if (command === 'lock') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+      return message.reply('❌ Bu komutu kullanmak için **Kanalları Yönet** (Manage Channels) yetkisine sahip olmalısınız.');
+    }
+
+    try {
+      await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, {
+        SendMessages: false
+      });
+      return message.reply('🔒 Bu kanal mesaj gönderimine kapatıldı.');
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Kanal kilitlenirken bir hata oluştu.');
+    }
+  }
+
+  // 8. UNLOCK KOMUTU (.unlock)
+  if (command === 'unlock') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+      return message.reply('❌ Bu komutu kullanmak için **Kanalları Yönet** (Manage Channels) yetkisine sahip olmalısınız.');
+    }
+
+    try {
+      await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, {
+        SendMessages: null
+      });
+      return message.reply('🔓 Bu kanalın kilidi açıldı.');
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Kanal kilidi açılırken bir hata oluştu.');
+    }
+  }
+
+  // 9. SPOTIFY KOMUTU (.spo)
+  if (command === 'spo') {
+    let member = message.member;
+    if (args[0]) {
+      const userId = resolveUserId(args[0]);
+      if (userId) {
+        try {
+          member = await message.guild.members.fetch(userId);
+        } catch (e) {
+          return message.reply('⚠️ Kullanıcı bulunamadı.');
+        }
+      }
+    }
+
+    if (!member.presence || !member.presence.activities) {
+      return message.reply(`❌ ${member.displayName} çevrimdışı veya durum bilgisi alınamıyor (Presence Intent açık olmalı).`);
+    }
+
+    const spotify = member.presence.activities.find(act => act.name === 'Spotify' && act.type === 2);
+    if (!spotify) {
+      return message.reply(`❌ ${member.displayName} şu anda Spotify'da şarkı dinlemiyor veya durumu Discord'a bağlı değil.`);
+    }
+
+    const trackName = spotify.details;
+    const artists = spotify.state;
+    const album = spotify.assets ? spotify.assets.largeText : 'Bilinmiyor';
+
+    return message.reply(`🎵 **${member.displayName}** şu anda Spotify dinliyor:\n**Şarkı:** ${trackName}\n**Sanatçı:** ${artists}\n**Albüm:** ${album}`);
+  }
+
+  // 10. SICIL KOMUTU (.sicil <id>)
+  if (command === 'sicil') {
+    const userId = resolveUserId(args[0]) || message.author.id;
+    const data = loadSicil();
+    const userData = data[userId] || { joins: 0, leaves: 0, nicknames: [] };
+
+    let isBanned = 'Hayır';
+    try {
+      await message.guild.bans.fetch(userId);
+      isBanned = 'Evet (Banlı)';
+    } catch (e) {
+      if (e.code === 10026) {
+        isBanned = 'Hayır';
+      } else {
+        isBanned = 'Bilinmiyor (Yetki Yetersiz)';
+      }
+    }
+
+    let kickCount = 0;
+    let banHistoryCount = 0;
+    try {
+      const auditLogs = await message.guild.fetchAuditLogs({ limit: 100 });
+      auditLogs.entries.forEach(entry => {
+        if (entry.target && entry.target.id === userId) {
+          if (entry.action === 24) {
+            kickCount++;
+          } else if (entry.action === 22) {
+            banHistoryCount++;
+          }
+        }
+      });
+    } catch (e) {
+      kickCount = 'Bilinmiyor (Denetim Kaydı Yetkisi Yok)';
+      banHistoryCount = 'Bilinmiyor (Denetim Kaydı Yetkisi Yok)';
+    }
+
+    const nicksStr = userData.nicknames.length > 0 ? userData.nicknames.join(', ') : 'Yok';
+
+    return message.reply(`📋 **<@${userId}> (ID: ${userId}) Sunucu Sicili:**\n` +
+      `👤 **Eski Takma Adları:** ${nicksStr}\n` +
+      `🚪 **Sunucuya Giriş Sayısı:** ${userData.joins}\n` +
+      `🚶 **Sunucudan Çıkış Sayısı:** ${userData.leaves}\n` +
+      `👢 **Sunucudan Atılma (Kick) Sayısı (Audit Log):** ${kickCount}\n` +
+      `🚫 **Ban Geçmişi Sayısı (Audit Log):** ${banHistoryCount}\n` +
+      `⚖️ **Şu anki Ban Durumu:** ${isBanned}`
+    );
+  }
+
+  // 11. KORU KOMUTU (.koru)
+  if (command === 'koru') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return message.reply('❌ Bu komutu kullanmak için **Sunucuyu Yönet** (Manage Server) yetkisine sahip olmalısınız.');
+    }
+
+    await message.channel.send('🚨 **Acil Durum Modu Aktif Ediliyor!** Tüm metin ve ses kanalları kilitleniyor...');
+
+    try {
+      const channels = await message.guild.channels.fetch();
+      for (const [id, channel] of channels) {
+        if (!channel) continue;
+        try {
+          if (channel.isTextBased()) {
+            await channel.permissionOverwrites.edit(message.guild.roles.everyone, {
+              SendMessages: false
+            });
+          } else if (channel.type === 2) {
+            await channel.permissionOverwrites.edit(message.guild.roles.everyone, {
+              Connect: false
+            });
+          }
+        } catch (error) {
+          console.error(`Kanal kilitlenirken hata (${channel.name}):`, error);
+        }
+      }
+      return message.channel.send('🔒 **Karantina Tamamlandı!** Tüm kanallar kilitlendi. Sunucu koruma altında.');
+    } catch (e) {
+      console.error(e);
+      return message.reply('❌ Kanallar listelenirken bir hata oluştu.');
+    }
+  }
+
+  // 12. KORUAC KOMUTU (.korumayıkapat)
+  if (command === 'korumayikapat' || command === 'korumayıkapat' || command === 'koruac') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return message.reply('❌ Bu komutu kullanmak için **Sunucuyu Yönet** (Manage Server) yetkisine sahip olmalısınız.');
+    }
+
+    await message.channel.send('🔓 **Acil Durum Modu Kapatılıyor...** Kanalların kilidi açılıyor...');
+
+    try {
+      const channels = await message.guild.channels.fetch();
+      for (const [id, channel] of channels) {
+        if (!channel) continue;
+        try {
+          if (channel.isTextBased()) {
+            await channel.permissionOverwrites.edit(message.guild.roles.everyone, {
+              SendMessages: null
+            });
+          } else if (channel.type === 2) {
+            await channel.permissionOverwrites.edit(message.guild.roles.everyone, {
+              Connect: null
+            });
+          }
+        } catch (error) {
+          console.error(`Kanal açılırken hata (${channel.name}):`, error);
+        }
+      }
+      return message.channel.send('✅ **İşlem Tamamlandı!** Sunucu normale döndü.');
+    } catch (e) {
+      console.error(e);
+      return message.reply('❌ Kanallar listelenirken bir hata oluştu.');
+    }
+  }
+
+  // 13. GUVENLIK KOMUTU (.guvenlik)
+  if (command === 'guvenlik') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** (Administrator) yetkisine sahip olmalısınız.');
+    }
+
+    await message.channel.send('🚨 **Rol Güvenlik Modu Aktif Ediliyor!** Tüm rollerin Yönetici (Administrator) yetkileri kapatılıyor...');
+
+    const roleStates = {};
+    const botMember = message.guild.members.me;
+
+    try {
+      const roles = await message.guild.roles.fetch();
+      for (const [id, role] of roles) {
+        if (role.isRawPositionWithoutGuildEveryoneAndEveryone() || role.managed || botMember.roles.cache.has(role.id)) {
+          continue;
+        }
+
+        // @everyone rolünü elle geç
+        if (role.id === message.guild.roles.everyone.id) {
+          continue;
+        }
+
+        if (role.permissions.has(PermissionFlagsBits.Administrator)) {
+          roleStates[role.id] = true;
+          try {
+            const newPerms = role.permissions.remove(PermissionFlagsBits.Administrator);
+            await role.edit({ permissions: newPerms }, 'Güvenlik Karantinası');
+          } catch (err) {
+            console.error(`Rol güncellenirken hata (${role.name}):`, err);
+          }
+        }
+      }
+
+      fs.writeFileSync('guvenlik_durum.json', JSON.stringify(roleStates, null, 2), 'utf8');
+      return message.channel.send('🔒 **İşlem Tamamlandı!** Yetkili rollerin Yönetici izinleri geçici olarak alındı.');
+    } catch (e) {
+      console.error(e);
+      return message.reply('❌ Roller düzenlenirken bir hata oluştu.');
+    }
+  }
+
+  // 14. GUVENLIKAC KOMUTU (.guvenlikac)
+  if (command === 'guvenlikac') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** (Administrator) yetkisine sahip olmalısınız.');
+    }
+
+    if (!fs.existsSync('guvenlik_durum.json')) {
+      return message.reply('❌ Kayıtlı bir güvenlik durumu bulunamadı.');
+    }
+
+    await message.channel.send('🔓 **Rol Güvenlik Modu Kapatılıyor...** Yönetici yetkileri geri yükleniyor...');
+
+    try {
+      const roleStates = JSON.parse(fs.readFileSync('guvenlik_durum.json', 'utf8'));
+      const roles = await message.guild.roles.fetch();
+
+      for (const roleId in roleStates) {
+        const role = roles.get(roleId);
+        if (role && roleStates[roleId]) {
+          try {
+            const newPerms = role.permissions.add(PermissionFlagsBits.Administrator);
+            await role.edit({ permissions: newPerms }, 'Güvenlik Karantinası Kaldırıldı');
+          } catch (err) {
+            console.error(`Rol geri yüklenirken hata (${role.name}):`, err);
+          }
+        }
+      }
+
+      fs.unlinkSync('guvenlik_durum.json');
+      return message.channel.send('✅ **İşlem Tamamlandı!** Tüm yetkili rollerin Yönetici izinleri geri yüklendi.');
+    } catch (e) {
+      console.error(e);
+      return message.reply('❌ Roller geri yüklenirken bir hata oluştu.');
+    }
+  }
+
+  // 14.2. ROLVER KOMUTU (.rolver <@id>)
+  if (command === 'rolver') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+      return message.reply('❌ Bu komutu kullanmak için **Rolleri Yönet** (Manage Roles) yetkisine sahip olmalısınız.');
+    }
+
+    const userId = resolveUserId(args[0]);
+    if (!userId) {
+      return message.reply('⚠️ Lütfen rol vermek istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.rolver @kullanıcı`');
+    }
+
+    try {
+      const member = await message.guild.members.fetch(userId);
+      if (!member) {
+        return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
+      }
+
+      const botMember = message.guild.members.me;
+      const roles = message.guild.roles.cache
+        .filter(role => !role.managed && role.id !== message.guild.roles.everyone.id && role.position < botMember.roles.highest.position)
+        .sort((a, b) => b.position - a.position)
+        .first(25);
+
+      if (roles.length === 0) {
+        return message.reply('⚠️ Sunucuda botun verebileceği uygun bir rol bulunamadı (tüm roller botun en üst rolünün üzerinde olabilir).');
+      }
+
+      const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
+
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('role_select')
+        .setPlaceholder('Verilecek rolü seçin...')
+        .addOptions(
+          roles.map(role => 
+            new StringSelectMenuOptionBuilder()
+              .setLabel(role.name)
+              .setValue(role.id)
+              .setDescription(`ID: ${role.id}`)
+          )
+        );
+
+      const row = new ActionRowBuilder().addComponents(selectMenu);
+
+      const response = await message.reply({
+        content: `👤 <@${userId}> kullanıcısına vermek istediğiniz rolü seçin:`,
+        components: [row]
+      });
+
+      const collector = response.createMessageComponentCollector({
+        componentType: ComponentType.StringSelect,
+        time: 60000
+      });
+
+      collector.on('collect', async (interaction) => {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+          return interaction.reply({ content: '❌ Bu işlemi yapmak için **Rolleri Yönet** yetkiniz olmalı!', ephemeral: true });
+        }
+
+        const selectedRoleId = interaction.values[0];
+        const role = message.guild.roles.cache.get(selectedRoleId);
+
+        if (!role) {
+          return interaction.reply({ content: '❌ Rol bulunamadı.', ephemeral: true });
+        }
+
+        try {
+          await member.roles.add(role);
+          await interaction.update({
+            content: `✅ <@${userId}> kullanıcısına **${role.name}** rolü başarıyla verildi.`,
+            components: []
+          });
+        } catch (err) {
+          console.error(err);
+          await interaction.reply({ content: '❌ Rol verilirken bir hata oluştu.', ephemeral: true });
+        }
+      });
+
+      collector.on('end', async (collected, reason) => {
+        if (reason === 'time' && collected.size === 0) {
+          try {
+            await response.edit({
+              content: '⏱️ Rol seçme süresi doldu.',
+              components: []
+            });
+          } catch (e) {
+            // ignore
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Kullanıcı bilgileri veya roller yüklenirken bir hata oluştu.');
+    }
+  }
+
+  // 14.3. ROLAL KOMUTU (.rolal <@id>)
+  if (command === 'rolal') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+      return message.reply('❌ Bu komutu kullanmak için **Rolleri Yönet** (Manage Roles) yetkisine sahip olmalısınız.');
+    }
+
+    const userId = resolveUserId(args[0]);
+    if (!userId) {
+      return message.reply('⚠️ Lütfen rolünü almak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.rolal @kullanıcı`');
+    }
+
+    try {
+      const member = await message.guild.members.fetch(userId);
+      if (!member) {
+        return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
+      }
+
+      const botMember = message.guild.members.me;
+      const roles = member.roles.cache
+        .filter(role => !role.managed && role.id !== message.guild.roles.everyone.id && role.position < botMember.roles.highest.position)
+        .sort((a, b) => b.position - a.position)
+        .first(25);
+
+      if (roles.length === 0) {
+        return message.reply(`⚠️ <@${userId}> kullanıcısının botun alabileceği hiçbir rolü bulunmuyor.`);
+      }
+
+      const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
+
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('role_remove_select')
+        .setPlaceholder('Alınacak rolü seçin...')
+        .addOptions(
+          roles.map(role => 
+            new StringSelectMenuOptionBuilder()
+              .setLabel(role.name)
+              .setValue(role.id)
+              .setDescription(`ID: ${role.id}`)
+          )
+        );
+
+      const row = new ActionRowBuilder().addComponents(selectMenu);
+
+      const response = await message.reply({
+        content: `👤 <@${userId}> kullanıcısından almak istediğiniz rolü seçin:`,
+        components: [row]
+      });
+
+      const collector = response.createMessageComponentCollector({
+        componentType: ComponentType.StringSelect,
+        time: 60000
+      });
+
+      collector.on('collect', async (interaction) => {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+          return interaction.reply({ content: '❌ Bu işlemi yapmak için **Rolleri Yönet** yetkiniz olmalı!', ephemeral: true });
+        }
+
+        const selectedRoleId = interaction.values[0];
+        const role = message.guild.roles.cache.get(selectedRoleId);
+
+        if (!role) {
+          return interaction.reply({ content: '❌ Rol bulunamadı.', ephemeral: true });
+        }
+
+        try {
+          await member.roles.remove(role);
+          await interaction.update({
+            content: `✅ <@${userId}> kullanıcısından **${role.name}** rolü başarıyla alındı.`,
+            components: []
+          });
+        } catch (err) {
+          console.error(err);
+          await interaction.reply({ content: '❌ Rol alınırken bir hata oluştu.', ephemeral: true });
+        }
+      });
+
+      collector.on('end', async (collected, reason) => {
+        if (reason === 'time' && collected.size === 0) {
+          try {
+            await response.edit({
+              content: '⏱️ Rol seçme süresi doldu.',
+              components: []
+            });
+          } catch (e) {
+            // ignore
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Kullanıcı bilgileri veya roller yüklenirken bir hata oluştu.');
+    }
+  }
+
+  // 14.35. LIMIT KOMUTU (.limit)
+  if (command === 'limit') {
+    if (message.author.id !== message.guild.ownerId) {
+      return message.reply('❌ Bu komutu sadece sunucu sahibi (taç sahibi) kullanabilir!');
+    }
+
+    try {
+      const roles = message.guild.roles.cache
+        .filter(role => !role.managed && role.id !== message.guild.roles.everyone.id && 
+          (role.permissions.has(PermissionFlagsBits.Administrator) || 
+           role.permissions.has(PermissionFlagsBits.BanMembers) || 
+           role.permissions.has(PermissionFlagsBits.KickMembers)))
+        .sort((a, b) => b.position - a.position)
+        .first(25);
+
+      if (roles.length === 0) {
+        return message.reply('⚠️ Sunucuda yönetici, ban veya kick yetkisi olan herhangi bir rol bulunamadı.');
+      }
+
+      const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } = require('discord.js');
+
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('limit_role_select')
+        .setPlaceholder('Limitini düzenlemek istediğiniz rolü seçin...')
+        .addOptions(
+          roles.map(role => 
+            new StringSelectMenuOptionBuilder()
+              .setLabel(role.name)
+              .setValue(role.id)
+              .setDescription(`ID: ${role.id}`)
+          )
+        );
+
+      const row = new ActionRowBuilder().addComponents(selectMenu);
+
+      const response = await message.reply({
+        content: '⚙️ **Limit Ayarları**\nLimit belirlemek istediğiniz rolü seçin:',
+        components: [row]
+      });
+
+      const collector = response.createMessageComponentCollector({
+        filter: (i) => i.user.id === message.guild.ownerId,
+        time: 120000 // 2 minutes
+      });
+
+      const showLimitValues = async (interaction, role) => {
+        const limits = loadLimitler();
+        const roleLimits = limits[role.id] || { ban_limit: null, kick_limit: null };
+        const banText = roleLimits.ban_limit !== null && roleLimits.ban_limit !== undefined ? roleLimits.ban_limit : 'Limitsiz';
+        const kickText = roleLimits.kick_limit !== null && roleLimits.kick_limit !== undefined ? roleLimits.kick_limit : 'Limitsiz';
+
+        const valSelectMenu = new StringSelectMenuBuilder()
+          .setCustomId(`limit_val_${role.id}`)
+          .setPlaceholder('Bir limit seçeneği seçin...')
+          .addOptions([
+            new StringSelectMenuOptionBuilder().setLabel('🚫 Ban Limiti: 1').setValue('ban_1').setDescription('1 saat içinde maks 1 ban'),
+            new StringSelectMenuOptionBuilder().setLabel('🚫 Ban Limiti: 2').setValue('ban_2').setDescription('1 saat içinde maks 2 ban'),
+            new StringSelectMenuOptionBuilder().setLabel('🚫 Ban Limiti: 3').setValue('ban_3').setDescription('1 saat içinde maks 3 ban'),
+            new StringSelectMenuOptionBuilder().setLabel('🚫 Ban Limiti: 5').setValue('ban_5').setDescription('1 saat içinde maks 5 ban'),
+            new StringSelectMenuOptionBuilder().setLabel('🚫 Ban Limiti: 10').setValue('ban_10').setDescription('1 saat içinde maks 10 ban'),
+            new StringSelectMenuOptionBuilder().setLabel('🚫 Ban Limitini Kaldır').setValue('ban_none').setDescription('Ban sınırını kaldırır'),
+            new StringSelectMenuOptionBuilder().setLabel('👢 Kick Limiti: 1').setValue('kick_1').setDescription('1 saat içinde maks 1 kick'),
+            new StringSelectMenuOptionBuilder().setLabel('👢 Kick Limiti: 2').setValue('kick_2').setDescription('1 saat içinde maks 2 kick'),
+            new StringSelectMenuOptionBuilder().setLabel('👢 Kick Limiti: 3').setValue('kick_3').setDescription('1 saat içinde maks 3 kick'),
+            new StringSelectMenuOptionBuilder().setLabel('👢 Kick Limiti: 5').setValue('kick_5').setDescription('1 saat içinde maks 5 kick'),
+            new StringSelectMenuOptionBuilder().setLabel('👢 Kick Limiti: 10').setValue('kick_10').setDescription('1 saat içinde maks 10 kick'),
+            new StringSelectMenuOptionBuilder().setLabel('👢 Kick Limitini Kaldır').setValue('kick_none').setDescription('Kick sınırını kaldırır'),
+            new StringSelectMenuOptionBuilder().setLabel('🔙 Başka Bir Rol Seç').setValue('back').setDescription('Ana rol listesine geri döner')
+          ]);
+
+        const valRow = new ActionRowBuilder().addComponents(valSelectMenu);
+
+        await interaction.update({
+          content: `⚙️ **Limit Ayarları - ${role.name}** (ID: ${role.id})\n\n` +
+                   `🚫 Mevcut Ban Limiti: **${banText}**\n` +
+                   `👢 Mevcut Kick Limiti: **${kickText}**\n\n` +
+                   `Lütfen güncellemek istediğiniz limiti seçin:`,
+          components: [valRow]
+        });
+      };
+
+      collector.on('collect', async (interaction) => {
+        if (interaction.customId === 'limit_role_select') {
+          const roleId = interaction.values[0];
+          const role = message.guild.roles.cache.get(roleId);
+          if (!role) {
+            return interaction.reply({ content: '❌ Rol bulunamadı.', ephemeral: true });
+          }
+          await showLimitValues(interaction, role);
+        } else if (interaction.customId.startsWith('limit_val_')) {
+          const roleId = interaction.customId.split('_')[2];
+          const role = message.guild.roles.cache.get(roleId);
+          if (!role) {
+            return interaction.reply({ content: '❌ Rol bulunamadı.', ephemeral: true });
+          }
+
+          const val = interaction.values[0];
+          if (val === 'back') {
+            const backMenu = new StringSelectMenuBuilder()
+              .setCustomId('limit_role_select')
+              .setPlaceholder('Limitini düzenlemek istediğiniz rolü seçin...')
+              .addOptions(
+                roles.map(r => 
+                  new StringSelectMenuOptionBuilder()
+                    .setLabel(r.name)
+                    .setValue(r.id)
+                    .setDescription(`ID: ${r.id}`)
+                )
+              );
+            const backRow = new ActionRowBuilder().addComponents(backMenu);
+            return interaction.update({
+              content: '⚙️ **Limit Ayarları**\nLimit belirlemek istediğiniz rolü seçin:',
+              components: [backRow]
+            });
+          }
+
+          const parts = val.split('_');
+          const action = parts[0];
+          const amountStr = parts[1];
+          const amount = amountStr === 'none' ? null : parseInt(amountStr);
+
+          const limits = loadLimitler();
+          if (!limits[roleId]) {
+            limits[roleId] = { ban_limit: null, kick_limit: null };
+          }
+
+          if (action === 'ban') {
+            limits[roleId].ban_limit = amount;
+          } else if (action === 'kick') {
+            limits[roleId].kick_limit = amount;
+          }
+
+          saveLimitler(limits);
+          await showLimitValues(interaction, role);
+        }
+      });
+
+      collector.on('end', async (collected, reason) => {
+        if (reason === 'time' && collected.size === 0) {
+          try {
+            await response.edit({
+              content: '⏱️ Limit ayarları süresi doldu.',
+              components: []
+            });
+          } catch (e) {}
+        }
+      });
+
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Roller listelenirken bir hata oluştu.');
+    }
+  }
+
+  // 14.36. OWNER KOMUTU (.owner)
+  if (command === 'owner') {
+    const owner = message.guild.members.cache.get(message.guild.ownerId) || await message.guild.members.fetch(message.guild.ownerId).catch(() => null);
+    const ownerMention = owner ? `<@${owner.id}>` : `<@${message.guild.ownerId}>`;
+    const ownerTag = owner ? ` (${owner.user.tag})` : '';
+    const ownerId = message.guild.ownerId;
+
+    const helpText = 
+      `👑 **Kurucu / Taç Sahibi Özel Komutları**\n` +
+      `👤 **Sunucu Sahibi:** ${ownerMention}${ownerTag} (ID: \`${ownerId}\`)\n\n` +
+      "• `.limit`: Yetkili roller için saatlik Ban/Kick limitlerini belirler (Açılır menü ile).\n" +
+      "• `.koru`: Tüm metin ve ses kanallarını kilitler (Acil durum modu).\n" +
+      "• `.korumayıkapat` / `.koruac`: Kilitlenen kanalları eski haline getirir.\n" +
+      "• `.guvenlik`: Tüm yetkili rollerin Yönetici (Administrator) yetkilerini geçici olarak kapatır.\n" +
+      "• `.guvenlikac`: Güvenlik nedeniyle kapatılan Yönetici yetkilerini geri yükler.\n" +
+      "• `.owner`: Sadece kurucunun kullanabildiği tüm özel komutları listeler.";
+
+    return message.reply(helpText);
+  }
+
+  // 14.4. YARDIM KOMUTU (.yardım)
+  if (command === 'yardim' || command === 'yardım' || command === 'help') {
+    const helpText = 
+      "📋 **Bot Komut Listesi (Prefix: .)**\n\n" +
+      "🛡️ **Yetkili & Moderasyon Komutları:**\n" +
+      "• `.ban <@kullanıcı>`: Kullanıcıyı sunucudan yasaklar.\n" +
+      "• `.unban <ID>`: Belirtilen ID'ye sahip kullanıcının yasaklamasını kaldırır.\n" +
+      "• `.kick <@kullanıcı>`: Kullanıcıyı sunucudan atar.\n" +
+      "• `.mute <@kullanıcı> <süre>`: Kullanıcıya geçici zaman aşımı uygular (Örn: `.mute @kullanıcı 10m`).\n" +
+      "• `.unmute <@kullanıcı>`: Kullanıcının zaman aşımını kaldırır.\n" +
+      "• `.rolver <@kullanıcı>`: Açılır menüden seçilen rolü kullanıcıya verir.\n" +
+      "• `.rolal <@kullanıcı>`: Açılır menüden kullanıcının üstündeki seçilen rolü geri alır.\n" +
+      "• `.e <@kullanıcı>`: Kullanıcıya Erkek rolünü verir.\n" +
+      "• `.k <@kullanıcı>`: Kullanıcıya Kız rolünü verir.\n" +
+      "• `.lock`: Bulunduğunuz kanalı mesaj gönderimine kapatır.\n" +
+      "• `.unlock`: Bulunduğunuz kanalın kilidini açar.\n" +
+      "• `.sil <sayı>`: Belirtilen miktarda mesajı topluca siler (En fazla 100).\n" +
+      "• `.engelle`: Link, video ve GIF paylaşımlarını engeller (Açar/Kapatır).\n\n" +
+      "🎮 **Eğlence & Bilgi Komutları:**\n" +
+      "• `.adamasmaca`: Kelime tahmin oyununu başlatır (Doğrudan kelime veya harf tahmin edebilirsiniz).\n" +
+      "• `.spo <@kullanıcı>`: Kullanıcının Spotify'da dinlediği şarkı durumunu gösterir.\n" +
+      "• `.sicil <@kullanıcı>`: Kullanıcının sunucuya giriş/çıkış ve eski takma ad geçmişini listeler.\n" +
+      "• `.kod`: Rastgele, doğruluğu garanti olmayan Nitro promo hediye linki üretir.\n" +
+      "• `.acv <@kullanıcı>`: Kullanıcının giriş serisi, aktif oyunu ve toplam oyun sürelerini listeler.\n\n" +
+      "🚨 **Güvenlik & Acil Durum Komutları:**\n" +
+      "• `.koru`: Tüm metin ve ses kanallarını mesaj gönderimine/bağlantıya kapatır.\n" +
+      "• `.korumayıkapat` / `.koruac`: Kilitlenen kanalları eski haline getirir.\n" +
+      "• `.guvenlik`: Yetkili rollerin Yönetici yetkisini geçici olarak kapatır.\n" +
+      "• `.guvenlikac`: Güvenlik nedeniyle kapatılan Yönetici yetkilerini geri yükler.\n" +
+      "• `.limit`: Yetkili rollerin ban/kick limitlerini belirler (Açılır menü ile).\n" +
+      "• `.owner`: Sadece kurucunun kullanabildiği tüm özel komutları listeler.";
+
+    return message.reply(helpText);
+  }
+
+  // 14.45. KOD URETME KOMUTU (.kod)
+  if (command === 'kod') {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let promoCode = '';
+    for (let i = 0; i < 16; i++) {
+      promoCode += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const promoLink = `https://discord.gift/${promoCode}`;
+
+    const { EmbedBuilder } = require('discord.js');
+    const embed = new EmbedBuilder()
+      .setTitle('🎁 Rastgele Discord Nitro Kodu')
+      .setDescription(`İşte oluşturulan rastgele Nitro promo linki:\n\n\`${promoLink}\`\n\n[Buraya Tıklayarak Dene](${promoLink})\n\n💡 *Not: Bu kod rastgele karakterlerden oluşturulmuştur ve çalışma olasılığı son derece düşüktür (doğruluğu kesin değildir).*`)
+      .setColor('#FF00FF');
+
+    return message.reply({ embeds: [embed] });
+  }
+
+  // 14.47. ENGELLE KOMUTU (.engelle)
+  if (command === 'engelle') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
+      return message.reply('❌ Bu komutu kullanmak için **Mesajları Yönet** (Manage Messages) yetkisine sahip olmalısınız.');
+    }
+
+    linkFilterActive = !linkFilterActive;
+    if (linkFilterActive) {
+      return message.reply('🔒 **Link ve GIF Filtresi Aktif!** Artık yetkililer dışındaki üyelerin link, YouTube videosu, Tenor GIF veya davet linki paylaşması engellenecek.');
+    } else {
+      return message.reply('🔓 **Link ve GIF Filtresi Kapatıldı!** Link paylaşımları serbest.');
+    }
+  }
+
+  // 14.9. ACV KOMUTU (.acv)
+  if (command === 'acv') {
+    let member = message.member;
+    if (args[0]) {
+      const userId = resolveUserId(args[0]);
+      if (userId) {
+        try {
+          member = await message.guild.members.fetch(userId);
+        } catch (e) {
+          return message.reply('⚠️ Kullanıcı bulunamadı.');
+        }
+      }
+    }
+
+    if (member.user.bot) {
+      return message.reply('🤖 Botların aktivite bilgisi bulunmaz.');
+    }
+
+    const data = loadAktivite();
+    const userData = data[member.id] || { games: {}, streak: 1, last_seen: "" };
+
+    const streak = userData.streak || 1;
+    const games = userData.games || {};
+    const currentGame = userData.current_game;
+
+    let currentGameDetails = '🎮 **Şu Anda Oynuyor:** Oyun oynamıyor.\n';
+    const gamesCopy = { ...games };
+
+    const activeActivity = member.presence && member.presence.activities
+      ? member.presence.activities.find(act => act.type === 0)
+      : null;
+
+    if (activeActivity) {
+      let sessionTime = 0;
+      const nowTs = Math.floor(Date.now() / 1000);
+
+      if (currentGame && currentGame.name === activeActivity.name) {
+        sessionTime = nowTs - (currentGame.start || nowTs);
+      } else if (activeActivity.timestamps && activeActivity.timestamps.start) {
+        sessionTime = nowTs - Math.floor(activeActivity.timestamps.start.getTime() / 1000);
+      }
+
+      if (sessionTime < 0) sessionTime = 0;
+
+      gamesCopy[activeActivity.name] = (gamesCopy[activeActivity.name] || 0) + sessionTime;
+
+      const sessionMin = Math.floor(sessionTime / 60);
+      const sessionSec = sessionTime % 60;
+      currentGameDetails = `🎮 **Şu Anda Oynuyor:** ${activeActivity.name} (Bu oturumda: ${sessionMin}dk ${sessionSec}sn)\n`;
+    }
+
+    const playtimeList = [];
+    for (const gName in gamesCopy) {
+      const gSecs = gamesCopy[gName];
+      const hours = Math.floor(gSecs / 3600);
+      const minutes = Math.floor((gSecs % 3600) / 60);
+      const seconds = gSecs % 60;
+
+      let timeStr = '';
+      if (hours > 0) timeStr += `${hours}sa `;
+      if (minutes > 0 || hours > 0) timeStr += `${minutes}dk `;
+      timeStr += `${seconds}sn`;
+
+      playtimeList.push(`• **${gName}**: ${timeStr}`);
+    }
+
+    const playtimesStr = playtimeList.length > 0 ? playtimeList.join('\n') : '• Henüz kaydedilmiş oyun süresi yok.';
+
+    const { EmbedBuilder } = require('discord.js');
+    const embed = new EmbedBuilder()
+      .setTitle(`📊 Aktivite & İstatistik Raporu: ${member.displayName}`)
+      .setThumbnail(member.user.displayAvatarURL())
+      .setColor('#0000FF')
+      .addFields(
+        { name: '🔥 Giriş Serisi (Streak)', value: `**${streak}** gün üst üste aktif oldu.`, inline: false },
+        { name: '🎮 Oyun Durumu', value: currentGameDetails, inline: false },
+        { name: '🕒 Toplam Oyun Süreleri', value: playtimesStr, inline: false }
+      );
+
+    return message.reply({ embeds: [embed] });
+  }
+
+  // 14.5. SIL KOMUTU (.sil <sayı>)
+  if (command === 'sil') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
+      return message.reply('❌ Bu komutu kullanmak için **Mesajları Yönet** (Manage Messages) yetkisine sahip olmalısınız.');
+    }
+
+    const amount = parseInt(args[0]);
+    if (isNaN(amount) || amount <= 0) {
+      return message.reply('⚠️ Lütfen geçerli bir sayı girin. Örnek: `.sil 10`');
+    }
+
+    const limit = Math.min(amount + 1, 100);
+
+    try {
+      const deleted = await message.channel.bulkDelete(limit, true);
+      const msg = await message.channel.send(`✅ ${deleted.size - 1} mesaj başarıyla silindi.`);
+      setTimeout(() => {
+        msg.delete().catch(console.error);
+      }, 3000);
+    } catch (error) {
+      console.error(error);
+      return message.reply('❌ Mesajlar silinirken bir hata oluştu. Mesajların 14 günden eski olmadığından ve botun yetkilerinin tam olduğundan emin olun.');
+    }
+  }
+
+  // 15. ADAM ASMACA KOMUTU (.adamasmaca)
+  if (command === 'adamasmaca') {
+    const channelId = message.channel.id;
+    if (activeGames.has(channelId)) {
+      return message.reply('⚠️ Bu kanalda zaten devam eden bir adam asmaca oyunu var!');
+    }
+
+    const randomWord = HANGMAN_WORDS[Math.floor(Math.random() * HANGMAN_WORDS.length)].toLowerCase();
+    activeGames.set(channelId, {
+      word: randomWord,
+      guessed: [],
+      attempts: 6
+    });
+
+    const display = Array(randomWord.length).fill('_').join(' ');
+    return message.reply(`🎮 **Adam Asmaca Oyunu Başladı!**\nKelime: \`${display}\` (Kelime ${randomWord.length} harfli)\n💡 *Tahmin etmek için doğrudan tek bir harf yazın.*\n` + HANGMAN_STAGES[0]);
+  }
+
+  // 16. PLAY KOMUTU (.play)
+  if (command === 'play') {
+    const voiceChannel = message.member?.voice?.channel;
+    if (!voiceChannel) {
+      return message.reply('⚠️ Bu komutu kullanmak için bir ses kanalında olmalısınız!');
+    }
+
+    try {
+      const { joinVoiceChannel } = require('@discordjs/voice');
+      joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: voiceChannel.guild.id,
+        adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+      });
+    } catch (e) {
+      console.error("Voice join error:", e);
+    }
+
+    const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('play_search_btn')
+        .setLabel('🎵 Şarkı Ara / Çal')
+        .setStyle(ButtonStyle.Success)
+    );
+
+    return message.reply({ 
+      content: '🎶 Spotify müzik çalar menüsünü açmak için aşağıdaki butona tıklayın:', 
+      components: [row] 
+    });
+  }
+});
+
+// ==================== API SERVER FOR WEBSITE INTERACTION ====================
+const http = require('http');
+
+const API_PORT = 3000;
+const apiServer = http.createServer((req, res) => {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  const sendJSON = (status, data) => {
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(data));
+  };
+
+  if (req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        let params = {};
+        if (body) params = JSON.parse(body);
+
+        if (req.url === '/api/send-embed') {
+          const { guildId, channelId, title, description, color, footer } = params;
+          if (!guildId || !channelId) {
+            return sendJSON(400, { error: 'guildId and channelId are required' });
+          }
+
+          const guild = client.guilds.cache.get(guildId);
+          if (!guild) return sendJSON(404, { error: 'Guild not found' });
+
+          const channel = guild.channels.cache.get(channelId);
+          if (!channel) return sendJSON(404, { error: 'Channel not found' });
+
+          const embed = new EmbedBuilder()
+            .setTitle(title || null)
+            .setDescription(description || null)
+            .setColor(color || '#5865f2')
+            .setFooter(footer ? { text: footer } : null);
+
+          await channel.send({ embeds: [embed] });
+          return sendJSON(200, { success: true });
+        }
+
+        if (req.url === '/api/save-embed-config') {
+          const { id, name, guildId, channelId, author, title, description, color, thumbnail, image, footer } = params;
+          if (!guildId) {
+            return sendJSON(400, { error: 'guildId is required' });
+          }
+
+          const embedId = id || Date.now().toString();
+          const embedData = {
+            id: embedId,
+            name: name || 'Yeni Embed',
+            guildId,
+            channelId: channelId || 'all',
+            author,
+            title,
+            description,
+            color,
+            thumbnail,
+            image,
+            footer
+          };
+
+          const idx = savedEmbeds.findIndex(e => e.id === embedId);
+          if (idx !== -1) {
+            savedEmbeds[idx] = embedData;
+          } else {
+            savedEmbeds.push(embedData);
+          }
+          saveSavedEmbeds();
+          exportServerData();
+
+          // Send to Discord
+          const guild = client.guilds.cache.get(guildId);
+          if (guild && channelId && channelId !== 'all') {
+            const channel = guild.channels.cache.get(channelId);
+            if (channel) {
+              const embed = new EmbedBuilder()
+                .setColor(color || '#ffffff');
+              
+              if (author && author !== 'Üst bilgi' && author.trim() !== '') {
+                embed.setAuthor({ name: author });
+              }
+              if (title && title !== 'Başlık' && title.trim() !== '') {
+                embed.setTitle(title);
+              }
+              if (description && description !== 'Açıklama...' && description.trim() !== '') {
+                embed.setDescription(description);
+              }
+              if (thumbnail && thumbnail.trim() !== '') {
+                embed.setThumbnail(thumbnail);
+              }
+              if (image && image.trim() !== '') {
+                embed.setImage(image);
+              }
+              if (footer && footer !== 'Alt bilgi' && footer.trim() !== '') {
+                embed.setFooter({ text: footer });
+              }
+
+              await channel.send({ embeds: [embed] });
+            }
+          }
+          logEvent("INFO", "Embeds", `Saved embed '${embedData.name}' with channel ID ${channelId}`);
+          return sendJSON(200, { success: true });
+        }
+
+        if (req.url === '/api/delete-embed-config') {
+          const { id } = params;
+          if (!id) {
+            return sendJSON(400, { error: 'id is required' });
+          }
+          savedEmbeds = savedEmbeds.filter(e => e.id !== id);
+          saveSavedEmbeds();
+          exportServerData();
+          logEvent("INFO", "Embeds", `Deleted saved embed config ID ${id}`);
+          return sendJSON(200, { success: true });
+        }
+
+        if (req.url === '/api/add-autoresponder') {
+          const { trigger, response } = params;
+          if (!trigger || !response) {
+            return sendJSON(400, { error: 'trigger and response are required' });
+          }
+          const idx = autoresponders.findIndex(ar => ar.trigger.toLowerCase() === trigger.toLowerCase());
+          if (idx !== -1) {
+            autoresponders[idx].response = response;
+          } else {
+            autoresponders.push({ trigger, response });
+          }
+          saveAutoresponders();
+          exportServerData();
+          logEvent("INFO", "Autoresponder", `Added autoresponder for '${trigger}' via website`);
+          return sendJSON(200, { success: true });
+        }
+
+        if (req.url === '/api/remove-autoresponder') {
+          const { trigger } = params;
+          if (!trigger) {
+            return sendJSON(400, { error: 'trigger is required' });
+          }
+          autoresponders = autoresponders.filter(ar => ar.trigger.toLowerCase() !== trigger.toLowerCase());
+          saveAutoresponders();
+          exportServerData();
+          logEvent("INFO", "Autoresponder", `Removed autoresponder for '${trigger}' via website`);
+          return sendJSON(200, { success: true });
+        }
+
+        if (req.url === '/api/save-settings') {
+          const { prefix } = params;
+          if (prefix) {
+            config.prefix = prefix;
+            try {
+              fs.writeFileSync('config.js', `module.exports = ${JSON.stringify(config, null, 2)};`, 'utf8');
+            } catch (err) {
+              console.error('Failed to write config.js:', err);
+            }
+            logEvent("INFO", "Config", `Prefix updated to '${prefix}' via website`);
+          }
+          return sendJSON(200, { success: true });
+        }
+
+        if (req.url === '/api/toggle-link-filter') {
+          const { enabled } = params;
+          linkFilterActive = !!enabled;
+          logEvent("INFO", "Filter", `Link Filter set to ${linkFilterActive} via website`);
+          return sendJSON(200, { success: true, enabled: linkFilterActive });
+        }
+
+        if (req.url === '/api/toggle-panic') {
+          const { guildId, enabled } = params;
+          if (!guildId) return sendJSON(400, { error: 'guildId is required' });
+
+          const guild = client.guilds.cache.get(guildId);
+          if (!guild) return sendJSON(404, { error: 'Guild not found' });
+
+          const channels = await guild.channels.fetch();
+          for (const [id, channel] of channels) {
+            if (!channel) continue;
+            try {
+              if (channel.isTextBased()) {
+                await channel.permissionOverwrites.edit(guild.roles.everyone, {
+                  SendMessages: !enabled
+                });
+              } else if (channel.type === 2) {
+                await channel.permissionOverwrites.edit(guild.roles.everyone, {
+                  Connect: !enabled
+                });
+              }
+            } catch (err) {
+              console.error(`Kanal kilidi degistirilirken hata (${channel.name}):`, err);
+            }
+          }
+          logEvent("INFO", "Panic", `Panic Mode set to ${enabled} via website`);
+          return sendJSON(200, { success: true });
+        }
+
+        if (req.url === '/api/toggle-role-security') {
+          const { guildId, enabled } = params;
+          if (!guildId) return sendJSON(400, { error: 'guildId is required' });
+
+          const guild = client.guilds.cache.get(guildId);
+          if (!guild) return sendJSON(404, { error: 'Guild not found' });
+
+          const botMember = guild.members.me;
+
+          if (enabled) {
+            const roleStates = {};
+            const roles = await guild.roles.fetch();
+            for (const [id, role] of roles) {
+              if (role.isRawPositionWithoutGuildEveryoneAndEveryone() || role.managed || botMember.roles.cache.has(role.id)) {
+                continue;
+              }
+              if (role.id === guild.roles.everyone.id) {
+                continue;
+              }
+
+              if (role.permissions.has(PermissionFlagsBits.Administrator)) {
+                roleStates[role.id] = true;
+                try {
+                  const newPerms = role.permissions.remove(PermissionFlagsBits.Administrator);
+                  await role.edit({ permissions: newPerms }, 'Güvenlik Karantinası');
+                } catch (err) {
+                  console.error(`Rol güncellenirken hata (${role.name}):`, err);
+                }
+              }
+            }
+            fs.writeFileSync('guvenlik_durum.json', JSON.stringify(roleStates, null, 2), 'utf8');
+            logEvent("INFO", "Security", `Role Security enabled via website`);
+          } else {
+            if (fs.existsSync('guvenlik_durum.json')) {
+              try {
+                const roleStates = JSON.parse(fs.readFileSync('guvenlik_durum.json', 'utf8'));
+                const roles = await guild.roles.fetch();
+
+                for (const roleId in roleStates) {
+                  const role = roles.get(roleId);
+                  if (role && roleStates[roleId]) {
+                    try {
+                      const newPerms = role.permissions.add(PermissionFlagsBits.Administrator);
+                      await role.edit({ permissions: newPerms }, 'Güvenlik Karantinası Kaldırıldı');
+                    } catch (err) {
+                      console.error(`Rol geri yüklenirken hata (${role.name}):`, err);
+                    }
+                  }
+                }
+                fs.unlinkSync('guvenlik_durum.json');
+              } catch (err) {
+                console.error(err);
+              }
+            }
+            logEvent("INFO", "Security", `Role Security disabled via website`);
+          }
+          return sendJSON(200, { success: true });
+        }
+
+        if (req.url === '/api/save-automod') {
+          automodConfig = {
+            reklam: params.reklam || automodConfig.reklam,
+            kufur: params.kufur || automodConfig.kufur,
+            link: params.link || automodConfig.link
+          };
+          saveAutomodConfig();
+          exportServerData();
+          logEvent("INFO", "Automod", "Automod configuration updated via website");
+          return sendJSON(200, { success: true });
+        }
+
+        return sendJSON(404, { error: 'Not Found' });
+      } catch (err) {
+        console.error(err);
+        return sendJSON(500, { error: err.message });
+      }
+    });
+  } else {
+    return sendJSON(404, { error: 'Not Found' });
+  }
+});
+
+apiServer.listen(API_PORT, () => {
+  console.log(`[API Server] listening on http://localhost:${API_PORT}`);
+});
+
+client.login(process.env.DISCORD_TOKEN);
