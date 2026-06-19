@@ -888,8 +888,18 @@ client.on('messageCreate', async (message) => {
             return message.author.send('⚠️ Kullanım: `.yaz <kanal_id> <mesaj>`').catch(() => null);
           }
 
+          const cleanedChannelId = channelId.replace(/[^0-9]/g, '');
+          let msgToSend = msgContent;
+          if (msgToSend.startsWith('<') && msgToSend.endsWith('>')) {
+            msgToSend = msgToSend.slice(1, -1);
+          }
+
+          if (!cleanedChannelId) {
+            return message.author.send('❌ Geçersiz kanal ID.').catch(() => null);
+          }
+
           try {
-            const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(() => null);
+            const channel = client.channels.cache.get(cleanedChannelId) || await client.channels.fetch(cleanedChannelId).catch(() => null);
             if (!channel) {
               return message.author.send('❌ Belirtilen kanal bulunamadı veya bot bu kanala erişemiyor.').catch(() => null);
             }
@@ -899,15 +909,34 @@ client.on('messageCreate', async (message) => {
             }
 
             await channel.send({
-              content: msgContent,
+              content: msgToSend,
               allowedMentions: { parse: ['everyone', 'users', 'roles'] }
             });
 
-            return message.author.send(`✅ Mesaj başarıyla <#${channelId}> kanalına gönderildi.`).catch(() => null);
+            return message.author.send(`✅ Mesaj başarıyla <#${cleanedChannelId}> kanalına gönderildi.`).catch(() => null);
           } catch (error) {
             console.error(error);
             return message.author.send('❌ Mesaj gönderilirken bir hata oluştu.').catch(() => null);
           }
+        }
+
+        if (command === 'özel' || command === 'ozel') {
+          const embed = new EmbedBuilder()
+            .setTitle('🛠️ Bot Geliştirici Özel Komutları')
+            .setColor('#7289da')
+            .setDescription('Sadece bot geliştiricilerine özel kullanılabilen komutlar:')
+            .addFields(
+              { name: '`.yaz <kanal_id> <mesaj>`', value: 'Belirtilen kanala botun adıyla mesaj gönderir (DM veya sunucuda kullanılabilir).' },
+              { name: '`.rolver <kullanıcı> <rol> [sunucu_id]`', value: 'Kullanıcıya rol verir. Sunucu ID girilirse sunucu dışından da verilebilir.' },
+              { name: '`.rolal <kullanıcı> <rol> [sunucu_id]`', value: 'Kullanıcıdan rol geri alır. Sunucu ID girilirse sunucu dışından da yapılabilir.' },
+              { name: '`.koru`', value: 'Acil durum korumasını açar (tüm kanalları kilitler).' },
+              { name: '`.korumayıkapat` / `.koruac`', value: 'Acil durum korumasını kapatır (kanal kilitlerini kaldırır).' },
+              { name: '`.guvenlik`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır/kaldırır.' },
+              { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
+            )
+            .setFooter({ text: 'Antigravity Developer Panel' });
+
+          return message.author.send({ embeds: [embed] }).catch(() => null);
         }
       }
     }
@@ -1912,8 +1941,18 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Kullanım: `.yaz <kanal_id> <mesaj>`');
     }
 
+    const cleanedChannelId = channelId.replace(/[^0-9]/g, '');
+    let msgToSend = msgContent;
+    if (msgToSend.startsWith('<') && msgToSend.endsWith('>')) {
+      msgToSend = msgToSend.slice(1, -1);
+    }
+
+    if (!cleanedChannelId) {
+      return message.reply('❌ Geçersiz kanal ID.');
+    }
+
     try {
-      const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(() => null);
+      const channel = client.channels.cache.get(cleanedChannelId) || await client.channels.fetch(cleanedChannelId).catch(() => null);
       if (!channel) {
         return message.reply('❌ Belirtilen kanal bulunamadı veya bot bu kanala erişemiyor.');
       }
@@ -1923,12 +1962,12 @@ client.on('messageCreate', async (message) => {
       }
 
       await channel.send({
-        content: msgContent,
+        content: msgToSend,
         allowedMentions: { parse: ['everyone', 'users', 'roles'] }
       });
 
       // Send confirmation to Developer DM
-      await message.author.send(`✅ Mesaj başarıyla <#${channelId}> kanalına gönderildi.`).catch(() => null);
+      await message.author.send(`✅ Mesaj başarıyla <#${cleanedChannelId}> kanalına gönderildi.`).catch(() => null);
       
       // Delete the command message in the current server channel so nobody sees it
       await message.delete().catch(() => null);
@@ -1936,6 +1975,32 @@ client.on('messageCreate', async (message) => {
       console.error(error);
       return message.reply('❌ Mesaj gönderilirken bir hata oluştu.');
     }
+  }
+
+  // 14.32. OZEL KOMUTU (.özel / .ozel)
+  if (command === 'özel' || command === 'ozel') {
+    if (!isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Bu komut sadece bot yapımcısına özeldir.');
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('🛠️ Bot Geliştirici Özel Komutları')
+      .setColor('#7289da')
+      .setDescription('Sadece bot geliştiricilerine özel kullanılabilen komutlar:')
+      .addFields(
+        { name: '`.yaz <kanal_id> <mesaj>`', value: 'Belirtilen kanala botun adıyla mesaj gönderir (DM veya sunucuda kullanılabilir).' },
+        { name: '`.rolver <kullanıcı> <rol> [sunucu_id]`', value: 'Kullanıcıya rol verir. Sunucu ID girilirse sunucu dışından da verilebilir.' },
+        { name: '`.rolal <kullanıcı> <rol> [sunucu_id]`', value: 'Kullanıcıdan rol geri alır. Sunucu ID girilirse sunucu dışından da yapılabilir.' },
+        { name: '`.koru`', value: 'Acil durum korumasını açar (tüm kanalları kilitler).' },
+        { name: '`.korumayıkapat` / `.koruac`', value: 'Acil durum korumasını kapatır (kanal kilitlerini kaldırır).' },
+        { name: '`.guvenlik`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır/kaldırır.' },
+        { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
+      )
+      .setFooter({ text: 'Antigravity Developer Panel' });
+
+    await message.author.send({ embeds: [embed] }).catch(() => null);
+    await message.delete().catch(() => null);
+    return;
   }
 
   // 14.35. LIMIT KOMUTU (.limit)
