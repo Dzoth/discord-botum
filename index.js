@@ -929,6 +929,11 @@ client.on('messageCreate', async (message) => {
               { name: '`.yaz <kanal_id> <mesaj>`', value: 'Belirtilen kanala botun adıyla mesaj gönderir (DM veya sunucuda kullanılabilir).' },
               { name: '`.rolver <kullanıcı> <rol> [sunucu_id]`', value: 'Kullanıcıya rol verir. Sunucu ID girilirse sunucu dışından da verilebilir.' },
               { name: '`.rolal <kullanıcı> <rol> [sunucu_id]`', value: 'Kullanıcıdan rol geri alır. Sunucu ID girilirse sunucu dışından da yapılabilir.' },
+              { name: '`.ban <kullanıcı> [sunucu_id]`', value: 'Kullanıcıyı yasaklar. Sunucu ID girilirse o sunucudan yasaklar.' },
+              { name: '`.unban <kullanıcı_id> [sunucu_id]`', value: 'Kullanıcının yasağını kaldırır. Sunucu ID girilirse o sunucudan kaldırır.' },
+              { name: '`.mute <kullanıcı> <süre> [sunucu_id]`', value: 'Kullanıcıyı susturur. Sunucu ID girilirse o sunucuda susturur.' },
+              { name: '`.unmute <kullanıcı> [sunucu_id]`', value: 'Kullanıcının susturmasını kaldırır. Sunucu ID girilirse o sunucuda kaldırır.' },
+              { name: '`.üst <taşınacak_rol_id> <hedef_rol_id> [sunucu_id]`', value: 'Belirtilen rolü hedef rolün üstüne taşır. Sunucu ID girilirse o sunucuda yapar.' },
               { name: '`.koru`', value: 'Acil durum korumasını açar (tüm kanalları kilitler).' },
               { name: '`.korumayıkapat` / `.koruac`', value: 'Acil durum korumasını kapatır (kanal kilitlerini kaldırır).' },
               { name: '`.guvenlik`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır/kaldırır.' },
@@ -1185,7 +1190,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // 1. BAN KOMUTU (.ban <@id>)
+  // 1. BAN KOMUTU (.ban <@id> [sunucu_id])
   if (command === 'ban') {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
       return message.reply('❌ Bu komutu kullanmak için **Üyeleri Yasakla** yetkisine sahip olmalısınız.');
@@ -1196,16 +1201,29 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen yasaklamak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.ban @kullanıcı` veya `.ban 1234567890`');
     }
 
+    const targetGuildId = args[1];
+    if (targetGuildId && !isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Farklı bir sunucuda ban işlemi yapmak sadece bot yapımcısına özeldir.');
+    }
+
     try {
-      await message.guild.members.ban(userId, { reason: `Yetkili: ${message.author.tag}` });
-      return message.reply(`✅ <@${userId}> (ID: ${userId}) başarıyla sunucudan yasaklandı.`);
+      const guild = targetGuildId 
+        ? (client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null))
+        : message.guild;
+
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
+      }
+
+      await guild.members.ban(userId, { reason: `Yetkili: ${message.author.tag}` });
+      return message.reply(`✅ <@${userId}> (ID: ${userId}) başarıyla **${guild.name}** sunucusundan yasaklandı.`);
     } catch (error) {
       console.error(error);
-      return message.reply('❌ Kullanıcı yasaklanırken bir hata oluştu. Botun yetkilerinin tam olduğundan ve kullanıcının rolünün botun rolünden daha düşük olduğundan emin olun.');
+      return message.reply('❌ Kullanıcı yasaklanırken bir hata oluştu. Botun yetkilerinin tam olduğundan emin olun.');
     }
   }
 
-  // 1.5. UNBAN KOMUTU (.unban <id>)
+  // 1.5. UNBAN KOMUTU (.unban <id> [sunucu_id])
   if (command === 'unban') {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
       return message.reply('❌ Bu komutu kullanmak için **Üyeleri Yasakla** yetkisine sahip olmalısınız.');
@@ -1216,9 +1234,22 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen yasağını kaldırmak istediğiniz kullanıcının ID\'sini girin. Örnek: `.unban 1234567890`');
     }
 
+    const targetGuildId = args[1];
+    if (targetGuildId && !isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Farklı bir sunucuda ban kaldırma işlemi yapmak sadece bot yapımcısına özeldir.');
+    }
+
     try {
-      await message.guild.members.unban(userId, `Yetkili: ${message.author.tag}`);
-      return message.reply(`✅ <@${userId}> (ID: ${userId}) kullanıcısının yasaklaması başarıyla kaldırıldı.`);
+      const guild = targetGuildId 
+        ? (client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null))
+        : message.guild;
+
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
+      }
+
+      await guild.members.unban(userId, `Yetkili: ${message.author.tag}`);
+      return message.reply(`✅ <@${userId}> (ID: ${userId}) kullanıcısının **${guild.name}** sunucusundaki yasaklaması başarıyla kaldırıldı.`);
     } catch (error) {
       console.error(error);
       return message.reply('❌ Kullanıcının yasaklaması kaldırılırken bir hata oluştu. Kullanıcının banlı olduğundan emin olun.');
@@ -1345,7 +1376,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // 5. MUTE / ZAMAN AŞIMI KOMUTU (.mute <@id> <süre>)
+  // 5. MUTE / ZAMAN AŞIMI KOMUTU (.mute <@id> <süre> [sunucu_id])
   if (command === 'mute') {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       return message.reply('❌ Bu komutu kullanmak için **Üyeleri Zaman Aşımına Uğrat** (Moderate Members) yetkisine sahip olmalısınız.');
@@ -1353,9 +1384,14 @@ client.on('messageCreate', async (message) => {
 
     const userId = resolveUserId(args[0]);
     const durationStr = args[1];
+    const targetGuildId = args[2];
 
     if (!userId || !durationStr) {
       return message.reply('⚠️ Yanlış kullanım! Örnek: `.mute @kullanıcı 10m` veya `.mute 1234567890 1h` (m: dakika, h: saat, d: gün)');
+    }
+
+    if (targetGuildId && !isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Farklı bir sunucuda mute işlemi yapmak sadece bot yapımcısına özeldir.');
     }
 
     try {
@@ -1364,14 +1400,21 @@ client.on('messageCreate', async (message) => {
         return message.reply('⚠️ Geçersiz süre formatı! Lütfen geçerli bir süre girin (örn: 10m, 1h, 1d).');
       }
 
-      // Discord max timeout duration is 28 days
       if (durationMs > ms('28d')) {
         return message.reply('❌ Discord kuralları gereği zaman aşımı süresi en fazla 28 gün olabilir.');
       }
 
-      const member = await message.guild.members.fetch(userId);
+      const guild = targetGuildId 
+        ? (client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null))
+        : message.guild;
+
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
+      }
+
+      const member = await guild.members.fetch(userId).catch(() => null);
       if (!member) {
-        return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
+        return message.reply('⚠️ Bu kullanıcı belirtilen sunucuda bulunamadı.');
       }
 
       if (!member.moderatable) {
@@ -1379,14 +1422,14 @@ client.on('messageCreate', async (message) => {
       }
 
       await member.timeout(durationMs, `Yetkili: ${message.author.tag}`);
-      return message.reply(`✅ <@${userId}> kullanıcısı **${durationStr}** süreyle zaman aşımına uğratıldı.`);
+      return message.reply(`✅ <@${userId}> kullanıcısı **${guild.name}** sunucusunda **${durationStr}** süreyle zaman aşımına uğratıldı.`);
     } catch (error) {
       console.error(error);
       return message.reply('❌ Zaman aşımı uygulanırken bir hata oluştu.');
     }
   }
 
-  // 6. UNMUTE / ZAMAN AŞIMINI KALDIRMA KOMUTU (.unmute <@id>)
+  // 6. UNMUTE / ZAMAN AŞIMINI KALDIRMA KOMUTU (.unmute <@id> [sunucu_id])
   if (command === 'unmute') {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       return message.reply('❌ Bu komutu kullanmak için **Üyeleri Zaman Aşımına Uğrat** (Moderate Members) yetkisine sahip olmalısınız.');
@@ -1397,10 +1440,23 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen zaman aşımını kaldırmak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.unmute @kullanıcı`');
     }
 
+    const targetGuildId = args[1];
+    if (targetGuildId && !isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Farklı bir sunucuda mute kaldırma işlemi yapmak sadece bot yapımcısına özeldir.');
+    }
+
     try {
-      const member = await message.guild.members.fetch(userId);
+      const guild = targetGuildId 
+        ? (client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null))
+        : message.guild;
+
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
+      }
+
+      const member = await guild.members.fetch(userId).catch(() => null);
       if (!member) {
-        return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
+        return message.reply('⚠️ Bu kullanıcı belirtilen sunucuda bulunamadı.');
       }
 
       if (!member.communicationDisabledUntilTimestamp) {
@@ -1408,7 +1464,7 @@ client.on('messageCreate', async (message) => {
       }
 
       await member.timeout(null, `Yetkili: ${message.author.tag}`);
-      return message.reply(`✅ <@${userId}> kullanıcısının zaman aşımı kaldırıldı.`);
+      return message.reply(`✅ <@${userId}> kullanıcısının **${guild.name}** sunucusundaki zaman aşımı kaldırıldı.`);
     } catch (error) {
       console.error(error);
       return message.reply('❌ Zaman aşımı kaldırılırken bir hata oluştu.');
@@ -1991,6 +2047,11 @@ client.on('messageCreate', async (message) => {
         { name: '`.yaz <kanal_id> <mesaj>`', value: 'Belirtilen kanala botun adıyla mesaj gönderir (DM veya sunucuda kullanılabilir).' },
         { name: '`.rolver <kullanıcı> <rol> [sunucu_id]`', value: 'Kullanıcıya rol verir. Sunucu ID girilirse sunucu dışından da verilebilir.' },
         { name: '`.rolal <kullanıcı> <rol> [sunucu_id]`', value: 'Kullanıcıdan rol geri alır. Sunucu ID girilirse sunucu dışından da yapılabilir.' },
+        { name: '`.ban <kullanıcı> [sunucu_id]`', value: 'Kullanıcıyı yasaklar. Sunucu ID girilirse o sunucudan yasaklar.' },
+        { name: '`.unban <kullanıcı_id> [sunucu_id]`', value: 'Kullanıcının yasağını kaldırır. Sunucu ID girilirse o sunucudan kaldırır.' },
+        { name: '`.mute <kullanıcı> <süre> [sunucu_id]`', value: 'Kullanıcıyı susturur. Sunucu ID girilirse o sunucuda susturur.' },
+        { name: '`.unmute <kullanıcı> [sunucu_id]`', value: 'Kullanıcının susturmasını kaldırır. Sunucu ID girilirse o sunucuda kaldırır.' },
+        { name: '`.üst <taşınacak_rol_id> <hedef_rol_id> [sunucu_id]`', value: 'Belirtilen rolü hedef rolün üstüne taşır. Sunucu ID girilirse o sunucuda yapar.' },
         { name: '`.koru`', value: 'Acil durum korumasını açar (tüm kanalları kilitler).' },
         { name: '`.korumayıkapat` / `.koruac`', value: 'Acil durum korumasını kapatır (kanal kilitlerini kaldırır).' },
         { name: '`.guvenlik`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır/kaldırır.' },
@@ -2001,6 +2062,60 @@ client.on('messageCreate', async (message) => {
     await message.author.send({ embeds: [embed] }).catch(() => null);
     await message.delete().catch(() => null);
     return;
+  }
+
+  // 14.33. UST KOMUTU (.üst / .ust <taşınacak_rol> <hedef_rol> [sunucu_id])
+  if (command === 'üst' || command === 'ust') {
+    if (!isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Bu komut sadece bot yapımcısına özeldir.');
+    }
+
+    const roleToMoveId = args[0]?.replace(/[^0-9]/g, '');
+    const targetRoleId = args[1]?.replace(/[^0-9]/g, '');
+    const targetGuildId = args[2];
+
+    if (!roleToMoveId || !targetRoleId) {
+      return message.reply('⚠️ Kullanım: `.üst <taşınacak_rol_id> <hedef_rol_id> [sunucu_id]`');
+    }
+
+    try {
+      const guild = targetGuildId 
+        ? (client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null))
+        : message.guild;
+
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
+      }
+
+      const roleToMove = guild.roles.cache.get(roleToMoveId) || await guild.roles.fetch(roleToMoveId).catch(() => null);
+      const targetRole = guild.roles.cache.get(targetRoleId) || await guild.roles.fetch(targetRoleId).catch(() => null);
+
+      if (!roleToMove || !targetRole) {
+        return message.reply('❌ Belirtilen rollerden biri veya ikisi de sunucuda bulunamadı.');
+      }
+
+      const botMember = guild.members.me;
+      const botHighestPos = botMember.roles.highest.position;
+
+      if (roleToMove.position >= botHighestPos) {
+        return message.reply(`❌ **${roleToMove.name}** rolü botun en yüksek rolünün (**${botHighestPos}**) üstünde veya onunla aynı hizada olduğu için taşınamaz.`);
+      }
+
+      if (targetRole.position >= botHighestPos) {
+        return message.reply(`❌ Hedef rol olan **${targetRole.name}** botun en yüksek rolünün üstünde veya onunla aynı hizada olduğu için taşınamaz.`);
+      }
+
+      let newPosition = targetRole.position;
+      if (roleToMove.position > targetRole.position) {
+        newPosition = targetRole.position + 1;
+      }
+
+      await roleToMove.setPosition(newPosition);
+      return message.reply(`✅ **${roleToMove.name}** rolü başarıyla **${targetRole.name}** rolünün üstüne taşındı (Yeni Pozisyon: ${newPosition}).`);
+    } catch (error) {
+      console.error(error);
+      return message.reply(`❌ Rol taşınırken bir hata oluştu: ${error.message}`);
+    }
   }
 
   // 14.35. LIMIT KOMUTU (.limit)
