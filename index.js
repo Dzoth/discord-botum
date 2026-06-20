@@ -763,6 +763,8 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildPresences,
     GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildEmojisAndStickers,
     GatewayIntentBits.DirectMessages
   ],
   partials: [Partials.Channel],
@@ -816,115 +818,8 @@ client.once('ready', async () => {
 
 client.on('guildCreate', () => exportServerData());
 client.on('guildDelete', () => exportServerData());
-client.on('channelCreate', () => exportServerData());
-client.on('channelDelete', () => exportServerData());
-client.on('roleCreate', () => exportServerData());
-client.on('roleDelete', () => exportServerData());
 
-client.on('guildMemberAdd', async (member) => {
-  const data = loadSicil();
-  const userId = member.id;
-  if (!data[userId]) {
-    data[userId] = { joins: 0, leaves: 0, nicknames: [] };
-  }
-  data[userId].joins += 1;
-  saveSicil(data);
 
-  // Yeni Hesap Filtresi (Fake Account Blocker)
-  const filter = accountFilterConfig[member.guild.id];
-  if (filter && filter.enabled) {
-    const createdTimestamp = member.user.createdTimestamp;
-    const ageInDays = (Date.now() - createdTimestamp) / (1000 * 60 * 60 * 24);
-    
-    if (ageInDays < filter.minAge) {
-      const ageRounded = Math.floor(ageInDays);
-      logEvent('WARNING', 'AccountFilter', `Suspicious account detected: ${member.user.tag} (ID: ${userId}). Age: ${ageRounded} days (Required: ${filter.minAge}). Action: ${filter.action}`);
-      
-      try {
-        // DM notification
-        try {
-          await member.send(`⚠️ **${member.guild.name}** sunucusuna katılımınız engellendi. Hesabınız yeni açılmış (şüpheli) olduğu için güvenlik filtresine takıldı.\nHesap Yaşınız: **${ageRounded} gün** (Gerekli: **${filter.minAge} gün**).`);
-        } catch (dmErr) {}
-
-        const systemChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(member.guild.members.me).has(PermissionFlagsBits.SendMessages));
-
-        if (filter.action === 'kick') {
-          await member.kick('Yeni Hesap Filtresi: Şüpheli hesap (Hesap yaşı çok yeni).');
-          if (systemChannel) {
-            systemChannel.send(`🚨 **Yeni Hesap Filtresi Tetiklendi!**\n👤 <@${userId}> (ID: ${userId}) hesabının yaşı çok yeni olduğu için sunucudan **atıldı**.\nHesap Yaşı: **${ageRounded} gün** (Gerekli: **${filter.minAge} gün**).`);
-          }
-        } else if (filter.action === 'ban') {
-          await member.guild.members.ban(userId, { reason: 'Yeni Hesap Filtresi: Şüpheli hesap (Hesap yaşı çok yeni).' });
-          if (systemChannel) {
-            systemChannel.send(`🚨 **Yeni Hesap Filtresi Tetiklendi!**\n👤 <@${userId}> (ID: ${userId}) hesabının yaşı çok yeni olduğu için sunucudan **yasaklandı (ban)**.\nHesap Yaşı: **${ageRounded} gün** (Gerekli: **${filter.minAge} gün**).`);
-          }
-        } else if (filter.action === 'role' && filter.quarantineRole) {
-          const role = member.guild.roles.cache.get(filter.quarantineRole);
-          if (role) {
-            await member.roles.add(role);
-            if (systemChannel) {
-              systemChannel.send(`🚨 **Yeni Hesap Filtresi Tetiklendi!**\n👤 <@${userId}> (ID: ${userId}) hesabının yaşı çok yeni olduğu için **Karantina Rolü** (<@&${filter.quarantineRole}>) verildi.\nHesap Yaşı: **${ageRounded} gün** (Gerekli: **${filter.minAge} gün**).`);
-            }
-          } else {
-            logEvent('ERROR', 'AccountFilter', `Quarantine role ID ${filter.quarantineRole} not found in guild.`);
-          }
-        }
-      } catch (err) {
-        logEvent('ERROR', 'AccountFilter', `Failed to apply action ${filter.action} on ${userId}: ${err.message}`);
-      }
-    }
-  }
-});
-
-client.on('guildMemberRemove', async (member) => {
-  const data = loadSicil();
-  const userId = member.id;
-  if (!data[userId]) {
-    data[userId] = { joins: 0, leaves: 0, nicknames: [] };
-  }
-  data[userId].leaves += 1;
-  saveSicil(data);
-
-  // Kayıtsız Çıkış Koruması (Otomatik Ban)
-  const guildAutomod = getGuildAutomodConfig(member.guild.id);
-  if (guildAutomod.kayitsizCikisBan && guildAutomod.kayitsizCikisBan.enabled) {
-    const settings = kayitAyarlari[member.guild.id];
-    const erkekId = settings?.erkekRolId || config.roles?.erkek;
-    const kizId = settings?.kizRolId || config.roles?.kiz;
-
-    const hasErkek = erkekId ? member.roles.cache.has(erkekId) : false;
-    const hasKiz = kizId ? member.roles.cache.has(kizId) : false;
-
-    if (!hasErkek && !hasKiz) {
-      try {
-        await member.guild.members.ban(userId, { reason: 'Automod: Kayıt olmadan sunucudan ayrıldı.' });
-        logEvent('INFO', 'Automod', `Banned user ${member.user.tag} (ID: ${userId}) for leaving without registering.`);
-
-        const systemChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(member.guild.members.me).has(PermissionFlagsBits.SendMessages));
-        if (systemChannel) {
-          systemChannel.send(`🚨 **Kayıtsız Çıkış Koruması Tetiklendi!**\n👤 <@${userId}> (ID: ${userId}) kayıt olmadan sunucudan ayrıldığı için otomatik olarak yasaklandı.`);
-        }
-      } catch (err) {
-        logEvent('ERROR', 'Automod', `Failed to ban user ${userId} on leave: ${err.message}`);
-      }
-    }
-  }
-});
-
-client.on('guildMemberUpdate', (oldMember, newMember) => {
-  if (oldMember.nickname !== newMember.nickname) {
-    const data = loadSicil();
-    const userId = newMember.id;
-    if (!data[userId]) {
-      data[userId] = { joins: 0, leaves: 0, nicknames: [] };
-    }
-    const newNick = newMember.nickname || newMember.user.username;
-    if (!data[userId].nicknames.includes(newNick)) {
-      data[userId].nicknames.push(newNick);
-    }
-    saveSicil(data);
-  }
-});
 
 client.on('presenceUpdate', (oldPresence, newPresence) => {
   if (!newPresence || !newPresence.member || newPresence.user.bot) return;
@@ -966,7 +861,479 @@ client.on('presenceUpdate', (oldPresence, newPresence) => {
   }
 });
 
+// ==================== DENETİM KAYDI (AUDIT LOG) OLAY YÖNETİCİLERİ ====================
+
+/**
+ * Sunucuya özel denetim kaydı kanalına embed gönderir.
+ * @param {Guild} guild - Discord sunucusu
+ * @param {string} optionKey - Ayar anahtarı (örn. "opt-member-join")
+ * @param {EmbedBuilder} embed - Gönderilecek embed
+ */
+async function sendAuditLog(guild, optionKey, embed) {
+  try {
+    const cfg = getGuildAuditLogConfig(guild.id);
+    if (!cfg.enabled) return;
+    if (!cfg.options[optionKey]) return;
+    if (!cfg.channel) return;
+
+    const channel = guild.channels.cache.get(cfg.channel);
+    if (!channel || !channel.isTextBased()) return;
+
+    const me = guild.members.me;
+    if (me && !channel.permissionsFor(me).has(PermissionFlagsBits.SendMessages)) return;
+
+    await channel.send({ embeds: [embed] });
+  } catch (err) {
+    logEvent('ERROR', 'AuditLog', `sendAuditLog hatası (${guild?.id}, ${optionKey}): ${err.message}`);
+  }
+}
+
+// --- Üye Katıldı ---
+client.on('guildMemberAdd', async (member) => {
+  // Sicil güncelleme (mevcut)
+  const data = loadSicil();
+  const userId = member.id;
+  if (!data[userId]) data[userId] = { joins: 0, leaves: 0, nicknames: [] };
+  data[userId].joins += 1;
+  saveSicil(data);
+
+  // Yeni Hesap Filtresi (mevcut)
+  const filter = accountFilterConfig[member.guild.id];
+  if (filter && filter.enabled) {
+    const createdTimestamp = member.user.createdTimestamp;
+    const ageInDays = (Date.now() - createdTimestamp) / (1000 * 60 * 60 * 24);
+    if (ageInDays < filter.minAge) {
+      const ageRounded = Math.floor(ageInDays);
+      logEvent('WARNING', 'AccountFilter', `Suspicious account: ${member.user.tag} (ID: ${userId}). Age: ${ageRounded}d / ${filter.minAge}d. Action: ${filter.action}`);
+      try {
+        try { await member.send(`⚠️ **${member.guild.name}** sunucusuna katılımınız engellendi. Hesabınız yeni açılmış (şüpheli) olduğu için güvenlik filtresine takıldı.\nHesap Yaşınız: **${ageRounded} gün** (Gerekli: **${filter.minAge} gün**).`); } catch (dmErr) {}
+        const systemChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(member.guild.members.me).has(PermissionFlagsBits.SendMessages));
+        if (filter.action === 'kick') {
+          await member.kick('Yeni Hesap Filtresi: Şüpheli hesap.');
+          if (systemChannel) systemChannel.send(`🚨 **Yeni Hesap Filtresi Tetiklendi!**\n👤 <@${userId}> hesabının yaşı çok yeni olduğu için sunucudan **atıldı**.\nHesap Yaşı: **${ageRounded} gün** (Gerekli: **${filter.minAge} gün**).`);
+        } else if (filter.action === 'ban') {
+          await member.guild.members.ban(userId, { reason: 'Yeni Hesap Filtresi: Şüpheli hesap.' });
+          if (systemChannel) systemChannel.send(`🚨 **Yeni Hesap Filtresi Tetiklendi!**\n👤 <@${userId}> hesabının yaşı çok yeni olduğu için sunucudan **yasaklandı (ban)**.\nHesap Yaşı: **${ageRounded} gün** (Gerekli: **${filter.minAge} gün**).`);
+        } else if (filter.action === 'role' && filter.quarantineRole) {
+          const role = member.guild.roles.cache.get(filter.quarantineRole);
+          if (role) {
+            await member.roles.add(role);
+            if (systemChannel) systemChannel.send(`🚨 **Yeni Hesap Filtresi Tetiklendi!**\n👤 <@${userId}> hesabının yaşı çok yeni olduğu için **Karantina Rolü** (<@&${filter.quarantineRole}>) verildi.\nHesap Yaşı: **${ageRounded} gün** (Gerekli: **${filter.minAge} gün**).`);
+          } else {
+            logEvent('ERROR', 'AccountFilter', `Quarantine role ID ${filter.quarantineRole} not found.`);
+          }
+        }
+      } catch (err) {
+        logEvent('ERROR', 'AccountFilter', `Failed to apply action on ${userId}: ${err.message}`);
+      }
+      return; // Filtreye takılan üye için log atma
+    }
+  }
+
+  // Denetim Kaydı: Üye Katıldı
+  const createdAt = member.user.createdAt;
+  const accountAgeDays = Math.floor((Date.now() - member.user.createdTimestamp) / 86400000);
+  const embed = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setTitle('👋 Üye Katıldı')
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .addFields(
+      { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
+      { name: 'ID', value: member.id, inline: true },
+      { name: 'Hesap Yaşı', value: `${accountAgeDays} gün`, inline: true },
+      { name: 'Hesap Oluşturulma', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:F>`, inline: false }
+    )
+    .setFooter({ text: `Sunucu: ${member.guild.name}` })
+    .setTimestamp();
+  await sendAuditLog(member.guild, 'opt-member-join', embed);
+});
+
+// --- Üye Ayrıldı ---
+client.on('guildMemberRemove', async (member) => {
+  // Sicil güncelleme (mevcut)
+  const data = loadSicil();
+  const userId = member.id;
+  if (!data[userId]) data[userId] = { joins: 0, leaves: 0, nicknames: [] };
+  data[userId].leaves += 1;
+  saveSicil(data);
+
+  // Kayıtsız Çıkış Koruması (mevcut)
+  const guildAutomod = getGuildAutomodConfig(member.guild.id);
+  if (guildAutomod.kayitsizCikisBan && guildAutomod.kayitsizCikisBan.enabled) {
+    const settings = kayitAyarlari[member.guild.id];
+    const erkekId = settings?.erkekRolId || config.roles?.erkek;
+    const kizId = settings?.kizRolId || config.roles?.kiz;
+    const hasErkek = erkekId ? member.roles.cache.has(erkekId) : false;
+    const hasKiz = kizId ? member.roles.cache.has(kizId) : false;
+    if (!hasErkek && !hasKiz) {
+      try {
+        await member.guild.members.ban(userId, { reason: 'Automod: Kayıt olmadan sunucudan ayrıldı.' });
+        logEvent('INFO', 'Automod', `Banned ${member.user.tag} (ID: ${userId}) for leaving without registering.`);
+        const systemChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(member.guild.members.me).has(PermissionFlagsBits.SendMessages));
+        if (systemChannel) systemChannel.send(`🚨 **Kayıtsız Çıkış Koruması Tetiklendi!**\n👤 <@${userId}> (ID: ${userId}) kayıt olmadan sunucudan ayrıldığı için otomatik olarak yasaklandı.`);
+      } catch (err) {
+        logEvent('ERROR', 'Automod', `Failed to ban ${userId} on leave: ${err.message}`);
+      }
+    }
+  }
+
+  // Denetim Kaydı: Üye Ayrıldı
+  const embed = new EmbedBuilder()
+    .setColor(0xED4245)
+    .setTitle('🚪 Üye Ayrıldı')
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .addFields(
+      { name: 'Kullanıcı', value: `${member.user.tag}`, inline: true },
+      { name: 'ID', value: member.id, inline: true },
+      { name: 'Sunucuya Katılma', value: member.joinedAt ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>` : 'Bilinmiyor', inline: true }
+    )
+    .setFooter({ text: `Sunucu: ${member.guild.name}` })
+    .setTimestamp();
+  await sendAuditLog(member.guild, 'opt-member-leave', embed);
+});
+
+// --- Üye Güncellendi (rol, isim, susturma) ---
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+  // Sicil: nickname takibi (mevcut)
+  if (oldMember.nickname !== newMember.nickname) {
+    const data = loadSicil();
+    const userId = newMember.id;
+    if (!data[userId]) data[userId] = { joins: 0, leaves: 0, nicknames: [] };
+    const newNick = newMember.nickname || newMember.user.username;
+    if (!data[userId].nicknames.includes(newNick)) data[userId].nicknames.push(newNick);
+    saveSicil(data);
+  }
+
+  const guild = newMember.guild;
+
+  // Kullanıcı adı değişimi
+  if (oldMember.user.username !== newMember.user.username || oldMember.nickname !== newMember.nickname) {
+    const embed = new EmbedBuilder()
+      .setColor(0xFEE75C)
+      .setTitle('✏️ İsim Güncellendi')
+      .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
+      .addFields(
+        { name: 'Kullanıcı', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: false },
+        { name: 'Eski İsim', value: oldMember.nickname || oldMember.user.username, inline: true },
+        { name: 'Yeni İsim', value: newMember.nickname || newMember.user.username, inline: true }
+      )
+      .setTimestamp();
+    await sendAuditLog(guild, 'opt-username-update', embed);
+  }
+
+  // Rol değişimi
+  const addedRoles = newMember.roles.cache.filter(r => !oldMember.roles.cache.has(r.id));
+  const removedRoles = oldMember.roles.cache.filter(r => !newMember.roles.cache.has(r.id));
+  if (addedRoles.size > 0 || removedRoles.size > 0) {
+    const embed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle('🏷️ Roller Güncellendi')
+      .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
+      .addFields(
+        { name: 'Kullanıcı', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: false },
+        { name: '➕ Eklenen Roller', value: addedRoles.size > 0 ? addedRoles.map(r => `<@&${r.id}>`).join(', ') : 'Yok', inline: true },
+        { name: '➖ Kaldırılan Roller', value: removedRoles.size > 0 ? removedRoles.map(r => `<@&${r.id}>`).join(', ') : 'Yok', inline: true }
+      )
+      .setTimestamp();
+    await sendAuditLog(guild, 'opt-member-roles-update', embed);
+  }
+
+  // Susturma değişimi
+  const wasMuted = oldMember.communicationDisabledUntilTimestamp && oldMember.communicationDisabledUntilTimestamp > Date.now();
+  const isMuted = newMember.communicationDisabledUntilTimestamp && newMember.communicationDisabledUntilTimestamp > Date.now();
+  if (!wasMuted && isMuted) {
+    const embed = new EmbedBuilder()
+      .setColor(0xFFA500)
+      .setTitle('🔇 Üye Susturuldu')
+      .addFields(
+        { name: 'Kullanıcı', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: true },
+        { name: 'Süre Bitiş', value: `<t:${Math.floor(newMember.communicationDisabledUntilTimestamp / 1000)}:R>`, inline: true }
+      )
+      .setTimestamp();
+    await sendAuditLog(guild, 'opt-member-mute', embed);
+  }
+});
+
+// --- Üye Yasaklandı ---
+client.on('guildBanAdd', async (ban) => {
+  const embed = new EmbedBuilder()
+    .setColor(0xED4245)
+    .setTitle('🔨 Üye Yasaklandı')
+    .setThumbnail(ban.user.displayAvatarURL({ dynamic: true }))
+    .addFields(
+      { name: 'Kullanıcı', value: `${ban.user.tag}`, inline: true },
+      { name: 'ID', value: ban.user.id, inline: true },
+      { name: 'Sebep', value: ban.reason || 'Belirtilmedi', inline: false }
+    )
+    .setTimestamp();
+  await sendAuditLog(ban.guild, 'opt-member-ban', embed);
+});
+
+// --- Üye Yasağı Kaldırıldı ---
+client.on('guildBanRemove', async (ban) => {
+  const embed = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setTitle('✅ Üye Yasağı Kaldırıldı')
+    .setThumbnail(ban.user.displayAvatarURL({ dynamic: true }))
+    .addFields(
+      { name: 'Kullanıcı', value: `${ban.user.tag}`, inline: true },
+      { name: 'ID', value: ban.user.id, inline: true }
+    )
+    .setTimestamp();
+  await sendAuditLog(ban.guild, 'opt-member-unban', embed);
+});
+
+// --- Mesaj Güncellendi ---
+client.on('messageUpdate', async (oldMsg, newMsg) => {
+  if (!newMsg.guild) return;
+  if (newMsg.author?.bot) return;
+  if (oldMsg.content === newMsg.content) return;
+  const embed = new EmbedBuilder()
+    .setColor(0xFEE75C)
+    .setTitle('✏️ Mesaj Düzenlendi')
+    .addFields(
+      { name: 'Kullanıcı', value: newMsg.author ? `<@${newMsg.author.id}> (${newMsg.author.tag})` : 'Bilinmiyor', inline: true },
+      { name: 'Kanal', value: `<#${newMsg.channelId}>`, inline: true },
+      { name: 'Eski Mesaj', value: (oldMsg.content || '*(boş)*').substring(0, 1024), inline: false },
+      { name: 'Yeni Mesaj', value: (newMsg.content || '*(boş)*').substring(0, 1024), inline: false },
+      { name: 'Mesaj Linki', value: `[Mesaja Git](${newMsg.url})`, inline: false }
+    )
+    .setTimestamp();
+  await sendAuditLog(newMsg.guild, 'opt-message-update', embed);
+});
+
+// --- Mesaj Silindi ---
+client.on('messageDelete', async (msg) => {
+  if (!msg.guild) return;
+  if (msg.author?.bot) return;
+  const embed = new EmbedBuilder()
+    .setColor(0xED4245)
+    .setTitle('🗑️ Mesaj Silindi')
+    .addFields(
+      { name: 'Kullanıcı', value: msg.author ? `<@${msg.author.id}> (${msg.author.tag})` : 'Bilinmiyor', inline: true },
+      { name: 'Kanal', value: `<#${msg.channelId}>`, inline: true },
+      { name: 'Mesaj İçeriği', value: (msg.content || '*(medya / gömülü içerik)*').substring(0, 1024), inline: false }
+    )
+    .setTimestamp();
+  await sendAuditLog(msg.guild, 'opt-message-delete', embed);
+});
+
+// --- Sunucu Güncellendi ---
+client.on('guildUpdate', async (oldGuild, newGuild) => {
+  const embed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle('⚙️ Sunucu Güncellendi')
+    .addFields(
+      { name: 'Eski İsim', value: oldGuild.name, inline: true },
+      { name: 'Yeni İsim', value: newGuild.name, inline: true }
+    )
+    .setTimestamp();
+  await sendAuditLog(newGuild, 'opt-guild-update', embed);
+});
+
+// --- Emoji Oluşturuldu ---
+client.on('emojiCreate', async (emoji) => {
+  const embed = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setTitle('😀 Emoji Oluşturuldu')
+    .addFields(
+      { name: 'Emoji', value: `<:${emoji.name}:${emoji.id}> — \`${emoji.name}\``, inline: true },
+      { name: 'ID', value: emoji.id, inline: true }
+    )
+    .setThumbnail(emoji.url)
+    .setTimestamp();
+  await sendAuditLog(emoji.guild, 'opt-emoji-create', embed);
+});
+
+// --- Emoji Güncellendi ---
+client.on('emojiUpdate', async (oldEmoji, newEmoji) => {
+  const embed = new EmbedBuilder()
+    .setColor(0xFEE75C)
+    .setTitle('😀 Emoji Güncellendi')
+    .addFields(
+      { name: 'Eski İsim', value: oldEmoji.name, inline: true },
+      { name: 'Yeni İsim', value: newEmoji.name, inline: true }
+    )
+    .setTimestamp();
+  await sendAuditLog(newEmoji.guild, 'opt-emoji-update', embed);
+});
+
+// --- Emoji Silindi ---
+client.on('emojiDelete', async (emoji) => {
+  const embed = new EmbedBuilder()
+    .setColor(0xED4245)
+    .setTitle('❌ Emoji Silindi')
+    .addFields(
+      { name: 'İsim', value: emoji.name, inline: true },
+      { name: 'ID', value: emoji.id, inline: true }
+    )
+    .setTimestamp();
+  await sendAuditLog(emoji.guild, 'opt-emoji-delete', embed);
+});
+
+// --- Kanal Oluşturuldu ---
+client.on('channelCreate', async (channel) => {
+  exportServerData();
+  if (!channel.guild) return;
+  const embed = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setTitle('📢 Kanal Oluşturuldu')
+    .addFields(
+      { name: 'Kanal', value: `<#${channel.id}> (${channel.name})`, inline: true },
+      { name: 'Tür', value: channel.type.toString(), inline: true }
+    )
+    .setTimestamp();
+  await sendAuditLog(channel.guild, 'opt-channel-create', embed);
+});
+
+// --- Kanal Güncellendi ---
+client.on('channelUpdate', async (oldChannel, newChannel) => {
+  if (!newChannel.guild) return;
+  if (oldChannel.name === newChannel.name && oldChannel.topic === newChannel.topic) return;
+  const embed = new EmbedBuilder()
+    .setColor(0xFEE75C)
+    .setTitle('📝 Kanal Güncellendi')
+    .addFields(
+      { name: 'Kanal', value: `<#${newChannel.id}>`, inline: true },
+      { name: 'Eski İsim', value: oldChannel.name, inline: true },
+      { name: 'Yeni İsim', value: newChannel.name, inline: true }
+    )
+    .setTimestamp();
+  await sendAuditLog(newChannel.guild, 'opt-channel-update', embed);
+});
+
+// --- Kanal Silindi ---
+client.on('channelDelete', async (channel) => {
+  exportServerData();
+  if (!channel.guild) return;
+  const embed = new EmbedBuilder()
+    .setColor(0xED4245)
+    .setTitle('🗑️ Kanal Silindi')
+    .addFields(
+      { name: 'İsim', value: channel.name, inline: true },
+      { name: 'ID', value: channel.id, inline: true }
+    )
+    .setTimestamp();
+  await sendAuditLog(channel.guild, 'opt-channel-delete', embed);
+});
+
+// --- Rol Oluşturuldu ---
+client.on('roleCreate', async (role) => {
+  exportServerData();
+  const embed = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setTitle('🎭 Rol Oluşturuldu')
+    .addFields(
+      { name: 'Rol', value: `<@&${role.id}> (${role.name})`, inline: true },
+      { name: 'ID', value: role.id, inline: true }
+    )
+    .setTimestamp();
+  await sendAuditLog(role.guild, 'opt-role-create', embed);
+});
+
+// --- Rol Güncellendi ---
+client.on('roleUpdate', async (oldRole, newRole) => {
+  if (oldRole.name === newRole.name && oldRole.color === newRole.color) return;
+  const embed = new EmbedBuilder()
+    .setColor(0xFEE75C)
+    .setTitle('✏️ Rol Güncellendi')
+    .addFields(
+      { name: 'Rol', value: `<@&${newRole.id}>`, inline: true },
+      { name: 'Eski İsim', value: oldRole.name, inline: true },
+      { name: 'Yeni İsim', value: newRole.name, inline: true }
+    )
+    .setTimestamp();
+  await sendAuditLog(newRole.guild, 'opt-role-update', embed);
+});
+
+// --- Rol Silindi ---
+client.on('roleDelete', async (role) => {
+  exportServerData();
+  const embed = new EmbedBuilder()
+    .setColor(0xED4245)
+    .setTitle('🗑️ Rol Silindi')
+    .addFields(
+      { name: 'İsim', value: role.name, inline: true },
+      { name: 'ID', value: role.id, inline: true }
+    )
+    .setTimestamp();
+  await sendAuditLog(role.guild, 'opt-role-delete', embed);
+});
+
+// ==================== ANTİ-NUKE VE MODERASYON DENETİM KAYDI ====================
+// guildAuditLogEntryCreate ile mod-ban, mod-unban, mod-kick, mod-mute, mod-unmute
 client.on('guildAuditLogEntryCreate', async (entry, guild) => {
+  // --- Moderatör Ban ---
+  if (entry.action === 22) { // BAN
+    const executor = entry.executor;
+    if (executor && !executor.bot) {
+      const embed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setTitle('🔨 Moderatör Ban Uyguladı')
+        .addFields(
+          { name: 'Hedef', value: entry.target ? `${entry.target.tag} (ID: ${entry.target.id})` : entry.targetId, inline: true },
+          { name: 'Yetkili', value: `<@${executor.id}> (${executor.tag})`, inline: true },
+          { name: 'Sebep', value: entry.reason || 'Belirtilmedi', inline: false }
+        )
+        .setTimestamp();
+      await sendAuditLog(guild, 'opt-mod-ban', embed);
+    }
+  }
+
+  // --- Moderatör Unban ---
+  if (entry.action === 23) { // UNBAN
+    const executor = entry.executor;
+    if (executor && !executor.bot) {
+      const embed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setTitle('✅ Moderatör Ban Kaldırdı')
+        .addFields(
+          { name: 'Hedef', value: entry.target ? `${entry.target.tag} (ID: ${entry.target.id})` : entry.targetId, inline: true },
+          { name: 'Yetkili', value: `<@${executor.id}> (${executor.tag})`, inline: true }
+        )
+        .setTimestamp();
+      await sendAuditLog(guild, 'opt-mod-unban', embed);
+    }
+  }
+
+  // --- Moderatör Kick ---
+  if (entry.action === 20) { // KICK
+    const executor = entry.executor;
+    if (executor && !executor.bot) {
+      const embed = new EmbedBuilder()
+        .setColor(0xFFA500)
+        .setTitle('👟 Moderatör Üye Attı')
+        .addFields(
+          { name: 'Hedef', value: entry.target ? `${entry.target.tag} (ID: ${entry.target.id})` : entry.targetId, inline: true },
+          { name: 'Yetkili', value: `<@${executor.id}> (${executor.tag})`, inline: true },
+          { name: 'Sebep', value: entry.reason || 'Belirtilmedi', inline: false }
+        )
+        .setTimestamp();
+      await sendAuditLog(guild, 'opt-mod-kick', embed);
+    }
+  }
+
+  // --- Moderatör Mute (communication_disabled) ---
+  if (entry.action === 24) { // MEMBER_UPDATE
+    const executor = entry.executor;
+    const changes = entry.changes || [];
+    const muteChange = changes.find(c => c.key === 'communication_disabled_until');
+    if (executor && !executor.bot && muteChange) {
+      const isMuting = !!muteChange.new;
+      const embed = new EmbedBuilder()
+        .setColor(isMuting ? 0xFFA500 : 0x57F287)
+        .setTitle(isMuting ? '🔇 Moderatör Susturdu' : '🔊 Moderatör Susturmayı Kaldırdı')
+        .addFields(
+          { name: 'Hedef', value: entry.target ? `<@${entry.target.id}> (${entry.target.tag || entry.target.id})` : entry.targetId, inline: true },
+          { name: 'Yetkili', value: `<@${executor.id}> (${executor.tag})`, inline: true },
+          ...(isMuting && muteChange.new ? [{ name: 'Süre Bitiş', value: `<t:${Math.floor(new Date(muteChange.new).getTime() / 1000)}:R>`, inline: true }] : [])
+        )
+        .setTimestamp();
+      await sendAuditLog(guild, isMuting ? 'opt-mod-mute' : 'opt-mod-unmute', embed);
+    }
+  }
+
+  // ==================== ANTİ-NUKE KONTROL (ESKİ KOD) ====================
   if (entry.action !== 22 && entry.action !== 20) return;
 
   const executor = entry.executor;
