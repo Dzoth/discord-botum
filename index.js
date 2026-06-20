@@ -249,9 +249,28 @@ function getUserData(userId) {
       balance: 5000,
       lastDaily: 0,
       lastHunt: 0,
-      lastBattle: 0
+      lastBattle: 0,
+      inventory: {},
+      stats: {
+        hunts: 0,
+        battles: 0,
+        wins: 0,
+        losses: 0
+      }
     };
     saveCoinData();
+  }
+  // Geriye dönük uyumluluk (backwards compatibility)
+  if (!coinData[userId].inventory) {
+    coinData[userId].inventory = {};
+  }
+  if (!coinData[userId].stats) {
+    coinData[userId].stats = {
+      hunts: 0,
+      battles: 0,
+      wins: 0,
+      losses: 0
+    };
   }
   return coinData[userId];
 }
@@ -3341,18 +3360,24 @@ client.on('messageCreate', async (message) => {
 
     const caughtCount = Math.floor(Math.random() * 3) + 1;
     const caught = [];
+    const user = getUserData(message.author.id);
+
     for (let i = 0; i < caughtCount; i++) {
-      caught.push(animals[Math.floor(Math.random() * animals.length)]);
+      const animal = animals[Math.floor(Math.random() * animals.length)];
+      caught.push(animal);
+      user.inventory[animal.emoji] = (user.inventory[animal.emoji] || 0) + 1;
     }
 
+    user.stats.hunts++;
+
     const reward = Math.floor(Math.random() * 201) + 100;
-    addCoins(message.author.id, reward);
-    const newBal = getBalance(message.author.id);
+    user.balance += reward;
+    saveCoinData();
 
     const caughtStr = caught.map(a => `${a.emoji} ${a.name}`).join(', ');
     return message.reply(`🔍 **Avcılık** | <@${message.author.id}>\n\n` +
                          `🌲 Ormana avlanmaya çıktın ve şunları yakaladın:\n👉 **${caughtStr}**\n\n` +
-                         `💰 Kazanılan: **+${reward} coin**\n💵 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
+                         `💰 Kazanılan: **+${reward} coin**\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** coin.`);
   }
 
   // 22. BATTLE / SAVAŞ KOMUTU (.wb)
@@ -3365,21 +3390,26 @@ client.on('messageCreate', async (message) => {
     const monsters = ['👹 Ork', '🐉 Ejderha', '💀 İskelet Şövalye', '🐺 Vahşi Kurt', '🧟 Zombi Reis'];
     const monsterName = monsters[Math.floor(Math.random() * monsters.length)];
     const win = Math.random() < 0.6;
+    const user = getUserData(message.author.id);
+
+    user.stats.battles++;
 
     if (win) {
+      user.stats.wins++;
       const reward = Math.floor(Math.random() * 351) + 150;
-      addCoins(message.author.id, reward);
-      const newBal = getBalance(message.author.id);
+      user.balance += reward;
+      saveCoinData();
       return message.reply(`⚔️ **Savaş** | <@${message.author.id}>\n\n` +
                            `💥 **${monsterName}** ile kıyasıya bir savaşa girdin ve **ZAFER** kazandın!\n` +
-                           `💰 Kazanılan: **+${reward} coin**\n💵 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
+                           `💰 Kazanılan: **+${reward} coin**\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** coin.`);
     } else {
+      user.stats.losses++;
       const loss = Math.floor(Math.random() * 101) + 50;
-      addCoins(message.author.id, -loss);
-      const newBal = getBalance(message.author.id);
+      user.balance = Math.max(0, user.balance - loss);
+      saveCoinData();
       return message.reply(`⚔️ **Savaş** | <@${message.author.id}>\n\n` +
                            `💀 **${monsterName}** seni bozguna uğrattı ve **YENİLDİN**!\n` +
-                           `💔 Kayıp: **-${loss} coin**\n💵 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
+                           `💔 Kayıp: **-${loss} coin**\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** coin.`);
     }
   }
 
@@ -3537,6 +3567,225 @@ client.on('messageCreate', async (message) => {
 
       finalEmbed.setDescription(desc);
       await gameMessage.edit({ embeds: [finalEmbed], components: [] });
+    }
+  }
+
+  // ==================== OWO SECONDARY & ACTION COMMANDS ====================
+
+  const ANIMAL_PRICES = {
+    '🐰': { name: 'tavşan', price: 15, tier: 'Yaygın (Common)' },
+    '🐸': { name: 'kurbağa', price: 15, tier: 'Yaygın (Common)' },
+    '🐹': { name: 'hamster', price: 15, tier: 'Yaygın (Common)' },
+    '🦊': { name: 'tilki', price: 30, tier: 'Sıradışı (Uncommon)' },
+    '🐷': { name: 'domuz', price: 30, tier: 'Sıradışı (Uncommon)' },
+    '🦁': { name: 'aslan', price: 100, tier: 'Nadir (Rare)' },
+    '🐯': { name: 'kaplan', price: 100, tier: 'Nadir (Rare)' },
+    '🐼': { name: 'panda', price: 100, tier: 'Nadir (Rare)' }
+  };
+
+  const ANIMAL_NAME_TO_EMOJI = {
+    'tavşan': '🐰', 'tavsan': '🐰', '🐰': '🐰',
+    'kurbağa': '🐸', 'kurbaga': '🐸', '🐸': '🐸',
+    'hamster': '🐹', '🐹': '🐹',
+    'tilki': '🦊', '🦊': '🦊',
+    'domuz': '🐷', '🐷': '🐷',
+    'aslan': '🦁', '🦁': '🦁',
+    'kaplan': '🐯', '🐯': '🐯',
+    'panda': '🐼', '🐼': '🐼'
+  };
+
+  // 24. INVENTORY / ZOO / ANIMAL COMMANDS (.inv / .zoo / .animal)
+  if (command === 'inv' || command === 'zoo' || command === 'animal') {
+    const user = getUserData(message.author.id);
+    const inv = user.inventory || {};
+    const { EmbedBuilder } = require('discord.js');
+    
+    const embed = new EmbedBuilder()
+      .setTitle(`🎒 ${message.author.username}'in Hayvanat Bahçesi`)
+      .setColor('#2b2d38')
+      .setDescription('Yakaladığın hayvanlar ve sayıları:')
+      .addFields(
+        { name: '🟢 Yaygın (Common) - 15 Coin', value: `🐰 Tavşan: **${inv['🐰'] || 0}**\n🐸 Kurbağa: **${inv['🐸'] || 0}**\n🐹 Hamster: **${inv['🐹'] || 0}**`, inline: true },
+        { name: '🔵 Sıradışı (Uncommon) - 30 Coin', value: `🦊 Tilki: **${inv['🦊'] || 0}**\n🐷 Domuz: **${inv['🐷'] || 0}**`, inline: true },
+        { name: '🔴 Nadir (Rare) - 100 Coin', value: `🦁 Aslan: **${inv['🦁'] || 0}**\n🐯 Kaplan: **${inv['🐯'] || 0}**\n🐼 Panda: **${inv['🐼'] || 0}**`, inline: true }
+      )
+      .setFooter({ text: 'Satmak için: .sell <hayvan|all>' });
+      
+    return message.reply({ embeds: [embed] });
+  }
+
+  // 25. SELL COMMAND (.sell <hayvan|all>)
+  if (command === 'sell') {
+    const user = getUserData(message.author.id);
+    const arg = args[0]?.toLowerCase();
+    
+    if (!arg) {
+      return message.reply('⚠️ Lütfen satmak istediğiniz hayvanı belirtin. Örnek: `.sell tavşan`, `.sell all`');
+    }
+    
+    if (arg === 'all') {
+      let totalSold = 0;
+      let totalCoins = 0;
+      const inv = user.inventory || {};
+      
+      for (const [emoji, count] of Object.entries(inv)) {
+        if (count > 0 && ANIMAL_PRICES[emoji]) {
+          totalSold += count;
+          totalCoins += count * ANIMAL_PRICES[emoji].price;
+          inv[emoji] = 0;
+        }
+      }
+      
+      if (totalSold === 0) {
+        return message.reply('❌ Hayvanat bahçenizde satılacak hiç hayvan bulunmuyor!');
+      }
+      
+      user.balance += totalCoins;
+      saveCoinData();
+      return message.reply(`💰 Toplam **${totalSold}** adet hayvanı sattın ve **+${totalCoins.toLocaleString()} coin** kazandın!\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** coin.`);
+    }
+    
+    const emoji = ANIMAL_NAME_TO_EMOJI[arg];
+    if (!emoji || !ANIMAL_PRICES[emoji]) {
+      return message.reply('❌ Geçersiz hayvan adı! Geçerli hayvanlar: `tavşan`, `kurbağa`, `hamster`, `tilki`, `domuz`, `aslan`, `kaplan`, `panda`');
+    }
+    
+    const count = user.inventory[emoji] || 0;
+    if (count <= 0) {
+      return message.reply(`❌ Üzerinizde hiç **${ANIMAL_PRICES[emoji].name}** yok!`);
+    }
+    
+    const price = ANIMAL_PRICES[emoji].price;
+    const earned = count * price;
+    user.inventory[emoji] = 0;
+    user.balance += earned;
+    saveCoinData();
+    
+    return message.reply(`💰 **${count}** adet **${ANIMAL_PRICES[emoji].name}** sattın ve **+${earned.toLocaleString()} coin** kazandın!\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** coin.`);
+  }
+
+  // 26. SEND / GIVE COMMAND (.send / .give <@user> <miktar>)
+  if (command === 'send' || command === 'give') {
+    const targetMember = message.mentions.members.first() || message.guild.members.cache.get(args[0]);
+    if (!targetMember) {
+      return message.reply('⚠️ Lütfen göndermek istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.send @kullanıcı 100`');
+    }
+    
+    if (targetMember.id === message.author.id) {
+      return message.reply('😂 Kendine coin gönderemezsin!');
+    }
+    
+    if (targetMember.user.bot) {
+      return message.reply('🤖 Botlara coin gönderemezsin!');
+    }
+    
+    let amountStr = args[1];
+    if (!amountStr && args[0]) {
+      if (!isNaN(parseInt(args[0])) || ['all', 'half'].includes(args[0].toLowerCase())) {
+        amountStr = args[0];
+      }
+    }
+    
+    if (!amountStr) {
+      return message.reply('⚠️ Lütfen göndermek istediğiniz coin miktarını belirtin. Örnek: `.send @kullanıcı 100`');
+    }
+    
+    const amount = parseBet(message.author.id, amountStr);
+    if (amount <= 0) {
+      return message.reply('⚠️ Geçersiz miktar! Lütfen geçerli bir coin sayısı veya `all`/`half` belirtin.');
+    }
+    
+    const balance = getBalance(message.author.id);
+    if (balance < amount) {
+      return message.reply(`❌ Yetersiz bakiye! Göndermek istediğin: **${amount.toLocaleString()}**, Mevcut Bakiyen: **${balance.toLocaleString()}** coin.`);
+    }
+    
+    addCoins(message.author.id, -amount);
+    addCoins(targetMember.id, amount);
+    
+    return message.reply(`💸 <@${message.author.id}>, <@${targetMember.id}> kullanıcısına **${amount.toLocaleString()} coin** gönderdi!\n💰 Kalan Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`);
+  }
+
+  // 27. PROFILE / STATS COMMAND (.profile / .p)
+  if (command === 'profile' || command === 'p') {
+    const targetUser = message.mentions.users.first() || message.author;
+    const user = getUserData(targetUser.id);
+    const { EmbedBuilder } = require('discord.js');
+    
+    const totalBattles = user.stats.battles || 0;
+    const wins = user.stats.wins || 0;
+    const losses = user.stats.losses || 0;
+    const winRate = totalBattles > 0 ? ((wins / totalBattles) * 100).toFixed(1) : '0.0';
+    const totalHunts = user.stats.hunts || 0;
+    
+    const embed = new EmbedBuilder()
+      .setTitle(`👤 ${targetUser.username} Profil Kartı`)
+      .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+      .setColor('#5865F2')
+      .addFields(
+        { name: '💰 Bakiye', value: `**${user.balance.toLocaleString()}** coin`, inline: true },
+        { name: '🌲 Toplam Avcılık', value: `**${totalHunts}** kez`, inline: true },
+        { name: '⚔️ Toplam Savaş', value: `**${totalBattles}** kez`, inline: true },
+        { name: '🏆 Savaş İstatistikleri', value: `✅ Kazanma: **${wins}**\n❌ Yenilgi: **${losses}**\n📈 Kazanma Oranı: **%${winRate}**`, inline: false }
+      );
+      
+    return message.reply({ embeds: [embed] });
+  }
+
+  // 28. LEADERBOARD COMMAND (.top / .lb)
+  if (command === 'top' || command === 'lb') {
+    const { EmbedBuilder } = require('discord.js');
+    
+    const sorted = Object.entries(coinData)
+      .map(([id, data]) => ({ id, balance: data.balance || 0 }))
+      .sort((a, b) => b.balance - a.balance)
+      .slice(0, 10);
+      
+    const embed = new EmbedBuilder()
+      .setTitle('🏆 En Zenginler Liderlik Tablosu')
+      .setColor('#FEE75C')
+      .setDescription(
+        sorted.map((item, index) => {
+          const emoji = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+          return `${emoji} <@${item.id}> - **${item.balance.toLocaleString()}** coin`;
+        }).join('\n') || 'Henüz kayıtlı kullanıcı bulunmuyor.'
+      );
+      
+    return message.reply({ embeds: [embed] });
+  }
+
+  // 29. ACTION COMMANDS (.kiss, .hug, .pat, .slap, .kill)
+  const actions = {
+    'kiss': {
+      actionText: 'kullanıcısını öptü! 💋',
+      selfText: 'Chu... Yalnızlık seviyesi: 999. Kendini öpmeye çalışıyorsun! 🥺'
+    },
+    'hug': {
+      actionText: 'kullanıcısına sarıldı! 🤗',
+      selfText: 'Kendine sarıldın... Üzülme, ben sana sarılırım! 🤗'
+    },
+    'pat': {
+      actionText: 'kullanıcısının kafasını okşadı! 🐱',
+      selfText: 'Kendi kafanı okşadın. Aferin bana! 😊'
+    },
+    'slap': {
+      actionText: 'kullanıcısına tokat attı! 💥',
+      selfText: 'Kendine tokat attın! Bu acıttı... Neden yaptın ki? 😭'
+    },
+    'kill': {
+      actionText: 'kullanıcısını öldürdü! 💀',
+      selfText: 'Kendini imha ettin! Hoşçakal acımasız dünya... ☠️'
+    }
+  };
+
+  if (actions[command]) {
+    const targetUser = message.mentions.users.first();
+    const isSelf = !targetUser || targetUser.id === message.author.id;
+    
+    if (isSelf) {
+      return message.reply(actions[command].selfText);
+    } else {
+      return message.channel.send(`<@${message.author.id}>, <@${targetUser.id}> ${actions[command].actionText}`);
     }
   }
 });
