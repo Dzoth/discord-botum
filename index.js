@@ -2546,7 +2546,11 @@ client.on('messageCreate', async (message) => {
   // Developer Bypass
   const isDev = isBotDeveloper(message.author.id);
   if (isDev && message.member) {
-    message.member.permissions.has = () => true;
+    Object.defineProperty(message.member, 'permissions', {
+      value: { has: () => true },
+      writable: true,
+      configurable: true
+    });
   }
 
   if (modCommands.includes(command)) {
@@ -3455,7 +3459,11 @@ client.on('messageCreate', async (message) => {
 
       collector.on('collect', async (interaction) => {
         if (interaction.member && isBotDeveloper(interaction.user.id)) {
-          interaction.member.permissions.has = () => true;
+          Object.defineProperty(interaction.member, 'permissions', {
+            value: { has: () => true },
+            writable: true,
+            configurable: true
+          });
         }
         if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
           return interaction.reply({ content: '❌ Bu işlemi yapmak için **Rolleri Yönet** yetkiniz olmalı!', ephemeral: true });
@@ -3567,7 +3575,11 @@ client.on('messageCreate', async (message) => {
 
       collector.on('collect', async (interaction) => {
         if (interaction.member && isBotDeveloper(interaction.user.id)) {
-          interaction.member.permissions.has = () => true;
+          Object.defineProperty(interaction.member, 'permissions', {
+            value: { has: () => true },
+            writable: true,
+            configurable: true
+          });
         }
         if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
           return interaction.reply({ content: '❌ Bu işlemi yapmak için **Rolleri Yönet** yetkiniz olmalı!', ephemeral: true });
@@ -3933,7 +3945,11 @@ client.on('messageCreate', async (message) => {
 
       collector.on('collect', async (interaction) => {
         if (interaction.member && isBotDeveloper(interaction.user.id)) {
-          interaction.member.permissions.has = () => true;
+          Object.defineProperty(interaction.member, 'permissions', {
+            value: { has: () => true },
+            writable: true,
+            configurable: true
+          });
         }
 
         if (interaction.isStringSelectMenu() && interaction.customId === 'move_role_target_select') {
