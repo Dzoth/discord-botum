@@ -4648,7 +4648,7 @@ client.on('messageCreate', async (message) => {
 // ==================== API SERVER FOR WEBSITE INTERACTION ====================
 const http = require('http');
 
-const API_PORT = 3000;
+const API_PORT = process.env.PORT || process.env.API_PORT || 3000;
 const apiServer = http.createServer((req, res) => {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');

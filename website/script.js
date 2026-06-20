@@ -28,6 +28,7 @@ let activeLogs = [...sampleLogs];
 
 // ==================== CORE INITIALIZATION ====================
 document.addEventListener("DOMContentLoaded", () => {
+    let isUpdatingUI = false;
     
     // 1. DYNAMIC NAVIGATION
     const menuItems = document.querySelectorAll(".sidebar-menu .menu-item");
@@ -431,6 +432,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     function saveAuditConfigToBackend() {
+        if (isUpdatingUI) return;
         const config = {
             enabled: auditGlobalToggle ? auditGlobalToggle.checked : false,
             channel: auditChannelSelect ? auditChannelSelect.value : "",
@@ -474,6 +476,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (auditGlobalToggle) {
         auditGlobalToggle.addEventListener("change", () => {
+            if (isUpdatingUI) return;
             const isEnabled = auditGlobalToggle.checked;
             toggleAuditUIState(isEnabled);
             saveAuditConfigToBackend();
@@ -493,6 +496,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (auditChannelSelect) {
         auditChannelSelect.addEventListener("change", () => {
+            if (isUpdatingUI) return;
             saveAuditConfigToBackend();
             const channelName = auditChannelSelect.options[auditChannelSelect.selectedIndex].text;
             showToast(`Log kanalı güncellendi: ${channelName}`, "success");
@@ -512,6 +516,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const checkbox = document.getElementById(optId);
         if (checkbox) {
             checkbox.addEventListener("change", () => {
+                if (isUpdatingUI) return;
                 saveAuditConfigToBackend();
                 
                 const labelText = checkbox.closest(".audit-toggle-item").querySelector("span").textContent;
@@ -728,8 +733,10 @@ document.addEventListener("DOMContentLoaded", () => {
     function updateDashboardGuilds() {
         if (!allGuilds || allGuilds.length === 0) return;
 
-        // If activeGuildId is not set or not in list, pick the first one
-        let activeGuild = allGuilds.find(g => g.id === activeGuildId);
+        isUpdatingUI = true;
+        try {
+            // If activeGuildId is not set or not in list, pick the first one
+            let activeGuild = allGuilds.find(g => g.id === activeGuildId);
         if (!activeGuild) {
             activeGuild = allGuilds[0];
             activeGuildId = activeGuild.id;
@@ -1016,6 +1023,9 @@ document.addEventListener("DOMContentLoaded", () => {
             renderSavedEmbeds(guildEmbeds);
         } else {
             renderSavedEmbeds([]);
+        }
+        } finally {
+            isUpdatingUI = false;
         }
     }
 
@@ -1759,6 +1769,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const accQuarantineRole = document.getElementById("acc-quarantine-role");
 
     function saveAccountFilterConfigToBackend() {
+        if (isUpdatingUI) return;
         if (!accFilterEnable || !accMinAge || !accAction || !accQuarantineRole) return;
         
         const enabled = accFilterEnable.checked;
@@ -1807,6 +1818,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (accAction) {
         accAction.addEventListener("change", () => {
+            if (isUpdatingUI) return;
             const quarantineGroup = document.getElementById("acc-quarantine-role-group");
             if (quarantineGroup) {
                 if (accAction.value === "role") {
@@ -1821,6 +1833,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (accFilterEnable) {
         accFilterEnable.addEventListener("change", () => {
+            if (isUpdatingUI) return;
             saveAccountFilterConfigToBackend();
             const status = accFilterEnable.checked ? "aktif edildi" : "devre dışı bırakıldı";
             showToast(`Hesap filtresi ${status}!`, accFilterEnable.checked ? "success" : "error");
@@ -1836,6 +1849,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (accMinAge) {
         accMinAge.addEventListener("change", () => {
+            if (isUpdatingUI) return;
             saveAccountFilterConfigToBackend();
             const minAgeText = accMinAge.options[accMinAge.selectedIndex].text;
             showToast(`Minimum hesap yaşı ${minAgeText} olarak güncellendi.`, "success");
@@ -1851,6 +1865,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (accQuarantineRole) {
         accQuarantineRole.addEventListener("change", () => {
+            if (isUpdatingUI) return;
             saveAccountFilterConfigToBackend();
             showToast("Karantina rolü başarıyla güncellendi.", "success");
         });
