@@ -269,13 +269,18 @@ function getDefaultAuditLogOptions() {
     "opt-username-update": false,
     "opt-member-roles-update": false,
     "opt-member-mute": false,
-    "opt-member-ban": false,
     "opt-member-unban": false,
+    "opt-member-ban": false,
+    "opt-member-deafen": false,
+    "opt-voice-join": false,
+    "opt-voice-leave": false,
+    "opt-voice-move": false,
     "opt-mod-mute": false,
     "opt-mod-unmute": false,
     "opt-mod-ban": false,
     "opt-mod-unban": false,
     "opt-mod-kick": false,
+    "opt-mod-deafen": false,
     "opt-message-update": false,
     "opt-message-delete": false,
     "opt-guild-update": false,
@@ -624,10 +629,12 @@ function exportServerData() {
   client.guilds.cache.forEach(guild => {
     const channels = [];
     guild.channels.cache.forEach(channel => {
-      if (channel.type === 0) {
+      // 0=metin, 2=ses, 4=kategori, 5=duyuru, 13=sahne, 15=forum
+      if ([0, 2, 4, 5, 13, 15].includes(channel.type)) {
         channels.push({
           id: channel.id,
-          name: channel.name
+          name: channel.name,
+          type: channel.type // 0=text,2=voice,4=category,5=announcement
         });
       }
     });
@@ -1051,6 +1058,128 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
       )
       .setTimestamp();
     await sendAuditLog(guild, 'opt-member-mute', embed);
+  }
+
+  // Sunucu Sağırlaştırma
+  const wasDeafened = oldMember.voice?.serverDeaf;
+  const isDeafened = newMember.voice?.serverDeaf;
+  if (!wasDeafened && isDeafened) {
+    const embed = new EmbedBuilder()
+      .setColor(0xFF6B35)
+      .setTitle('🔇 Üye Sağırlaştırıldı')
+      .addFields(
+        { name: 'Kullanıcı', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: true }
+      )
+      .setTimestamp();
+    await sendAuditLog(guild, 'opt-member-deafen', embed);
+  } else if (wasDeafened && !isDeafened) {
+    const embed = new EmbedBuilder()
+      .setColor(0x57F287)
+      .setTitle('🔊 Sağırlaştırma Kaldırıldı')
+      .addFields(
+        { name: 'Kullanıcı', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: true }
+      )
+      .setTimestamp();
+    await sendAuditLog(guild, 'opt-member-deafen', embed);
+  }
+});
+
+// --- Ses Kanalı Olayları ---
+client.on('voiceStateUpdate', async (oldState, newState) => {
+  const guild = newState.guild || oldState.guild;
+  const member = newState.member || oldState.member;
+  if (!member || member.user.bot) return;
+
+  const oldChannel = oldState.channel;
+  const newChannel = newState.channel;
+
+  // Ses kanalına girdi
+  if (!oldChannel && newChannel) {
+    const embed = new EmbedBuilder()
+      .setColor(0x57F287)
+      .setTitle('🔊 Ses Kanalına Girdi')
+      .addFields(
+        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
+        { name: 'Kanal', value: `**${newChannel.name}**`, inline: true }
+      )
+      .setTimestamp();
+    await sendAuditLog(guild, 'opt-voice-join', embed);
+    return;
+  }
+
+  // Ses kanalından çıktı
+  if (oldChannel && !newChannel) {
+    const embed = new EmbedBuilder()
+      .setColor(0xED4245)
+      .setTitle('🔇 Ses Kanalından Ayrıldı')
+      .addFields(
+        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
+        { name: 'Kanal', value: `**${oldChannel.name}**`, inline: true }
+      )
+      .setTimestamp();
+    await sendAuditLog(guild, 'opt-voice-leave', embed);
+    return;
+  }
+
+  // Farklı ses kanalına geçti
+  if (oldChannel && newChannel && oldChannel.id !== newChannel.id) {
+    const embed = new EmbedBuilder()
+      .setColor(0xFEE75C)
+      .setTitle('🔀 Ses Kanalı Değiştirdi')
+      .addFields(
+        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: false },
+        { name: 'Eski Kanal', value: `**${oldChannel.name}**`, inline: true },
+        { name: 'Yeni Kanal', value: `**${newChannel.name}**`, inline: true }
+      )
+      .setTimestamp();
+    await sendAuditLog(guild, 'opt-voice-move', embed);
+    return;
+  }
+
+  // Sunucu sessize alma (serverMute)
+  if (!oldState.serverMute && newState.serverMute) {
+    const embed = new EmbedBuilder()
+      .setColor(0xFFA500)
+      .setTitle('🔇 Mod: Ses Susturuldu')
+      .addFields(
+        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
+        { name: 'Kanal', value: newChannel ? `**${newChannel.name}**` : 'Bilinmiyor', inline: true }
+      )
+      .setTimestamp();
+    await sendAuditLog(guild, 'opt-mod-mute', embed);
+  } else if (oldState.serverMute && !newState.serverMute) {
+    const embed = new EmbedBuilder()
+      .setColor(0x57F287)
+      .setTitle('🔊 Mod: Ses Susturma Kaldırıldı')
+      .addFields(
+        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
+        { name: 'Kanal', value: newChannel ? `**${newChannel.name}**` : 'Bilinmiyor', inline: true }
+      )
+      .setTimestamp();
+    await sendAuditLog(guild, 'opt-mod-unmute', embed);
+  }
+
+  // Sunucu sağırlaştırma (serverDeaf)
+  if (!oldState.serverDeaf && newState.serverDeaf) {
+    const embed = new EmbedBuilder()
+      .setColor(0xFF6B35)
+      .setTitle('🔇 Mod: Sağırlaştırıldı')
+      .addFields(
+        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
+        { name: 'Kanal', value: newChannel ? `**${newChannel.name}**` : 'Bilinmiyor', inline: true }
+      )
+      .setTimestamp();
+    await sendAuditLog(guild, 'opt-mod-deafen', embed);
+  } else if (oldState.serverDeaf && !newState.serverDeaf) {
+    const embed = new EmbedBuilder()
+      .setColor(0x57F287)
+      .setTitle('🔊 Mod: Sağırlaştırma Kaldırıldı')
+      .addFields(
+        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
+        { name: 'Kanal', value: newChannel ? `**${newChannel.name}**` : 'Bilinmiyor', inline: true }
+      )
+      .setTimestamp();
+    await sendAuditLog(guild, 'opt-mod-deafen', embed);
   }
 });
 
@@ -5094,10 +5223,11 @@ const apiServer = http.createServer((req, res) => {
     client.guilds.cache.forEach(guild => {
       const channels = [];
       guild.channels.cache.forEach(channel => {
-        if (channel.type === 0) {
+        if ([0, 2, 4, 5, 13, 15].includes(channel.type)) {
           channels.push({
             id: channel.id,
-            name: channel.name
+            name: channel.name,
+            type: channel.type
           });
         }
       });

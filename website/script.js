@@ -391,11 +391,16 @@ document.addEventListener("DOMContentLoaded", () => {
             "opt-member-mute": false,
             "opt-member-ban": false,
             "opt-member-unban": false,
+            "opt-member-deafen": false,
+            "opt-voice-join": false,
+            "opt-voice-leave": false,
+            "opt-voice-move": false,
             "opt-mod-mute": false,
             "opt-mod-unmute": false,
             "opt-mod-ban": false,
             "opt-mod-unban": false,
             "opt-mod-kick": false,
+            "opt-mod-deafen": false,
             "opt-message-update": false,
             "opt-message-delete": false,
             "opt-guild-update": false,
@@ -822,10 +827,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 select.appendChild(placeholder);
             }
 
+            const getChIcon = (type) => {
+                if (type === 2) return '🔊'; // ses
+                if (type === 4) return '📁'; // kategori
+                if (type === 5) return '📣'; // duyuru
+                if (type === 13) return '🎤'; // sahne
+                if (type === 15) return '💬'; // forum
+                return '#'; // metin (type=0)
+            };
+
             activeGuild.channels.forEach(ch => {
                 const opt = document.createElement("option");
                 opt.value = ch.id;
-                opt.textContent = `# ${ch.name}`;
+                opt.textContent = `${getChIcon(ch.type)} ${ch.name}`;
                 if (ch.id === currentValue && !select.classList.contains("select-channel-exempt")) opt.selected = true;
                 select.appendChild(opt);
             });
