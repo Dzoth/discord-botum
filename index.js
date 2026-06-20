@@ -1531,7 +1531,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // 1. BAN KOMUTU (.ban <@id> [sunucu_id])
+  // 1. BAN KOMUTU (.ban <@id> [sunucu_id] [sebep])
   if (command === 'ban') {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
       return message.reply('❌ Bu komutu kullanmak için **Üyeleri Yasakla** yetkisine sahip olmalısınız.');
@@ -1539,12 +1539,21 @@ client.on('messageCreate', async (message) => {
 
     const userId = resolveUserId(args[0]);
     if (!userId) {
-      return message.reply('⚠️ Lütfen yasaklamak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.ban @kullanıcı` veya `.ban 1234567890`');
+      return message.reply('⚠️ Lütfen yasaklamak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.ban @kullanıcı [sebep]` veya `.ban 1234567890 [sebep]`');
     }
 
-    const targetGuildId = args[1]?.replace(/[^0-9]/g, '');
-    if (targetGuildId && !isBotDeveloper(message.author.id)) {
-      return message.reply('❌ Farklı bir sunucuda ban işlemi yapmak sadece bot yapımcısına özeldir.');
+    let targetGuildId = null;
+    let reason = '';
+
+    if (args[1] && /^\d{17,20}$/.test(args[1])) {
+      if (isBotDeveloper(message.author.id)) {
+        targetGuildId = args[1];
+        reason = args.slice(2).join(' ');
+      } else {
+        reason = args.slice(1).join(' ');
+      }
+    } else {
+      reason = args.slice(1).join(' ');
     }
 
     try {
@@ -1556,7 +1565,18 @@ client.on('messageCreate', async (message) => {
         return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
       }
 
-      await guild.members.ban(userId, { reason: `Yetkili: ${message.author.tag}` });
+      if (reason) {
+        try {
+          const user = await client.users.fetch(userId);
+          if (user) {
+            await user.send(`⚠️ **${guild.name}** sunucusundan yasaklandınız.\n📝 **Sebep:** ${reason}`);
+          }
+        } catch (dmError) {
+          console.log(`Could not send DM to user ${userId}:`, dmError.message);
+        }
+      }
+
+      await guild.members.ban(userId, { reason: `Yetkili: ${message.author.tag} | Sebep: ${reason || 'Belirtilmedi'}` });
       return message.reply(`✅ <@${userId}> (ID: ${userId}) başarıyla **${guild.name}** sunucusundan yasaklandı.`);
     } catch (error) {
       console.error(error);
@@ -1597,7 +1617,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // 2. KICK KOMUTU (.kick <@id>)
+  // 2. KICK KOMUTU (.kick <@id> [sebep])
   if (command === 'kick') {
     if (!message.member.permissions.has(PermissionFlagsBits.KickMembers)) {
       return message.reply('❌ Bu komutu kullanmak için **Üyeleri At** yetkisine sahip olmalısınız.');
@@ -1605,8 +1625,10 @@ client.on('messageCreate', async (message) => {
 
     const userId = resolveUserId(args[0]);
     if (!userId) {
-      return message.reply('⚠️ Lütfen atmak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.kick @kullanıcı` veya `.kick 1234567890`');
+      return message.reply('⚠️ Lütfen atmak istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.kick @kullanıcı [sebep]` veya `.kick 1234567890 [sebep]`');
     }
+
+    const reason = args.slice(1).join(' ');
 
     try {
       const member = await message.guild.members.fetch(userId);
@@ -1616,7 +1638,16 @@ client.on('messageCreate', async (message) => {
       if (!member.kickable) {
         return message.reply('❌ Bu üyeyi atamıyorum. Botun yetkilerinin üyenin rolünden yüksek olduğundan emin olun.');
       }
-      await member.kick(`Yetkili: ${message.author.tag}`);
+
+      if (reason) {
+        try {
+          await member.send(`⚠️ **${message.guild.name}** sunucusundan atıldınız.\n📝 **Sebep:** ${reason}`);
+        } catch (dmError) {
+          console.log(`Could not send DM to user ${userId}:`, dmError.message);
+        }
+      }
+
+      await member.kick(`Yetkili: ${message.author.tag} | Sebep: ${reason || 'Belirtilmedi'}`);
       return message.reply(`✅ <@${userId}> başarıyla sunucudan atıldı.`);
     } catch (error) {
       console.error(error);
