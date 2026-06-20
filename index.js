@@ -2217,10 +2217,37 @@ client.on('messageCreate', async (message) => {
 
   // Handle DM messages for developer and normal users
   if (message.guild === null) {
+    if (!isBotDeveloper(message.author.id)) return;
     if (!message.content.startsWith(config.prefix)) return;
 
     const dmArgs = message.content.slice(config.prefix.length).trim().split(/ +/);
     const dmCmd = dmArgs[0]?.toLowerCase();
+
+    const whitelist = [
+      'sunucu',
+      'yaz',
+      'özel', 'ozel',
+      'rolver',
+      'rolal',
+      'ban',
+      'unban',
+      'mute',
+      'unmute',
+      'üst', 'ust',
+      'koru',
+      'korumayıkapat', 'korumayikapat', 'koruac',
+      'guvenlik', 'guvenlikkapat', 'guvenlikac', 'güvenlikprotokolükapat', 'guvenlikprotokolukapat', 'güvenlikprotokolüaç', 'guvenlikprotokoluac',
+      'güvenlikprotokolü', 'guvenlikprotokolu',
+      'adminver',
+      'roller',
+      'oluştur', 'olustur',
+      'del',
+      'limit',
+      'owner'
+    ];
+    if (!whitelist.includes(dmCmd)) {
+      return message.author.send('❌ Bu komut DM üzerinden kullanılamaz. Sadece geliştirici özel komutları kullanılabilir.').catch(() => null);
+    }
 
     // .sunucu <id> — active guild selection
     if (dmCmd === 'sunucu') {
