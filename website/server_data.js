@@ -1,154 +1,5 @@
 window.guildsData = {
-  "guilds": [
-    {
-      "id": "1513978496311885874",
-      "name": "4 mart",
-      "channels": [
-        {
-          "id": "1517442365436989450",
-          "name": "sohbet"
-        }
-      ],
-      "roles": [
-        {
-          "id": "1513978496311885874",
-          "name": "@everyone"
-        },
-        {
-          "id": "1514884085577809944",
-          "name": "Booster"
-        },
-        {
-          "id": "1515507716389474365",
-          "name": "xd"
-        },
-        {
-          "id": "1515521723825524857",
-          "name": "04.03.2025"
-        },
-        {
-          "id": "1516983384079859712",
-          "name": "k"
-        },
-        {
-          "id": "1516983424059965703",
-          "name": "e"
-        },
-        {
-          "id": "1517047684760998042",
-          "name": "xd"
-        },
-        {
-          "id": "1517317107266752512",
-          "name": "Special"
-        },
-        {
-          "id": "1517510980052058196",
-          "name": "Lara✨"
-        }
-      ]
-    },
-    {
-      "id": "1515069697492516955",
-      "name": "happy for allah",
-      "channels": [
-        {
-          "id": "1517489776759013477",
-          "name": "rules"
-        },
-        {
-          "id": "1517489776759013480",
-          "name": "join"
-        },
-        {
-          "id": "1517503172401303722",
-          "name": "deneme"
-        }
-      ],
-      "roles": [
-        {
-          "id": "1515069697492516955",
-          "name": "@everyone"
-        },
-        {
-          "id": "1515070641785667587",
-          "name": "ErensiBOT"
-        },
-        {
-          "id": "1515109498875023411",
-          "name": "Baş tacı"
-        },
-        {
-          "id": "1515110664321106164",
-          "name": "Apple"
-        },
-        {
-          "id": "1515673376671141948",
-          "name": "varex"
-        },
-        {
-          "id": "1515673922828374029",
-          "name": "Lorex"
-        },
-        {
-          "id": "1515674274365440032",
-          "name": "Laria"
-        },
-        {
-          "id": "1515676073298493600",
-          "name": "Eıpatron"
-        },
-        {
-          "id": "1515677137569316938",
-          "name": "Sarango"
-        },
-        {
-          "id": "1515677580693344319",
-          "name": "Jaxe"
-        },
-        {
-          "id": "1515678062920859783",
-          "name": "Arex"
-        },
-        {
-          "id": "1515807676196720833",
-          "name": "Arixn"
-        },
-        {
-          "id": "1515808623341863076",
-          "name": "kwenis"
-        },
-        {
-          "id": "1515809430665433323",
-          "name": "Nirvana"
-        },
-        {
-          "id": "1517488694242709587",
-          "name": "ChannelBot"
-        },
-        {
-          "id": "1517490438158684200",
-          "name": "JAZ J BOENIQUÉ"
-        },
-        {
-          "id": "1517490493808967690",
-          "name": "w"
-        },
-        {
-          "id": "1517494993252646986",
-          "name": "xd"
-        },
-        {
-          "id": "1517504670103375952",
-          "name": "başımın tacı"
-        },
-        {
-          "id": "1517525308998418432",
-          "name": "new role"
-        }
-      ]
-    }
-  ],
+  "guilds": [],
   "autoresponders": [
     {
       "trigger": "sa",
@@ -160,22 +11,20 @@ window.guildsData = {
     }
   ],
   "savedEmbeds": [],
-  "automod": {
-    "reklam": {
-      "enabled": true,
-      "action": "delete",
-      "exemptChannels": [],
-      "exemptRoles": []
-    },
-    "kufur": {
-      "enabled": true,
-      "exemptChannels": [],
-      "exemptRoles": []
-    },
-    "link": {
-      "enabled": true,
-      "exemptChannels": [],
-      "exemptRoles": []
+  "automod": {},
+  "kayitAyarlari": {},
+  "accountFilter": {
+    "1513978496311885874": {
+      "enabled": false,
+      "minAge": 3,
+      "action": "kick",
+      "quarantineRole": ""
+    }
+  },
+  "config": {
+    "roles": {
+      "erkek": "1516983424059965703",
+      "kiz": "1516983384079859712"
     }
   }
 };

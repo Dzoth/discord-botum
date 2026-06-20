@@ -206,21 +206,21 @@
                         <div class="stat-card">
                             <div class="stat-icon purple"><i class="fa-solid fa-users"></i></div>
                             <div class="stat-details">
-                                <span class="stat-value">25,482</span>
+                                <span class="stat-value" id="stat-total-members">25,482</span>
                                 <span class="stat-title">Toplam Üye</span>
                             </div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-icon blue"><i class="fa-solid fa-bolt"></i></div>
                             <div class="stat-details">
-                                <span class="stat-value">4,120</span>
+                                <span class="stat-value" id="stat-active-members">4,120</span>
                                 <span class="stat-title">Aktif Üye</span>
                             </div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-icon green"><i class="fa-solid fa-circle-check"></i></div>
                             <div class="stat-details">
-                                <span class="stat-value">99.9%</span>
+                                <span class="stat-value" id="stat-bot-uptime">99.9%</span>
                                 <span class="stat-title">Bot Aktiflik</span>
                             </div>
                         </div>
@@ -943,6 +943,25 @@
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Kayıtsız Çıkış Koruması -->
+                        <div class="automod-card" id="card-automod-kayitsizCikisBan" style="margin-top: 25px;">
+                            <div class="automod-card-header">
+                                <div class="automod-card-info">
+                                    <h4>Kayıtsız Çıkış Koruması</h4>
+                                    <p>Kayıt olmadan sunucudan ayrılanları otomatik olarak yasaklar</p>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="automod-kayitsizCikisBan-toggle">
+                                    <span class="slider rounded"></span>
+                                </label>
+                            </div>
+                            <div class="automod-card-body" id="body-automod-kayitsizCikisBan">
+                                <p style="font-size: 0.85rem; color: #a6a9b6; line-height: 1.5; margin: 0;">
+                                    Bu koruma aktif edildiğinde, sunucuya yeni katılan kullanıcılar kayıt işlemlerini tamamlamadan (Erkek veya Kız rolü almadan) sunucudan ayrılırlarsa, bot tarafından otomatik olarak sunucudan yasaklanırlar (banlanırlar). Bu sayede sunucuya gir-çık yapan şüpheli hesapların tekrar girişi engellenir.
+                                </p>
                             </div>
                         </div>
                     </div>

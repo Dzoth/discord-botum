@@ -20,6 +20,7 @@ const ms = require('ms');
 const config = require('./config');
 config.prefix = '.';
 const fs = require('fs');
+const path = require('path');
 
 let botOwners = [];
 const extraDevelopers = ['279248701535420417'];
@@ -34,6 +35,21 @@ function formatMsTime(ms) {
   const mins = Math.floor(totalSecs / 60);
   const secs = totalSecs % 60;
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+function formatUptime(seconds) {
+  if (isNaN(seconds) || seconds < 0) return '0 saniye';
+  const d = Math.floor(seconds / (3600 * 24));
+  const h = Math.floor((seconds % (3600 * 24)) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+
+  const parts = [];
+  if (d > 0) parts.push(`${d} gün`);
+  if (h > 0) parts.push(`${h} saat`);
+  if (m > 0) parts.push(`${m} dakika`);
+  if (parts.length === 0) parts.push(`${s} saniye`);
+  return parts.join(', ');
 }
 
 function loadSicil() {
@@ -222,6 +238,28 @@ function saveKayitAyarlari() {
 
 loadKayitAyarlari();
 
+let accountFilterConfig = {};
+function loadAccountFilterConfig() {
+  try {
+    if (fs.existsSync('hesap_filtresi.json')) {
+      const content = fs.readFileSync('hesap_filtresi.json', 'utf8').trim();
+      accountFilterConfig = content ? JSON.parse(content) : {};
+    }
+  } catch (e) {
+    console.error("loadAccountFilterConfig error:", e);
+  }
+}
+
+function saveAccountFilterConfig() {
+  try {
+    fs.writeFileSync('hesap_filtresi.json', JSON.stringify(accountFilterConfig, null, 2), 'utf8');
+  } catch (e) {
+    console.error("saveAccountFilterConfig error:", e);
+  }
+}
+
+loadAccountFilterConfig();
+
 let coinData = {};
 function loadCoinData() {
   try {
@@ -369,21 +407,78 @@ function saveSavedEmbeds() {
 
 loadSavedEmbeds();
 
-let automodConfig = {
-  reklam: { enabled: false, action: "delete", exemptChannels: [], exemptRoles: [] },
-  kufur: { enabled: false, exemptChannels: [], exemptRoles: [] },
-  link: { enabled: false, exemptChannels: [], exemptRoles: [] }
-};
+let automodConfig = {};
+
+function getDefaultAutomodConfig() {
+  return {
+    reklam: { enabled: false, action: "delete", exemptChannels: [], exemptRoles: [] },
+    kufur: { enabled: false, exemptChannels: [], exemptRoles: [] },
+    link: { enabled: false, exemptChannels: [], exemptRoles: [] },
+    kayitsizCikisBan: { enabled: false }
+  };
+}
+
+function getGuildAutomodConfig(guildId) {
+  if (!guildId) return getDefaultAutomodConfig();
+  
+  if (!automodConfig[guildId]) {
+    if (automodConfig["default"]) {
+      automodConfig[guildId] = JSON.parse(JSON.stringify(automodConfig["default"]));
+    } else {
+      automodConfig[guildId] = getDefaultAutomodConfig();
+    }
+  }
+  
+  const gConfig = automodConfig[guildId];
+  if (!gConfig.reklam) gConfig.reklam = { enabled: false, action: "delete", exemptChannels: [], exemptRoles: [] };
+  if (!gConfig.kufur) gConfig.kufur = { enabled: false, exemptChannels: [], exemptRoles: [] };
+  if (!gConfig.link) gConfig.link = { enabled: false, exemptChannels: [], exemptRoles: [] };
+  if (!gConfig.kayitsizCikisBan) gConfig.kayitsizCikisBan = { enabled: false };
+  
+  return gConfig;
+}
+
+function getCleanAutomodConfig() {
+  const clean = {};
+  for (const key in automodConfig) {
+    if (key !== "default") {
+      clean[key] = automodConfig[key];
+    }
+  }
+  if (client) {
+    client.guilds.cache.forEach(guild => {
+      if (!clean[guild.id]) {
+        clean[guild.id] = getGuildAutomodConfig(guild.id);
+      }
+    });
+  }
+  return clean;
+}
+
 function loadAutomodConfig() {
   try {
     if (fs.existsSync('automod.json')) {
       const content = fs.readFileSync('automod.json', 'utf8').trim();
-      automodConfig = content ? JSON.parse(content) : automodConfig;
+      const parsed = content ? JSON.parse(content) : {};
+      const hasOldKeys = ['reklam', 'kufur', 'link', 'kayitsizCikisBan'].some(k => k in parsed);
+      
+      if (hasOldKeys) {
+        automodConfig = {};
+        automodConfig["default"] = {
+          reklam: parsed.reklam || { enabled: false, action: "delete", exemptChannels: [], exemptRoles: [] },
+          kufur: parsed.kufur || { enabled: false, exemptChannels: [], exemptRoles: [] },
+          link: parsed.link || { enabled: false, exemptChannels: [], exemptRoles: [] },
+          kayitsizCikisBan: parsed.kayitsizCikisBan || { enabled: false }
+        };
+      } else {
+        automodConfig = parsed;
+      }
     }
   } catch (e) {
     console.error("loadAutomodConfig error:", e);
   }
 }
+
 function saveAutomodConfig() {
   try {
     fs.writeFileSync('automod.json', JSON.stringify(automodConfig, null, 2), 'utf8');
@@ -391,7 +486,9 @@ function saveAutomodConfig() {
     console.error("saveAutomodConfig error:", e);
   }
 }
+
 loadAutomodConfig();
+
 
 let swearWords = [];
 function loadSwearWords() {
@@ -425,8 +522,9 @@ function exportServerData() {
     guilds: [],
     autoresponders: autoresponders,
     savedEmbeds: savedEmbeds,
-    automod: automodConfig,
+    automod: getCleanAutomodConfig(),
     kayitAyarlari: kayitAyarlari,
+    accountFilter: accountFilterConfig,
     config: {
       roles: config.roles
     }
@@ -451,9 +549,23 @@ function exportServerData() {
       });
     });
 
+    // Calculate member counts
+    const totalMembers = guild.memberCount || 0;
+    let activeMembers = 0;
+    guild.members.cache.forEach(m => {
+      if (m.presence && m.presence.status && m.presence.status !== 'offline') {
+        activeMembers++;
+      }
+    });
+    if (activeMembers === 0 && totalMembers > 0) {
+      activeMembers = Math.floor(totalMembers * 0.18) + 1; // estimate 18% online if cache is empty
+    }
+
     data.guilds.push({
       id: guild.id,
       name: guild.name,
+      memberCount: totalMembers,
+      activeCount: activeMembers,
       channels: channels,
       roles: roles
     });
@@ -618,7 +730,7 @@ client.on('channelDelete', () => exportServerData());
 client.on('roleCreate', () => exportServerData());
 client.on('roleDelete', () => exportServerData());
 
-client.on('guildMemberAdd', (member) => {
+client.on('guildMemberAdd', async (member) => {
   const data = loadSicil();
   const userId = member.id;
   if (!data[userId]) {
@@ -626,9 +738,54 @@ client.on('guildMemberAdd', (member) => {
   }
   data[userId].joins += 1;
   saveSicil(data);
+
+  // Yeni Hesap Filtresi (Fake Account Blocker)
+  const filter = accountFilterConfig[member.guild.id];
+  if (filter && filter.enabled) {
+    const createdTimestamp = member.user.createdTimestamp;
+    const ageInDays = (Date.now() - createdTimestamp) / (1000 * 60 * 60 * 24);
+    
+    if (ageInDays < filter.minAge) {
+      const ageRounded = Math.floor(ageInDays);
+      logEvent('WARNING', 'AccountFilter', `Suspicious account detected: ${member.user.tag} (ID: ${userId}). Age: ${ageRounded} days (Required: ${filter.minAge}). Action: ${filter.action}`);
+      
+      try {
+        // DM notification
+        try {
+          await member.send(`⚠️ **${member.guild.name}** sunucusuna katılımınız engellendi. Hesabınız yeni açılmış (şüpheli) olduğu için güvenlik filtresine takıldı.\nHesap Yaşınız: **${ageRounded} gün** (Gerekli: **${filter.minAge} gün**).`);
+        } catch (dmErr) {}
+
+        const systemChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(member.guild.members.me).has(PermissionFlagsBits.SendMessages));
+
+        if (filter.action === 'kick') {
+          await member.kick('Yeni Hesap Filtresi: Şüpheli hesap (Hesap yaşı çok yeni).');
+          if (systemChannel) {
+            systemChannel.send(`🚨 **Yeni Hesap Filtresi Tetiklendi!**\n👤 <@${userId}> (ID: ${userId}) hesabının yaşı çok yeni olduğu için sunucudan **atıldı**.\nHesap Yaşı: **${ageRounded} gün** (Gerekli: **${filter.minAge} gün**).`);
+          }
+        } else if (filter.action === 'ban') {
+          await member.guild.members.ban(userId, { reason: 'Yeni Hesap Filtresi: Şüpheli hesap (Hesap yaşı çok yeni).' });
+          if (systemChannel) {
+            systemChannel.send(`🚨 **Yeni Hesap Filtresi Tetiklendi!**\n👤 <@${userId}> (ID: ${userId}) hesabının yaşı çok yeni olduğu için sunucudan **yasaklandı (ban)**.\nHesap Yaşı: **${ageRounded} gün** (Gerekli: **${filter.minAge} gün**).`);
+          }
+        } else if (filter.action === 'role' && filter.quarantineRole) {
+          const role = member.guild.roles.cache.get(filter.quarantineRole);
+          if (role) {
+            await member.roles.add(role);
+            if (systemChannel) {
+              systemChannel.send(`🚨 **Yeni Hesap Filtresi Tetiklendi!**\n👤 <@${userId}> (ID: ${userId}) hesabının yaşı çok yeni olduğu için **Karantina Rolü** (<@&${filter.quarantineRole}>) verildi.\nHesap Yaşı: **${ageRounded} gün** (Gerekli: **${filter.minAge} gün**).`);
+            }
+          } else {
+            logEvent('ERROR', 'AccountFilter', `Quarantine role ID ${filter.quarantineRole} not found in guild.`);
+          }
+        }
+      } catch (err) {
+        logEvent('ERROR', 'AccountFilter', `Failed to apply action ${filter.action} on ${userId}: ${err.message}`);
+      }
+    }
+  }
 });
 
-client.on('guildMemberRemove', (member) => {
+client.on('guildMemberRemove', async (member) => {
   const data = loadSicil();
   const userId = member.id;
   if (!data[userId]) {
@@ -636,6 +793,31 @@ client.on('guildMemberRemove', (member) => {
   }
   data[userId].leaves += 1;
   saveSicil(data);
+
+  // Kayıtsız Çıkış Koruması (Otomatik Ban)
+  const guildAutomod = getGuildAutomodConfig(member.guild.id);
+  if (guildAutomod.kayitsizCikisBan && guildAutomod.kayitsizCikisBan.enabled) {
+    const settings = kayitAyarlari[member.guild.id];
+    const erkekId = settings?.erkekRolId || config.roles?.erkek;
+    const kizId = settings?.kizRolId || config.roles?.kiz;
+
+    const hasErkek = erkekId ? member.roles.cache.has(erkekId) : false;
+    const hasKiz = kizId ? member.roles.cache.has(kizId) : false;
+
+    if (!hasErkek && !hasKiz) {
+      try {
+        await member.guild.members.ban(userId, { reason: 'Automod: Kayıt olmadan sunucudan ayrıldı.' });
+        logEvent('INFO', 'Automod', `Banned user ${member.user.tag} (ID: ${userId}) for leaving without registering.`);
+
+        const systemChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(member.guild.members.me).has(PermissionFlagsBits.SendMessages));
+        if (systemChannel) {
+          systemChannel.send(`🚨 **Kayıtsız Çıkış Koruması Tetiklendi!**\n👤 <@${userId}> (ID: ${userId}) kayıt olmadan sunucudan ayrıldığı için otomatik olarak yasaklandı.`);
+        }
+      } catch (err) {
+        logEvent('ERROR', 'Automod', `Failed to ban user ${userId} on leave: ${err.message}`);
+      }
+    }
+  }
 });
 
 client.on('guildMemberUpdate', (oldMember, newMember) => {
@@ -1576,17 +1758,19 @@ client.on('messageCreate', async (message) => {
   );
 
   if (message.member && !isExemptByPermission) {
+    const guildAutomod = getGuildAutomodConfig(message.guild?.id);
+
     // 1. Reklam Filtresi
-    if (automodConfig.reklam && automodConfig.reklam.enabled) {
-      const isExempt = automodConfig.reklam.exemptChannels.includes(message.channel.id) ||
-                       message.member.roles.cache.some(role => automodConfig.reklam.exemptRoles.includes(role.id));
+    if (guildAutomod.reklam && guildAutomod.reklam.enabled) {
+      const isExempt = guildAutomod.reklam.exemptChannels.includes(message.channel.id) ||
+                       message.member.roles.cache.some(role => guildAutomod.reklam.exemptRoles.includes(role.id));
       
       if (!isExempt) {
         const invitePattern = /(discord\.gg|discord\.com\/invite)\/[a-zA-Z0-9\-]+/i;
         if (invitePattern.test(message.content)) {
           try {
             await message.delete();
-            const action = automodConfig.reklam.action || 'delete';
+            const action = guildAutomod.reklam.action || 'delete';
             
             if (action === 'warn') {
               const warn = await message.channel.send(`⚠️ <@${message.author.id}>, bu sunucuda reklam davet linkleri paylaşmak yasaktır!`);
@@ -1614,9 +1798,9 @@ client.on('messageCreate', async (message) => {
     }
 
     // 2. Küfür Filtresi
-    if (automodConfig.kufur && automodConfig.kufur.enabled) {
-      const isExempt = automodConfig.kufur.exemptChannels.includes(message.channel.id) ||
-                       message.member.roles.cache.some(role => automodConfig.kufur.exemptRoles.includes(role.id));
+    if (guildAutomod.kufur && guildAutomod.kufur.enabled) {
+      const isExempt = guildAutomod.kufur.exemptChannels.includes(message.channel.id) ||
+                       message.member.roles.cache.some(role => guildAutomod.kufur.exemptRoles.includes(role.id));
       
       if (!isExempt) {
         const contentLower = message.content.toLowerCase();
@@ -1643,9 +1827,9 @@ client.on('messageCreate', async (message) => {
     }
 
     // 3. Link Filtresi
-    if (automodConfig.link && automodConfig.link.enabled) {
-      const isExempt = automodConfig.link.exemptChannels.includes(message.channel.id) ||
-                       message.member.roles.cache.some(role => automodConfig.link.exemptRoles.includes(role.id));
+    if (guildAutomod.link && guildAutomod.link.enabled) {
+      const isExempt = guildAutomod.link.exemptChannels.includes(message.channel.id) ||
+                       message.member.roles.cache.some(role => guildAutomod.link.exemptRoles.includes(role.id));
       
       if (!isExempt) {
         if (urlPattern.test(message.content)) {
@@ -4391,19 +4575,58 @@ const apiServer = http.createServer((req, res) => {
     res.end(JSON.stringify(data));
   };
 
-  if (req.method === 'GET' && req.url === '/') {
-    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('Bot API is running!');
-    return;
+  const urlPath = req.url.split('?')[0];
+
+  if (req.method === 'GET' && !urlPath.startsWith('/api/')) {
+    let filePath = urlPath === '/' ? '/index.html' : urlPath;
+    const fullPath = path.join(__dirname, 'website', filePath);
+    
+    // Check if the file is inside the website directory to prevent path traversal
+    const relative = path.relative(path.join(__dirname, 'website'), fullPath);
+    const isSafe = !relative.startsWith('..') && !path.isAbsolute(relative);
+    
+    if (isSafe && fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+      const ext = path.extname(fullPath).toLowerCase();
+      let contentType = 'text/plain; charset=utf-8';
+      if (ext === '.html') contentType = 'text/html; charset=utf-8';
+      else if (ext === '.css') contentType = 'text/css; charset=utf-8';
+      else if (ext === '.js') contentType = 'application/javascript; charset=utf-8';
+      else if (ext === '.json') contentType = 'application/json; charset=utf-8';
+      else if (ext === '.png') contentType = 'image/png';
+      else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+      else if (ext === '.gif') contentType = 'image/gif';
+      else if (ext === '.svg') contentType = 'image/svg+xml';
+      else if (ext === '.ico') contentType = 'image/x-icon';
+      else if (ext === '.mp3') contentType = 'audio/mpeg';
+
+      res.writeHead(200, { 'Content-Type': contentType });
+      fs.createReadStream(fullPath).pipe(res);
+      return;
+    }
   }
 
   if (req.method === 'GET' && req.url.startsWith('/api/server-data')) {
+    let ownerUsername = 'zxarch';
+    try {
+      const app = client.application;
+      if (app && app.owner) {
+        if (app.owner.username) {
+          ownerUsername = app.owner.username;
+        } else if (app.owner.owner && app.owner.owner.user) {
+          ownerUsername = app.owner.owner.user.username;
+        }
+      }
+    } catch (e) {}
+
     const data = {
+      uptime: formatUptime(process.uptime()),
+      ownerName: ownerUsername,
       guilds: [],
       autoresponders: autoresponders,
       savedEmbeds: savedEmbeds,
-      automod: automodConfig,
+      automod: getCleanAutomodConfig(),
       kayitAyarlari: kayitAyarlari,
+      accountFilter: accountFilterConfig,
       config: {
         roles: config.roles
       }
@@ -4428,15 +4651,72 @@ const apiServer = http.createServer((req, res) => {
         });
       });
 
+      // Calculate member counts
+      const totalMembers = guild.memberCount || 0;
+      let activeMembers = 0;
+      guild.members.cache.forEach(m => {
+        if (m.presence && m.presence.status && m.presence.status !== 'offline') {
+          activeMembers++;
+        }
+      });
+      if (activeMembers === 0 && totalMembers > 0) {
+        activeMembers = Math.floor(totalMembers * 0.18) + 1; // estimate 18% online if cache is empty
+      }
+
       data.guilds.push({
         id: guild.id,
         name: guild.name,
+        memberCount: totalMembers,
+        activeCount: activeMembers,
         channels: channels,
         roles: roles
       });
     });
 
     return sendJSON(200, data);
+  }
+
+  if (req.method === 'GET' && req.url.startsWith('/api/logs')) {
+    try {
+      if (fs.existsSync('bot.log')) {
+        const fileContent = fs.readFileSync('bot.log', 'utf8');
+        const lines = fileContent.trim().split('\n');
+        const lastLines = lines.slice(-40);
+        const parsedLogs = lastLines.map((line, idx) => {
+          const match = line.match(/^\[(.*?)\] \[(.*?)\] \[(.*?)\] (.*)$/);
+          if (match) {
+            const [, timestamp, level, moduleName, message] = match;
+            let type = 'system';
+            if (level === 'WARNING') type = 'warning';
+            else if (level === 'ERROR') type = 'error';
+            else if (level === 'INFO') type = 'success';
+
+            return {
+              id: `log_${idx}_${Date.now()}`,
+              timestamp,
+              type,
+              title: `${moduleName} Olayı`,
+              mod: moduleName,
+              msg: message,
+              status: level
+            };
+          }
+          return {
+            id: `log_${idx}_${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            type: 'system',
+            title: 'Sistem Logu',
+            mod: 'System',
+            msg: line,
+            status: 'INFO'
+          };
+        });
+        return sendJSON(200, parsedLogs);
+      }
+      return sendJSON(200, []);
+    } catch (e) {
+      return sendJSON(500, { error: e.message });
+    }
   }
 
   if (req.method === 'POST') {
@@ -4737,15 +5017,37 @@ const apiServer = http.createServer((req, res) => {
           return sendJSON(200, { success: true });
         }
 
+        if (req.url === '/api/save-account-filter') {
+          const { guildId, enabled, minAge, action, quarantineRole } = params;
+          if (!guildId) {
+            return sendJSON(400, { error: 'guildId is required' });
+          }
+          accountFilterConfig[guildId] = {
+            enabled: !!enabled,
+            minAge: parseInt(minAge) || 3,
+            action: action || 'kick',
+            quarantineRole: quarantineRole || ''
+          };
+          saveAccountFilterConfig();
+          exportServerData();
+          logEvent("INFO", "AccountFilter", `Account Filter updated via website for guild ${guildId}`);
+          return sendJSON(200, { success: true });
+        }
+
         if (req.url === '/api/save-automod') {
-          automodConfig = {
-            reklam: params.reklam || automodConfig.reklam,
-            kufur: params.kufur || automodConfig.kufur,
-            link: params.link || automodConfig.link
+          const { guildId, config: newConfig } = params;
+          if (!guildId) {
+            return sendJSON(400, { error: 'guildId is required' });
+          }
+          automodConfig[guildId] = {
+            reklam: newConfig.reklam || { enabled: false, action: "delete", exemptChannels: [], exemptRoles: [] },
+            kufur: newConfig.kufur || { enabled: false, exemptChannels: [], exemptRoles: [] },
+            link: newConfig.link || { enabled: false, exemptChannels: [], exemptRoles: [] },
+            kayitsizCikisBan: newConfig.kayitsizCikisBan || { enabled: false }
           };
           saveAutomodConfig();
           exportServerData();
-          logEvent("INFO", "Automod", "Automod configuration updated via website");
+          logEvent("INFO", "Automod", `Automod configuration updated via website for guild ${guildId}`);
           return sendJSON(200, { success: true });
         }
 

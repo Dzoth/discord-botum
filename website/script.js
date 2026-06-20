@@ -336,10 +336,27 @@ document.addEventListener("DOMContentLoaded", () => {
         renderLogs();
     }
 
-    // Initialize render
-    renderLogs();
+    let usingRealLogs = false;
+    function fetchRealLogs() {
+        fetch(API_BASE + "/api/logs?t=" + Date.now())
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data) && data.length > 0) {
+                    usingRealLogs = true;
+                    activeLogs = data;
+                    renderLogs();
+                }
+            })
+            .catch(() => {
+                // Ignore and fall back to local logs
+            });
+    }
 
-    // Periodic simulation logs feeding
+    // Initial log fetch
+    fetchRealLogs();
+    setInterval(fetchRealLogs, 4000); // Fetch logs every 4 seconds
+
+    // Periodic simulation logs feeding (only if backend log API is not working)
     const mockSimulationLogs = [
         { type: "info", title: "Kayıt Gerçekleşti", mod: "Register", msg: "Yeni üye Erkek olarak kaydedildi: @Ahmet#2948", status: "Kayıt başarılı." },
         { type: "info", title: "Kayıt Gerçekleşti", mod: "Register", msg: "Yeni üye Kız olarak kaydedildi: @Ayşe#1092", status: "Kayıt başarılı." },
@@ -350,8 +367,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let simIndex = 0;
     setInterval(() => {
-        pushNewLog(mockSimulationLogs[simIndex]);
-        simIndex = (simIndex + 1) % mockSimulationLogs.length;
+        if (!usingRealLogs) {
+            pushNewLog(mockSimulationLogs[simIndex]);
+            simIndex = (simIndex + 1) % mockSimulationLogs.length;
+        }
     }, 12000); // add a simulated log every 12 seconds
 
     // ==================== AUDIT LOG (DENETİM KAYDI) SETTINGS STATE MANAGEMENT ====================
@@ -487,10 +506,54 @@ document.addEventListener("DOMContentLoaded", () => {
     // ==================== DYNAMIC CHANNELS & ROLES POPULATION (MATCHING discord guild) ====================
     // Fallback data matching the user's Discord guilds exactly (including the newly discovered "happy for allah")
     const fallbackGuildsData = {
+        uptime: "99.9%",
+        ownerName: "zxarch",
+        accountFilter: {
+            "1513978496311885874": {
+                enabled: false,
+                minAge: 3,
+                action: "kick",
+                quarantineRole: ""
+            },
+            "1513978496311885875": {
+                enabled: false,
+                minAge: 3,
+                action: "kick",
+                quarantineRole: ""
+            },
+            "1515069697492516955": {
+                enabled: false,
+                minAge: 3,
+                action: "kick",
+                quarantineRole: ""
+            }
+        },
+        automod: {
+            "1513978496311885874": {
+                reklam: { enabled: true, action: "delete", exemptChannels: [], exemptRoles: [] },
+                kufur: { enabled: true, exemptChannels: [], exemptRoles: [] },
+                link: { enabled: true, exemptChannels: [], exemptRoles: [] },
+                kayitsizCikisBan: { enabled: false }
+            },
+            "1513978496311885875": {
+                reklam: { enabled: false, action: "delete", exemptChannels: [], exemptRoles: [] },
+                kufur: { enabled: false, exemptChannels: [], exemptRoles: [] },
+                link: { enabled: false, exemptChannels: [], exemptRoles: [] },
+                kayitsizCikisBan: { enabled: false }
+            },
+            "1515069697492516955": {
+                reklam: { enabled: false, action: "delete", exemptChannels: [], exemptRoles: [] },
+                kufur: { enabled: false, exemptChannels: [], exemptRoles: [] },
+                link: { enabled: false, exemptChannels: [], exemptRoles: [] },
+                kayitsizCikisBan: { enabled: false }
+            }
+        },
         guilds: [
             {
                 id: "1513978496311885874",
                 name: "4 mart",
+                memberCount: 25482,
+                activeCount: 4120,
                 channels: [
                     { id: "1515521650311827518", name: "sohbet" },
                     { id: "1516983347459657960", name: "kayıt-chat" }
@@ -509,6 +572,8 @@ document.addEventListener("DOMContentLoaded", () => {
             {
                 id: "1513978496311885875",
                 name: "happy for allah",
+                memberCount: 1840,
+                activeCount: 352,
                 channels: [
                     { id: "2515521650311827518", name: "general" },
                     { id: "2516983347459657960", name: "bot-kontrol" }
@@ -541,6 +606,28 @@ document.addEventListener("DOMContentLoaded", () => {
             activeGuild = allGuilds[0];
             activeGuildId = activeGuild.id;
             localStorage.setItem("antigravity_active_guild_id", activeGuildId);
+        }
+
+        // 0. Update Dashboard Stats and Welcome Banner with real data
+        if (window.guildsData) {
+            const userNameSpan = document.getElementById("user-banner-name");
+            if (userNameSpan && window.guildsData.ownerName) {
+                userNameSpan.textContent = window.guildsData.ownerName;
+            }
+            const botUptimeSpan = document.getElementById("stat-bot-uptime");
+            if (botUptimeSpan && window.guildsData.uptime) {
+                botUptimeSpan.textContent = window.guildsData.uptime;
+            }
+        }
+
+        const totalMembersSpan = document.getElementById("stat-total-members");
+        if (totalMembersSpan && activeGuild.memberCount !== undefined) {
+            totalMembersSpan.textContent = activeGuild.memberCount.toLocaleString('tr-TR');
+        }
+
+        const activeMembersSpan = document.getElementById("stat-active-members");
+        if (activeMembersSpan && activeGuild.activeCount !== undefined) {
+            activeMembersSpan.textContent = activeGuild.activeCount.toLocaleString('tr-TR');
         }
 
         // 1. Update Breadcrumbs Display
@@ -635,7 +722,8 @@ document.addEventListener("DOMContentLoaded", () => {
         // 3.5. Load Automod Config into UI
         if (typeof loadAutomodConfigIntoUI === "function") {
             if (window.guildsData && window.guildsData.automod) {
-                loadAutomodConfigIntoUI(window.guildsData.automod);
+                const guildAutomod = window.guildsData.automod[activeGuildId] || fallbackAutomodConfig;
+                loadAutomodConfigIntoUI(guildAutomod);
             } else {
                 loadAutomodConfigIntoUI(fallbackAutomodConfig);
             }
@@ -647,6 +735,36 @@ document.addEventListener("DOMContentLoaded", () => {
             const femaleInput = document.getElementById("setting-female-role");
             if (maleInput) maleInput.value = window.guildsData.config.roles.erkek || "";
             if (femaleInput) femaleInput.value = window.guildsData.config.roles.kiz || "";
+        }
+
+        // 3.7. Load Account Filter Config into UI per server
+        const accFilterEnable = document.getElementById("acc-filter-enable");
+        const accMinAge = document.getElementById("acc-min-age");
+        const accAction = document.getElementById("acc-action");
+        const accQuarantineRole = document.getElementById("acc-quarantine-role");
+        
+        if (accFilterEnable && accMinAge && accAction && accQuarantineRole) {
+            const filterConfig = (window.guildsData && window.guildsData.accountFilter && window.guildsData.accountFilter[activeGuildId]) || {
+                enabled: false,
+                minAge: 3,
+                action: "kick",
+                quarantineRole: ""
+            };
+            
+            accFilterEnable.checked = filterConfig.enabled;
+            accMinAge.value = filterConfig.minAge;
+            accAction.value = filterConfig.action;
+            accQuarantineRole.value = filterConfig.quarantineRole || "";
+            
+            // Show/hide quarantine role dropdown based on action
+            const quarantineGroup = document.getElementById("acc-quarantine-role-group");
+            if (quarantineGroup) {
+                if (accAction.value === "role") {
+                    quarantineGroup.style.display = "block";
+                } else {
+                    quarantineGroup.style.display = "none";
+                }
+            }
         }
 
         // 4. Update the "Sunucularım" view list to match active state
@@ -763,12 +881,15 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    let isOfflineFallbackActive = false;
+
     function loadServerData() {
         // Try fetching server-data directly from live API first
         fetch(API_BASE + "/api/server-data?t=" + Date.now())
             .then(res => res.json())
             .then(data => {
                 if (data && data.guilds && data.guilds.length > 0) {
+                    isOfflineFallbackActive = false; // Reset fallback since we connected successfully
                     window.guildsData = data;
                     allGuilds = data.guilds;
                     updateDashboardGuilds();
@@ -782,6 +903,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function loadServerDataFallback() {
+        if (isOfflineFallbackActive) {
+            // Already in offline fallback mode, no need to reload static files and overwrite memory
+            return;
+        }
+        isOfflineFallbackActive = true;
+
         const scriptId = "dynamic-server-data-script";
         let script = document.getElementById(scriptId);
         if (script) {
@@ -799,6 +926,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 updateDashboardGuilds();
             } else {
                 console.warn("server_data.js loaded, but window.guildsData is invalid. Using fallback data.");
+                window.guildsData = fallbackGuildsData;
                 allGuilds = fallbackGuildsData.guilds;
                 updateDashboardGuilds();
             }
@@ -810,15 +938,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 .then(res => res.json())
                 .then(data => {
                     if (data && data.guilds && data.guilds.length > 0) {
+                        window.guildsData = data;
                         allGuilds = data.guilds;
                         updateDashboardGuilds();
                     } else {
+                        window.guildsData = fallbackGuildsData;
                         allGuilds = fallbackGuildsData.guilds;
                         updateDashboardGuilds();
                     }
                 })
                 .catch(() => {
                     console.warn("Could not fetch server_data.js or server_data.json. Using fallback guilds data.");
+                    window.guildsData = fallbackGuildsData;
                     allGuilds = fallbackGuildsData.guilds;
                     updateDashboardGuilds();
                 });
@@ -1176,7 +1307,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const fallbackAutomodConfig = {
         reklam: { enabled: false, action: "delete", exemptChannels: [], exemptRoles: [] },
         kufur: { enabled: false, exemptChannels: [], exemptRoles: [] },
-        link: { enabled: false, exemptChannels: [], exemptRoles: [] }
+        link: { enabled: false, exemptChannels: [], exemptRoles: [] },
+        kayitsizCikisBan: { enabled: false }
     };
     window.automodConfig = { ...fallbackAutomodConfig };
 
@@ -1185,19 +1317,22 @@ document.addEventListener("DOMContentLoaded", () => {
         window.automodConfig = {
             reklam: config.reklam || { enabled: false, action: "delete", exemptChannels: [], exemptRoles: [] },
             kufur: config.kufur || { enabled: false, exemptChannels: [], exemptRoles: [] },
-            link: config.link || { enabled: false, exemptChannels: [], exemptRoles: [] }
+            link: config.link || { enabled: false, exemptChannels: [], exemptRoles: [] },
+            kayitsizCikisBan: config.kayitsizCikisBan || { enabled: false }
         };
 
-        ["reklam", "kufur", "link"].forEach(filterType => {
+        ["reklam", "kufur", "link", "kayitsizCikisBan"].forEach(filterType => {
             const toggle = document.getElementById(`automod-${filterType}-toggle`);
             const body = document.getElementById(`body-automod-${filterType}`);
             
             if (toggle) {
                 toggle.checked = window.automodConfig[filterType].enabled;
-                if (toggle.checked) {
-                    body.classList.remove("collapsed");
-                } else {
-                    body.classList.add("collapsed");
+                if (body) {
+                    if (toggle.checked) {
+                        body.classList.remove("collapsed");
+                    } else {
+                        body.classList.add("collapsed");
+                    }
                 }
             }
 
@@ -1206,8 +1341,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (actionSelect) actionSelect.value = window.automodConfig.reklam.action || "delete";
             }
 
-            renderAutomodExemptBadges(filterType, "channels", window.automodConfig[filterType].exemptChannels);
-            renderAutomodExemptBadges(filterType, "roles", window.automodConfig[filterType].exemptRoles);
+            if (filterType !== "kayitsizCikisBan") {
+                renderAutomodExemptBadges(filterType, "channels", window.automodConfig[filterType].exemptChannels);
+                renderAutomodExemptBadges(filterType, "roles", window.automodConfig[filterType].exemptRoles);
+            }
         });
     };
 
@@ -1257,41 +1394,52 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function saveAutomodConfigToBackend() {
+        const payload = {
+            guildId: activeGuildId,
+            config: window.automodConfig
+        };
         fetch(API_BASE + "/api/save-automod", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(window.automodConfig)
+            body: JSON.stringify(payload)
         })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
                 if (window.guildsData) {
-                    window.guildsData.automod = { ...window.automodConfig };
+                    if (!window.guildsData.automod) window.guildsData.automod = {};
+                    window.guildsData.automod[activeGuildId] = JSON.parse(JSON.stringify(window.automodConfig));
                 }
             }
         })
         .catch(() => {
             console.log("Automod config saved (Simülasyon)", window.automodConfig);
+            if (window.guildsData) {
+                if (!window.guildsData.automod) window.guildsData.automod = {};
+                window.guildsData.automod[activeGuildId] = JSON.parse(JSON.stringify(window.automodConfig));
+            }
         });
     }
 
-    ["reklam", "kufur", "link"].forEach(filterType => {
+    ["reklam", "kufur", "link", "kayitsizCikisBan"].forEach(filterType => {
         const toggle = document.getElementById(`automod-${filterType}-toggle`);
         const body = document.getElementById(`body-automod-${filterType}`);
         
         if (toggle) {
             toggle.addEventListener("change", () => {
                 window.automodConfig[filterType].enabled = toggle.checked;
-                if (toggle.checked) {
-                    body.classList.remove("collapsed");
-                } else {
-                    body.classList.add("collapsed");
+                if (body) {
+                    if (toggle.checked) {
+                        body.classList.remove("collapsed");
+                    } else {
+                        body.classList.add("collapsed");
+                    }
                 }
                 saveAutomodConfigToBackend();
                 
-                const label = filterType === "reklam" ? "Reklam" : (filterType === "kufur" ? "Küfür" : "Link");
+                const label = filterType === "reklam" ? "Reklam" : (filterType === "kufur" ? "Küfür" : (filterType === "link" ? "Link" : "Kayıtsız Çıkış Koruması"));
                 const status = toggle.checked ? "Aktif Edildi" : "Devre Dışı";
-                showToast(`${label} engeli ${status.toLowerCase()}!`, toggle.checked ? "success" : "error");
+                showToast(`${label} ${toggle.checked ? "aktif edildi!" : "devre dışı bırakıldı!"}`, toggle.checked ? "success" : "error");
                 
                 pushNewLog({
                     type: toggle.checked ? "success" : "warning",
@@ -1465,21 +1613,116 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // 9. Hesap Filtresi Form
+    // 9. Hesap Filtresi Form ve Otomatik Kaydetme
     const accountFilterForm = document.getElementById("account-filter-form");
+    const accFilterEnable = document.getElementById("acc-filter-enable");
+    const accMinAge = document.getElementById("acc-min-age");
+    const accAction = document.getElementById("acc-action");
+    const accQuarantineRole = document.getElementById("acc-quarantine-role");
+
+    function saveAccountFilterConfigToBackend() {
+        if (!accFilterEnable || !accMinAge || !accAction || !accQuarantineRole) return;
+        
+        const enabled = accFilterEnable.checked;
+        const minAge = accMinAge.value;
+        const action = accAction.value;
+        const quarantineRole = accQuarantineRole.value;
+        
+        fetch(API_BASE + "/api/save-account-filter", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                guildId: activeGuildId,
+                enabled,
+                minAge,
+                action,
+                quarantineRole
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                if (!window.guildsData.accountFilter) {
+                    window.guildsData.accountFilter = {};
+                }
+                window.guildsData.accountFilter[activeGuildId] = {
+                    enabled,
+                    minAge: parseInt(minAge),
+                    action,
+                    quarantineRole
+                };
+            }
+        })
+        .catch(() => {
+            console.log("Account filter saved (Simülasyon)");
+            if (!window.guildsData.accountFilter) {
+                window.guildsData.accountFilter = {};
+            }
+            window.guildsData.accountFilter[activeGuildId] = {
+                enabled,
+                minAge: parseInt(minAge),
+                action,
+                quarantineRole
+            };
+        });
+    }
+
+    if (accAction) {
+        accAction.addEventListener("change", () => {
+            const quarantineGroup = document.getElementById("acc-quarantine-role-group");
+            if (quarantineGroup) {
+                if (accAction.value === "role") {
+                    quarantineGroup.style.display = "block";
+                } else {
+                    quarantineGroup.style.display = "none";
+                }
+            }
+            saveAccountFilterConfigToBackend();
+        });
+    }
+
+    if (accFilterEnable) {
+        accFilterEnable.addEventListener("change", () => {
+            saveAccountFilterConfigToBackend();
+            const status = accFilterEnable.checked ? "aktif edildi" : "devre dışı bırakıldı";
+            showToast(`Hesap filtresi ${status}!`, accFilterEnable.checked ? "success" : "error");
+            pushNewLog({
+                type: accFilterEnable.checked ? "success" : "warning",
+                title: "Hesap Filtresi Güncellemesi",
+                mod: "AccountFilter",
+                msg: `Yeni hesap filtresi kurucu tarafından ${status}.`,
+                status: `Filtre ${accFilterEnable.checked ? "Aktif" : "Kapalı"}`
+            });
+        });
+    }
+
+    if (accMinAge) {
+        accMinAge.addEventListener("change", () => {
+            saveAccountFilterConfigToBackend();
+            const minAgeText = accMinAge.options[accMinAge.selectedIndex].text;
+            showToast(`Minimum hesap yaşı ${minAgeText} olarak güncellendi.`, "success");
+            pushNewLog({
+                type: "success",
+                title: "Hesap Yaşı Güncellendi",
+                mod: "AccountFilter",
+                msg: `Minimum hesap yaşı limiti ${minAgeText} olarak güncellendi.`,
+                status: "Güncellendi"
+            });
+        });
+    }
+
+    if (accQuarantineRole) {
+        accQuarantineRole.addEventListener("change", () => {
+            saveAccountFilterConfigToBackend();
+            showToast("Karantina rolü başarıyla güncellendi.", "success");
+        });
+    }
+
     if (accountFilterForm) {
         accountFilterForm.addEventListener("submit", (e) => {
             e.preventDefault();
-            const minAgeSelect = document.getElementById("acc-min-age");
-            const minAge = minAgeSelect.options[minAgeSelect.selectedIndex]?.text || "Bilinmeyen";
-            showToast(`Hesap filtresi (${minAge}) kaydedildi!`, "success");
-            pushNewLog({
-                type: "success",
-                title: "Hesap Filtresi Kaydedildi",
-                mod: "AccountFilter",
-                msg: `Hesap yaşı filtresi '${minAge}' olarak güncellendi.`,
-                status: "Güncellendi"
-            });
+            saveAccountFilterConfigToBackend();
+            showToast("Hesap filtresi ayarları başarıyla kaydedildi!", "success");
         });
     }
 
