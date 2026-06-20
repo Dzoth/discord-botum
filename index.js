@@ -2301,11 +2301,15 @@ client.on('messageCreate', async (message) => {
       } catch (_) {}
     };
 
+    // Override message.delete
+    message.delete = async () => {
+      return message;
+    };
+
     // Developer bypass if member is missing
     const isDev = isBotDeveloper(message.author.id);
     if (isDev && targetGuild && !message.member) {
-      message.member = {
-        permissions: { has: () => true },
+      const mockMember = {
         roles: { cache: new Map() },
         id: message.author.id,
         user: message.author,
@@ -2314,6 +2318,12 @@ client.on('messageCreate', async (message) => {
         kick: async () => {},
         ban: async () => {},
       };
+      Object.defineProperty(mockMember, 'permissions', {
+        value: { has: () => true },
+        writable: true,
+        configurable: true
+      });
+      message.member = mockMember;
     }
   }
 
