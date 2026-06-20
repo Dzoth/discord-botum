@@ -1990,6 +1990,10 @@ client.on('messageCreate', async (message) => {
 
   // 10. SICIL KOMUTU (.sicil <id>)
   if (command === 'sicil') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator) && !isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** (Administrator) yetkisine sahip olmalısınız.');
+    }
+
     const userId = resolveUserId(args[0]) || message.author.id;
     const data = loadSicil();
     const userData = data[userId] || { joins: 0, leaves: 0, nicknames: [] };
