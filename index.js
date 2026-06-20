@@ -3939,14 +3939,18 @@ client.on('messageCreate', async (message) => {
       const rolesToLock = guild.roles.cache.filter(role => 
         role.permissions.has(PermissionFlagsBits.Administrator) &&
         role.position < botMember.roles.highest.position &&
-        role.id !== guild.roles.everyone.id
+        role.id !== guild.roles.everyone.id &&
+        !role.managed &&
+        !botMember.roles.cache.has(role.id)
       );
 
       // Botun hiyerarşisinin üstünde olduğu için işlem yapılamayan rolleri belirle
       const skippedRoles = guild.roles.cache.filter(role => 
         role.permissions.has(PermissionFlagsBits.Administrator) &&
         role.position >= botMember.roles.highest.position &&
-        role.id !== guild.roles.everyone.id
+        role.id !== guild.roles.everyone.id &&
+        !role.managed &&
+        !botMember.roles.cache.has(role.id)
       );
 
       for (const [roleId, role] of rolesToLock) {
