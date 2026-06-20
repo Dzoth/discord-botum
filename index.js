@@ -2339,6 +2339,7 @@ client.on('messageCreate', async (message) => {
 
   // Saved Embeds trigger check
   const matchingEmbed = savedEmbeds.find(emb => 
+    message.guild && 
     emb.guildId === message.guild.id && 
     emb.title && 
     emb.title.toLowerCase().trim() === msgLower
