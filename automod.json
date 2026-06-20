@@ -14,5 +14,8 @@
     "enabled": true,
     "exemptChannels": [],
     "exemptRoles": []
+  },
+  "kayitsizCikisBan": {
+    "enabled": false
   }
 }

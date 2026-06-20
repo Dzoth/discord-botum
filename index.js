@@ -677,6 +677,7 @@ function exportServerData() {
   }
 }
 
+const dmActiveGuild = new Map();
 const activeGames = new Map();
 let HANGMAN_WORDS = [
   "yazılım", "sunucu", "kodlama", "discord", "bilgisayar", "teknoloji", "internet", "klavye", "telefon",
@@ -2214,83 +2215,120 @@ client.on('messageCreate', async (message) => {
   console.log(`[Mesaj Alindi] Gonderen: ${message.author.tag} | Icerik: '${message.content}'`);
   if (message.author.bot) return;
 
-  // Handle DM messages for developer
+  // Handle DM messages for developer and normal users
   if (message.guild === null) {
-    if (isBotDeveloper(message.author.id)) {
-      if (message.content.startsWith(config.prefix)) {
-        const args = message.content.slice(config.prefix.length).trim().split(/ +/);
-        const command = args.shift().toLowerCase();
+    if (!message.content.startsWith(config.prefix)) return;
 
-        if (command === 'yaz') {
-          const channelId = args[0];
-          const msgContent = args.slice(1).join(' ');
+    const dmArgs = message.content.slice(config.prefix.length).trim().split(/ +/);
+    const dmCmd = dmArgs[0]?.toLowerCase();
 
-          if (!channelId || !msgContent) {
-            return message.author.send('⚠️ Kullanım: `.yaz <kanal_id> <mesaj>`').catch(() => null);
+    // .sunucu <id> — active guild selection
+    if (dmCmd === 'sunucu') {
+      const guildId = dmArgs[1];
+      
+      // Get all guilds where the bot is, and check if user is a member of them
+      const userGuilds = [];
+      for (const [id, g] of client.guilds.cache) {
+        try {
+          const isDev = isBotDeveloper(message.author.id);
+          const member = isDev ? true : (g.members.cache.get(message.author.id) || await g.members.fetch(message.author.id).catch(() => null));
+          if (member) {
+            userGuilds.push(g);
           }
-
-          const cleanedChannelId = channelId.replace(/[^0-9]/g, '');
-          let msgToSend = msgContent;
-          if (msgToSend.startsWith('<') && msgToSend.endsWith('>')) {
-            msgToSend = msgToSend.slice(1, -1);
-          }
-
-          if (!cleanedChannelId) {
-            return message.author.send('❌ Geçersiz kanal ID.').catch(() => null);
-          }
-
-          try {
-            const channel = client.channels.cache.get(cleanedChannelId) || await client.channels.fetch(cleanedChannelId).catch(() => null);
-            if (!channel) {
-              return message.author.send('❌ Belirtilen kanal bulunamadı veya bot bu kanala erişemiyor.').catch(() => null);
-            }
-
-            if (!channel.isTextBased()) {
-              return message.author.send('❌ Belirtilen kanal bir yazı kanalı değil.').catch(() => null);
-            }
-
-            await channel.send({
-              content: msgToSend,
-              allowedMentions: { parse: ['everyone', 'users', 'roles'] }
-            });
-
-            return message.author.send(`✅ Mesaj başarıyla <#${cleanedChannelId}> kanalına gönderildi.`).catch(() => null);
-          } catch (error) {
-            console.error(error);
-            return message.author.send('❌ Mesaj gönderilirken bir hata oluştu.').catch(() => null);
-          }
-        }
-
-        if (command === 'özel' || command === 'ozel') {
-          const embed = new EmbedBuilder()
-            .setTitle('🛠️ Bot Geliştirici Özel Komutları')
-            .setColor('#7289da')
-            .setDescription('Sadece bot geliştiricilerine özel kullanılabilen komutlar:')
-            .addFields(
-              { name: '`.yaz <kanal_id> <mesaj>`', value: 'Belirtilen kanala botun adıyla mesaj gönderir (DM veya sunucuda kullanılabilir).' },
-              { name: '`.rolver <kullanıcı> <rol> [sunucu_id]`', value: 'Kullanıcıya rol verir. Sunucu ID girilirse sunucu dışından da verilebilir.' },
-              { name: '`.rolal <kullanıcı> <rol> [sunucu_id]`', value: 'Kullanıcıdan rol geri alır. Sunucu ID girilirse sunucu dışından da yapılabilir.' },
-              { name: '`.ban <kullanıcı> [sunucu_id]`', value: 'Kullanıcıyı yasaklar. Sunucu ID girilirse o sunucudan yasaklar.' },
-              { name: '`.unban <kullanıcı_id> [sunucu_id]`', value: 'Kullanıcının yasağını kaldırır. Sunucu ID girilirse o sunucudan kaldırır.' },
-              { name: '`.mute <kullanıcı> <süre> [sunucu_id]`', value: 'Kullanıcıyı susturur. Sunucu ID girilirse o sunucuda susturur.' },
-              { name: '`.unmute <kullanıcı> [sunucu_id]`', value: 'Kullanıcının susturmasını kaldırır. Sunucu ID girilirse o sunucuda kaldırır.' },
-              { name: '`.üst <taşınacak_rol_id> [sunucu_id]`', value: 'Rolü taşımak için butonlar ve hedef rol seçimi içeren bir arayüz açar. Sunucu ID girilirse o sunucuda yapar.' },
-              { name: '`.koru`', value: 'Acil durum korumasını açar (tüm kanalları kilitler).' },
-              { name: '`.korumayıkapat` / `.koruac`', value: 'Acil durum korumasını kapatır (kanal kilitlerini kaldırır).' },
-              { name: '`.guvenlik [sunucu_id]`', value: 'Sunucu yönetici rollerinin yetkilerini karantinaya alır.' },
-              { name: '`.guvenlikkapat / .guvenlikac [sunucu_id]`', value: 'Güvenlik nedeniyle kapatılan Yönetici yetkilerini geri yükler.' },
-              { name: '`.adminver <rol_id> [sunucu_id]`', value: 'Belirtilen role manuel olarak Yönetici yetkisi verir.' },
-              { name: '`.roller [sunucu_id]`', value: 'Belirtilen sunucunun tüm rollerini ve yetkilerini listeler.' },
-              { name: '`.oluştur [sunucu_id]`', value: 'Belirtilen sunucuda yeni rol oluşturmak için bir form (modal) açar.' },
-              { name: '`.del [sunucu_id]`', value: 'Belirtilen sunucudan rol, kanal veya kategori silmek için bir form (modal) açar.' },
-              { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
-            );
-
-          return message.author.send({ embeds: [embed] }).catch(() => null);
-        }
+        } catch (_) {}
       }
+
+      if (!guildId) {
+        const guildList = userGuilds.map(g => `• **${g.name}** — \`${g.id}\``).join('\n');
+        return message.author.send(`🌐 **Bot'un Bulunduğu Ortak Sunucularınız:**\n${guildList || 'Hiçbir ortak sunucu bulunamadı.'}\n\n📌 Aktif sunucu seçmek için: \`.sunucu <sunucu_id>\``).catch(() => null);
+      }
+
+      const targetGuild = client.guilds.cache.get(guildId);
+      if (!targetGuild) {
+        return message.author.send(`❌ \`${guildId}\` ID'li sunucu bulunamadı veya bot bu sunucuda değil.`).catch(() => null);
+      }
+
+      const isDev = isBotDeveloper(message.author.id);
+      const isMember = isDev ? true : (targetGuild.members.cache.get(message.author.id) || await targetGuild.members.fetch(message.author.id).catch(() => null));
+      if (!isMember) {
+        return message.author.send(`❌ Bu sunucuda (\`${targetGuild.name}\`) üye değilsiniz!`).catch(() => null);
+      }
+
+      dmActiveGuild.set(message.author.id, guildId);
+      return message.author.send(`✅ Aktif sunucu **${targetGuild.name}** olarak ayarlandı. Artık tüm komutlar bu sunucuda çalışır.\n\nSunucu listesi için: \`.sunucu\``).catch(() => null);
     }
-    return;
+
+    // Check active guild selection
+    const activeGuildId = dmActiveGuild.get(message.author.id);
+    if (!activeGuildId) {
+      const userGuilds = [];
+      for (const [id, g] of client.guilds.cache) {
+        try {
+          const isDev = isBotDeveloper(message.author.id);
+          const member = isDev ? true : (g.members.cache.get(message.author.id) || await g.members.fetch(message.author.id).catch(() => null));
+          if (member) {
+            userGuilds.push(g);
+          }
+        } catch (_) {}
+      }
+      const guildList = userGuilds.map(g => `• **${g.name}** — \`${g.id}\``).join('\n');
+      return message.author.send(`⚙️ **DM Komut Modu**\nKomut çalıştırmak için önce aktif bir sunucu seçmelisin:\n\`\`\`.sunucu <sunucu_id>\`\`\`\n\n🌐 **Bulunduğunuz Sunucular:**\n${guildList || 'Hiçbir ortak sunucu bulunamadı.'}`).catch(() => null);
+    }
+
+    const dmGuild = client.guilds.cache.get(activeGuildId);
+    if (!dmGuild) {
+      dmActiveGuild.delete(message.author.id);
+      return message.author.send(`❌ Seçili sunucu artık erişilemez. \`.sunucu <id>\` ile yeniden seçin.`).catch(() => null);
+    }
+
+    // Fetch member
+    let dmMember = null;
+    try {
+      dmMember = dmGuild.members.cache.get(message.author.id)
+        || await dmGuild.members.fetch(message.author.id).catch(() => null);
+    } catch (_) {}
+
+    const isDev = isBotDeveloper(message.author.id);
+    if (!dmMember && !isDev) {
+      return message.author.send(`❌ Seçili sunucuda (\`${dmGuild.name}\`) artık üye değilsiniz! Başka bir sunucu seçin: \`.sunucu\``).catch(() => null);
+    }
+
+    // Enrich message for DM command execution
+    message.isDM = true;
+    message.guild = dmGuild;
+    message.member = dmMember;
+    
+    // Override message.channel
+    message.channel = Object.assign(Object.create(Object.getPrototypeOf(message.channel)), message.channel, {
+      name: 'DM',
+      id: message.channel.id,
+      send: async (content) => {
+        try {
+          return await message.author.send(content);
+        } catch (_) {}
+      }
+    });
+
+    // Override message.reply
+    message.reply = async (content) => {
+      try {
+        return await message.author.send(content);
+      } catch (_) {}
+    };
+
+    // Developer bypass if member is missing
+    if (isDev && !message.member) {
+      message.member = {
+        permissions: { has: () => true },
+        roles: { cache: new Map() },
+        id: message.author.id,
+        user: message.author,
+        guild: dmGuild,
+        timeout: async () => {},
+        kick: async () => {},
+        ban: async () => {},
+      };
+    }
   }
 
   updateAktiviteStreak(message.author.id);
@@ -2344,7 +2382,7 @@ client.on('messageCreate', async (message) => {
     message.member.permissions.has(PermissionFlagsBits.ManageMessages)
   );
 
-  if (message.member && !isExemptByPermission) {
+  if (message.member && !isExemptByPermission && !message.isDM) {
     const guildAutomod = getGuildAutomodConfig(message.guild?.id);
 
     // 1. Reklam Filtresi
