@@ -677,7 +677,6 @@ function exportServerData() {
   }
 }
 
-const dmActiveGuild = new Map();
 const activeGames = new Map();
 let HANGMAN_WORDS = [
   "yazılım", "sunucu", "kodlama", "discord", "bilgisayar", "teknoloji", "internet", "klavye", "telefon",
@@ -2224,7 +2223,6 @@ client.on('messageCreate', async (message) => {
     const dmCmd = dmArgs[0]?.toLowerCase();
 
     const whitelist = [
-      'sunucu',
       'yaz',
       'özel', 'ozel',
       'rolver',
@@ -2249,80 +2247,35 @@ client.on('messageCreate', async (message) => {
       return message.author.send('❌ Bu komut DM üzerinden kullanılamaz. Sadece geliştirici özel komutları kullanılabilir.').catch(() => null);
     }
 
-    // .sunucu <id> — active guild selection
-    if (dmCmd === 'sunucu') {
-      const guildId = dmArgs[1];
-      
-      // Get all guilds where the bot is, and check if user is a member of them
-      const userGuilds = [];
-      for (const [id, g] of client.guilds.cache) {
-        try {
-          const isDev = isBotDeveloper(message.author.id);
-          const member = isDev ? true : (g.members.cache.get(message.author.id) || await g.members.fetch(message.author.id).catch(() => null));
-          if (member) {
-            userGuilds.push(g);
-          }
-        } catch (_) {}
+    // Resolve the target guild from command arguments (scan for any 17-20 digit number in client.guilds.cache)
+    let targetGuild = null;
+    for (const arg of dmArgs.slice(1)) {
+      const cleaned = arg.replace(/[^0-9]/g, '');
+      if (cleaned && client.guilds.cache.has(cleaned)) {
+        targetGuild = client.guilds.cache.get(cleaned);
+        break;
       }
-
-      if (!guildId) {
-        const guildList = userGuilds.map(g => `• **${g.name}** — \`${g.id}\``).join('\n');
-        return message.author.send(`🌐 **Bot'un Bulunduğu Ortak Sunucularınız:**\n${guildList || 'Hiçbir ortak sunucu bulunamadı.'}\n\n📌 Aktif sunucu seçmek için: \`.sunucu <sunucu_id>\``).catch(() => null);
-      }
-
-      const targetGuild = client.guilds.cache.get(guildId);
-      if (!targetGuild) {
-        return message.author.send(`❌ \`${guildId}\` ID'li sunucu bulunamadı veya bot bu sunucuda değil.`).catch(() => null);
-      }
-
-      const isDev = isBotDeveloper(message.author.id);
-      const isMember = isDev ? true : (targetGuild.members.cache.get(message.author.id) || await targetGuild.members.fetch(message.author.id).catch(() => null));
-      if (!isMember) {
-        return message.author.send(`❌ Bu sunucuda (\`${targetGuild.name}\`) üye değilsiniz!`).catch(() => null);
-      }
-
-      dmActiveGuild.set(message.author.id, guildId);
-      return message.author.send(`✅ Aktif sunucu **${targetGuild.name}** olarak ayarlandı. Artık tüm komutlar bu sunucuda çalışır.\n\nSunucu listesi için: \`.sunucu\``).catch(() => null);
     }
 
-    // Check active guild selection
-    const activeGuildId = dmActiveGuild.get(message.author.id);
-    if (!activeGuildId) {
-      const userGuilds = [];
-      for (const [id, g] of client.guilds.cache) {
-        try {
-          const isDev = isBotDeveloper(message.author.id);
-          const member = isDev ? true : (g.members.cache.get(message.author.id) || await g.members.fetch(message.author.id).catch(() => null));
-          if (member) {
-            userGuilds.push(g);
-          }
-        } catch (_) {}
-      }
-      const guildList = userGuilds.map(g => `• **${g.name}** — \`${g.id}\``).join('\n');
-      return message.author.send(`⚙️ **DM Komut Modu**\nKomut çalıştırmak için önce aktif bir sunucu seçmelisin:\n\`\`\`.sunucu <sunucu_id>\`\`\`\n\n🌐 **Bulunduğunuz Sunucular:**\n${guildList || 'Hiçbir ortak sunucu bulunamadı.'}`).catch(() => null);
+    if (!targetGuild) {
+      return message.author.send(`❌ DM üzerinden **.${dmCmd}** komutunu kullanabilmek için lütfen geçerli bir sunucu ID'si belirtin. Örnek: \`.roller <sunucu_id>\``).catch(() => null);
     }
 
-    const dmGuild = client.guilds.cache.get(activeGuildId);
-    if (!dmGuild) {
-      dmActiveGuild.delete(message.author.id);
-      return message.author.send(`❌ Seçili sunucu artık erişilemez. \`.sunucu <id>\` ile yeniden seçin.`).catch(() => null);
-    }
-
-    // Fetch member
+    // Fetch member in targetGuild
     let dmMember = null;
     try {
-      dmMember = dmGuild.members.cache.get(message.author.id)
-        || await dmGuild.members.fetch(message.author.id).catch(() => null);
+      dmMember = targetGuild.members.cache.get(message.author.id)
+        || await targetGuild.members.fetch(message.author.id).catch(() => null);
     } catch (_) {}
 
     const isDev = isBotDeveloper(message.author.id);
     if (!dmMember && !isDev) {
-      return message.author.send(`❌ Seçili sunucuda (\`${dmGuild.name}\`) artık üye değilsiniz! Başka bir sunucu seçin: \`.sunucu\``).catch(() => null);
+      return message.author.send(`❌ Belirtilen sunucuda (\`${targetGuild.name}\`) üye değilsiniz!`).catch(() => null);
     }
 
     // Enrich message for DM command execution
     message.isDM = true;
-    message.guild = dmGuild;
+    message.guild = targetGuild;
     message.member = dmMember;
     
     // Override message.channel
@@ -2350,7 +2303,7 @@ client.on('messageCreate', async (message) => {
         roles: { cache: new Map() },
         id: message.author.id,
         user: message.author,
-        guild: dmGuild,
+        guild: targetGuild,
         timeout: async () => {},
         kick: async () => {},
         ban: async () => {},
