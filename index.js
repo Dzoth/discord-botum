@@ -3238,12 +3238,12 @@ client.on('messageCreate', async (message) => {
     });
   }
 
-  // ==================== OWO SYSTEM GAMES ====================
+  // ==================== OWO SYSTEM COIN GAMES ====================
   
-  // 17. OWO BAKİYE SORGULAMA (.cash / .coin / .para)
+  // 17. COIN BAKİYE SORGULAMA (.cash / .coin / .para)
   if (command === 'cash' || command === 'coin' || command === 'para') {
     const balance = getBalance(message.author.id);
-    return message.reply(`💰 **Bakiyeniz:** \`${balance.toLocaleString()}\` owo`);
+    return message.reply(`💰 **Bakiyeniz:** \`${balance.toLocaleString()}\` coin`);
   }
 
   // 18. GÜNLÜK ÖDÜL KOMUTU (.daily / .günlük / .gunluk)
@@ -3261,7 +3261,7 @@ client.on('messageCreate', async (message) => {
     const reward = 2500;
     user.balance += reward;
     saveCoinData();
-    return message.reply(`🎁 Günlük ödülünüz olan **${reward} owo** başarıyla alındı! Yeni bakiyeniz: **${user.balance.toLocaleString()}** owo.`);
+    return message.reply(`🎁 Günlük ödülünüz olan **${reward} coin** başarıyla alındı! Yeni bakiyeniz: **${user.balance.toLocaleString()}** coin.`);
   }
 
   // 19. COINFLIP / YAZI TURA KOMUTU (.cf <miktar>)
@@ -3279,18 +3279,18 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen geçerli bir bahis miktarı belirtin. Örnek: `.cf 100`, `.cf all`, `.cf half`');
     }
     if (balance < bet) {
-      return message.reply(`❌ Yetersiz bakiye! Mevcut bakiyen: **${balance.toLocaleString()}** owo.`);
+      return message.reply(`❌ Yetersiz bakiye! Mevcut bakiyen: **${balance.toLocaleString()}** coin.`);
     }
 
     const win = Math.random() < 0.5;
     if (win) {
       addCoins(message.author.id, bet);
       const newBal = getBalance(message.author.id);
-      return message.reply(`🪙 **Yazı Tura** | <@${message.author.id}>\n\n**Kazandın!** Tebrikler, **${bet.toLocaleString()} owo** kazandın!\n💰 Yeni Bakiyen: **${newBal.toLocaleString()}** owo.`);
+      return message.reply(`🪙 **Yazı Tura** | <@${message.author.id}>\n\n**Kazandın!** Tebrikler, **${bet.toLocaleString()} coin** kazandın!\n💰 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
     } else {
       addCoins(message.author.id, -bet);
       const newBal = getBalance(message.author.id);
-      return message.reply(`🪙 **Yazı Tura** | <@${message.author.id}>\n\n**Kaybettin!** Maalesef **${bet.toLocaleString()} owo** kaybettin.\n💰 Yeni Bakiyen: **${newBal.toLocaleString()}** owo.`);
+      return message.reply(`🪙 **Yazı Tura** | <@${message.author.id}>\n\n**Kaybettin!** Maalesef **${bet.toLocaleString()} coin** kaybettin.\n💰 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
     }
   }
 
@@ -3309,7 +3309,7 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen geçerli bir bahis miktarı belirtin. Örnek: `.ws 100`, `.ws all`, `.ws half`');
     }
     if (balance < bet) {
-      return message.reply(`❌ Yetersiz bakiye! Mevcut bakiyen: **${balance.toLocaleString()}** owo.`);
+      return message.reply(`❌ Yetersiz bakiye! Mevcut bakiyen: **${balance.toLocaleString()}** coin.`);
     }
 
     const emojis = ['🍒', '🍋', '🍇', '🔔', '💎', '👑'];
@@ -3334,9 +3334,9 @@ client.on('messageCreate', async (message) => {
                       `**[ ${s1} | ${s2} | ${s3} ]**\n\n`;
 
     if (multiplier > 0) {
-      return message.reply(resultStr + `🎉 **Kazandın!** Tebrikler, **${reward.toLocaleString()} owo** kazandın!\n💰 Yeni Bakiyen: **${newBal.toLocaleString()}** owo.`);
+      return message.reply(resultStr + `🎉 **Kazandın!** Tebrikler, **${reward.toLocaleString()} coin** kazandın!\n💰 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
     } else {
-      return message.reply(resultStr + `😭 **Kaybettin!** Maalesef **${bet.toLocaleString()} owo** kaybettin.\n💰 Yeni Bakiyen: **${newBal.toLocaleString()}** owo.`);
+      return message.reply(resultStr + `😭 **Kaybettin!** Maalesef **${bet.toLocaleString()} coin** kaybettin.\n💰 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
     }
   }
 
@@ -3377,7 +3377,7 @@ client.on('messageCreate', async (message) => {
     const caughtStr = caught.map(a => `${a.emoji} ${a.name}`).join(', ');
     return message.reply(`🔍 **Avcılık** | <@${message.author.id}>\n\n` +
                          `🌲 Ormana avlanmaya çıktın ve şunları yakaladın:\n👉 **${caughtStr}**\n\n` +
-                         `💰 Kazanılan: **+${reward} owo**\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** owo.`);
+                         `💰 Kazanılan: **+${reward} coin**\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** coin.`);
   }
 
   // 22. BATTLE / SAVAŞ KOMUTU (.wb)
@@ -3401,7 +3401,7 @@ client.on('messageCreate', async (message) => {
       saveCoinData();
       return message.reply(`⚔️ **Savaş** | <@${message.author.id}>\n\n` +
                            `💥 **${monsterName}** ile kıyasıya bir savaşa girdin ve **ZAFER** kazandın!\n` +
-                           `💰 Kazanılan: **+${reward} owo**\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** owo.`);
+                           `💰 Kazanılan: **+${reward} coin**\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** coin.`);
     } else {
       user.stats.losses++;
       const loss = Math.floor(Math.random() * 101) + 50;
@@ -3409,7 +3409,7 @@ client.on('messageCreate', async (message) => {
       saveCoinData();
       return message.reply(`⚔️ **Savaş** | <@${message.author.id}>\n\n` +
                            `💀 **${monsterName}** seni bozguna uğrattı ve **YENİLDİN**!\n` +
-                           `💔 Kayıp: **-${loss} owo**\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** owo.`);
+                           `💔 Kayıp: **-${loss} coin**\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** coin.`);
     }
   }
 
@@ -3432,7 +3432,7 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen geçerli bir bahis miktarı belirtin. Örnek: `.bj 100`, `.bj all`, `.bj half`');
     }
     if (balance < bet) {
-      return message.reply(`❌ Yetersiz bakiye! Mevcut bakiyen: **${balance.toLocaleString()}** owo.`);
+      return message.reply(`❌ Yetersiz bakiye! Mevcut bakiyen: **${balance.toLocaleString()}** coin.`);
     }
 
     activeBlackjack.add(message.author.id);
@@ -3456,7 +3456,7 @@ client.on('messageCreate', async (message) => {
 
       return new EmbedBuilder()
         .setTitle('🃏 Blackjack')
-        .setDescription(`<@${message.author.id}> oyununa başladı! Bahis: **${bet.toLocaleString()} owo**`)
+        .setDescription(`<@${message.author.id}> oyununa başladı! Bahis: **${bet.toLocaleString()} coin**`)
         .addFields(
           { name: `🙋 Senin Elin (${pScore})`, value: playerCardStr, inline: true },
           { name: `🕵️ Kasa Eli (${dScore})`, value: dealerCardStr, inline: true }
@@ -3468,13 +3468,13 @@ client.on('messageCreate', async (message) => {
       activeBlackjack.delete(message.author.id);
       if (dealerScore === 21) {
         const embed = getGameEmbed(true)
-          .setDescription(`🤝 **Berabere (Push)!** İkinizde de doğal Blackjack var. Bahsin iade edildi.\n💰 Bakiyen: **${balance.toLocaleString()}** owo.`);
+          .setDescription(`🤝 **Berabere (Push)!** İkinizde de doğal Blackjack var. Bahsin iade edildi.\n💰 Bakiyen: **${balance.toLocaleString()}** coin.`);
         return message.reply({ embeds: [embed] });
       } else {
         const winReward = Math.floor(bet * 1.5);
         addCoins(message.author.id, winReward);
         const embed = getGameEmbed(true)
-          .setDescription(`🎉 **Doğal Blackjack!** Kazandın!\n💰 Kazanılan: **+${winReward.toLocaleString()} owo**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** owo.`);
+          .setDescription(`🎉 **Doğal Blackjack!** Kazandın!\n💰 Kazanılan: **+${winReward.toLocaleString()} coin**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`);
         return message.reply({ embeds: [embed] });
       }
     }
@@ -3511,7 +3511,7 @@ client.on('messageCreate', async (message) => {
           activeBlackjack.delete(message.author.id);
 
           const bustEmbed = getGameEmbed(true)
-            .setDescription(`💥 **Bust (21'i aştın)!** Kasa kazandı.\n💔 Kayıp: **-${bet.toLocaleString()} owo**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** owo.`)
+            .setDescription(`💥 **Bust (21'i aştın)!** Kasa kazandı.\n💔 Kayıp: **-${bet.toLocaleString()} coin**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`)
             .setColor('#ed4245');
 
           await interaction.update({ embeds: [bustEmbed], components: [] });
@@ -3550,18 +3550,18 @@ client.on('messageCreate', async (message) => {
       
       if (dealerScore > 21) {
         addCoins(message.author.id, bet);
-        desc = `🎉 **Kasa patladı (Bust)!** Sen kazandın!\n💰 Kazanılan: **+${bet.toLocaleString()} owo**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** owo.`;
+        desc = `🎉 **Kasa patladı (Bust)!** Sen kazandın!\n💰 Kazanılan: **+${bet.toLocaleString()} coin**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`;
         finalEmbed.setColor('#3ba55d');
       } else if (playerScore > dealerScore) {
         addCoins(message.author.id, bet);
-        desc = `🎉 **Sen kazandın!** Kasa elinden daha yüksek bir elin var.\n💰 Kazanılan: **+${bet.toLocaleString()} owo**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** owo.`;
+        desc = `🎉 **Sen kazandın!** Kasa elinden daha yüksek bir elin var.\n💰 Kazanılan: **+${bet.toLocaleString()} coin**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`;
         finalEmbed.setColor('#3ba55d');
       } else if (playerScore < dealerScore) {
         addCoins(message.author.id, -bet);
-        desc = `😭 **Kasa kazandı!** Kasa eli senin elinden daha yüksek.\n💔 Kayıp: **-${bet.toLocaleString()} owo**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** owo.`;
+        desc = `😭 **Kasa kazandı!** Kasa eli senin elinden daha yüksek.\n💔 Kayıp: **-${bet.toLocaleString()} coin**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`;
         finalEmbed.setColor('#ed4245');
       } else {
-        desc = `🤝 **Berabere (Push)!** İki tarafın da el değeri eşit. Bahsin iade edildi.\n💰 Bakiyen: **${getBalance(message.author.id).toLocaleString()}** owo.`;
+        desc = `🤝 **Berabere (Push)!** İki tarafın da el değeri eşit. Bahsin iade edildi.\n💰 Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`;
         finalEmbed.setColor('#faa81a');
       }
 
@@ -3605,9 +3605,9 @@ client.on('messageCreate', async (message) => {
       .setColor('#2b2d38')
       .setDescription('Yakaladığın hayvanlar ve sayıları:')
       .addFields(
-        { name: '🟢 Yaygın (Common) - 15 Owo', value: `🐰 Tavşan: **${inv['🐰'] || 0}**\n🐸 Kurbağa: **${inv['🐸'] || 0}**\n🐹 Hamster: **${inv['🐹'] || 0}**`, inline: true },
-        { name: '🔵 Sıradışı (Uncommon) - 30 Owo', value: `🦊 Tilki: **${inv['🦊'] || 0}**\n🐷 Domuz: **${inv['🐷'] || 0}**`, inline: true },
-        { name: '🔴 Nadir (Rare) - 100 Owo', value: `🦁 Aslan: **${inv['🦁'] || 0}**\n🐯 Kaplan: **${inv['🐯'] || 0}**\n🐼 Panda: **${inv['🐼'] || 0}**`, inline: true }
+        { name: '🟢 Yaygın (Common) - 15 Coin', value: `🐰 Tavşan: **${inv['🐰'] || 0}**\n🐸 Kurbağa: **${inv['🐸'] || 0}**\n🐹 Hamster: **${inv['🐹'] || 0}**`, inline: true },
+        { name: '🔵 Sıradışı (Uncommon) - 30 Coin', value: `🦊 Tilki: **${inv['🦊'] || 0}**\n🐷 Domuz: **${inv['🐷'] || 0}**`, inline: true },
+        { name: '🔴 Nadir (Rare) - 100 Coin', value: `🦁 Aslan: **${inv['🦁'] || 0}**\n🐯 Kaplan: **${inv['🐯'] || 0}**\n🐼 Panda: **${inv['🐼'] || 0}**`, inline: true }
       )
       .setFooter({ text: 'Satmak için: .sell <hayvan|all>' });
       
@@ -3642,7 +3642,7 @@ client.on('messageCreate', async (message) => {
       
       user.balance += totalCoins;
       saveCoinData();
-      return message.reply(`💰 Toplam **${totalSold}** adet hayvanı sattın ve **+${totalCoins.toLocaleString()} owo** kazandın!\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** owo.`);
+      return message.reply(`💰 Toplam **${totalSold}** adet hayvanı sattın ve **+${totalCoins.toLocaleString()} coin** kazandın!\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** coin.`);
     }
     
     const emoji = ANIMAL_NAME_TO_EMOJI[arg];
@@ -3661,7 +3661,7 @@ client.on('messageCreate', async (message) => {
     user.balance += earned;
     saveCoinData();
     
-    return message.reply(`💰 **${count}** adet **${ANIMAL_PRICES[emoji].name}** sattın ve **+${earned.toLocaleString()} owo** kazandın!\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** owo.`);
+    return message.reply(`💰 **${count}** adet **${ANIMAL_PRICES[emoji].name}** sattın ve **+${earned.toLocaleString()} coin** kazandın!\n💵 Yeni Bakiyen: **${user.balance.toLocaleString()}** coin.`);
   }
 
   // 26. SEND / GIVE COMMAND (.send / .give <@user> <miktar>)
@@ -3672,11 +3672,11 @@ client.on('messageCreate', async (message) => {
     }
     
     if (targetMember.id === message.author.id) {
-      return message.reply('😂 Kendine owo gönderemezsin!');
+      return message.reply('😂 Kendine coin gönderemezsin!');
     }
     
     if (targetMember.user.bot) {
-      return message.reply('🤖 Botlara owo gönderemezsin!');
+      return message.reply('🤖 Botlara coin gönderemezsin!');
     }
     
     let amountStr = args[1];
@@ -3687,23 +3687,23 @@ client.on('messageCreate', async (message) => {
     }
     
     if (!amountStr) {
-      return message.reply('⚠️ Lütfen göndermek istediğiniz owo miktarını belirtin. Örnek: `.send @kullanıcı 100`');
+      return message.reply('⚠️ Lütfen göndermek istediğiniz coin miktarını belirtin. Örnek: `.send @kullanıcı 100`');
     }
     
     const amount = parseBet(message.author.id, amountStr);
     if (amount <= 0) {
-      return message.reply('⚠️ Geçersiz miktar! Lütfen geçerli bir owo sayısı veya `all`/`half` belirtin.');
+      return message.reply('⚠️ Geçersiz miktar! Lütfen geçerli bir coin sayısı veya `all`/`half` belirtin.');
     }
     
     const balance = getBalance(message.author.id);
     if (balance < amount) {
-      return message.reply(`❌ Yetersiz bakiye! Göndermek istediğin: **${amount.toLocaleString()}**, Mevcut Bakiyen: **${balance.toLocaleString()}** owo.`);
+      return message.reply(`❌ Yetersiz bakiye! Göndermek istediğin: **${amount.toLocaleString()}**, Mevcut Bakiyen: **${balance.toLocaleString()}** coin.`);
     }
     
     addCoins(message.author.id, -amount);
     addCoins(targetMember.id, amount);
     
-    return message.reply(`💸 <@${message.author.id}>, <@${targetMember.id}> kullanıcısına **${amount.toLocaleString()} owo** gönderdi!\n💰 Kalan Bakiyen: **${getBalance(message.author.id).toLocaleString()}** owo.`);
+    return message.reply(`💸 <@${message.author.id}>, <@${targetMember.id}> kullanıcısına **${amount.toLocaleString()} coin** gönderdi!\n💰 Kalan Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`);
   }
 
   // 27. PROFILE / STATS COMMAND (.profile / .p)
@@ -3723,7 +3723,7 @@ client.on('messageCreate', async (message) => {
       .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
       .setColor('#5865F2')
       .addFields(
-        { name: '💰 Bakiye', value: `**${user.balance.toLocaleString()}** owo`, inline: true },
+        { name: '💰 Bakiye', value: `**${user.balance.toLocaleString()}** coin`, inline: true },
         { name: '🌲 Toplam Avcılık', value: `**${totalHunts}** kez`, inline: true },
         { name: '⚔️ Toplam Savaş', value: `**${totalBattles}** kez`, inline: true },
         { name: '🏆 Savaş İstatistikleri', value: `✅ Kazanma: **${wins}**\n❌ Yenilgi: **${losses}**\n📈 Kazanma Oranı: **%${winRate}**`, inline: false }
@@ -3747,7 +3747,7 @@ client.on('messageCreate', async (message) => {
       .setDescription(
         sorted.map((item, index) => {
           const emoji = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
-          return `${emoji} <@${item.id}> - **${item.balance.toLocaleString()}** owo`;
+          return `${emoji} <@${item.id}> - **${item.balance.toLocaleString()}** coin`;
         }).join('\n') || 'Henüz kayıtlı kullanıcı bulunmuyor.'
       );
       
