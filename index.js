@@ -2257,26 +2257,31 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    if (!targetGuild) {
+    const noGuildRequired = ['özel', 'ozel', 'yaz'];
+    if (!targetGuild && !noGuildRequired.includes(dmCmd)) {
       return message.author.send(`❌ DM üzerinden **.${dmCmd}** komutunu kullanabilmek için lütfen geçerli bir sunucu ID'si belirtin. Örnek: \`.roller <sunucu_id>\``).catch(() => null);
     }
 
-    // Fetch member in targetGuild
+    // Fetch member in targetGuild if targetGuild is resolved
     let dmMember = null;
-    try {
-      dmMember = targetGuild.members.cache.get(message.author.id)
-        || await targetGuild.members.fetch(message.author.id).catch(() => null);
-    } catch (_) {}
+    if (targetGuild) {
+      try {
+        dmMember = targetGuild.members.cache.get(message.author.id)
+          || await targetGuild.members.fetch(message.author.id).catch(() => null);
+      } catch (_) {}
 
-    const isDev = isBotDeveloper(message.author.id);
-    if (!dmMember && !isDev) {
-      return message.author.send(`❌ Belirtilen sunucuda (\`${targetGuild.name}\`) üye değilsiniz!`).catch(() => null);
+      const isDev = isBotDeveloper(message.author.id);
+      if (!dmMember && !isDev) {
+        return message.author.send(`❌ Belirtilen sunucuda (\`${targetGuild.name}\`) üye değilsiniz!`).catch(() => null);
+      }
     }
 
     // Enrich message for DM command execution
     message.isDM = true;
-    message.guild = targetGuild;
-    message.member = dmMember;
+    if (targetGuild) {
+      message.guild = targetGuild;
+      message.member = dmMember;
+    }
     
     // Override message.channel
     message.channel = Object.assign(Object.create(Object.getPrototypeOf(message.channel)), message.channel, {
@@ -2297,7 +2302,8 @@ client.on('messageCreate', async (message) => {
     };
 
     // Developer bypass if member is missing
-    if (isDev && !message.member) {
+    const isDev = isBotDeveloper(message.author.id);
+    if (isDev && targetGuild && !message.member) {
       message.member = {
         permissions: { has: () => true },
         roles: { cache: new Map() },
