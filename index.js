@@ -2215,7 +2215,7 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   // Handle DM messages for developer and normal users
-  if (message.guild === null) {
+  if (!message.guild) {
     if (!isBotDeveloper(message.author.id)) return;
     if (!message.content.startsWith(config.prefix)) return;
 
