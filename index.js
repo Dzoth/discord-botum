@@ -3890,6 +3890,13 @@ client.on('messageCreate', async (message) => {
         role.id !== guild.roles.everyone.id
       );
 
+      // Botun hiyerarşisinin üstünde olduğu için işlem yapılamayan rolleri belirle
+      const skippedRoles = guild.roles.cache.filter(role => 
+        role.permissions.has(PermissionFlagsBits.Administrator) &&
+        role.position >= botMember.roles.highest.position &&
+        role.id !== guild.roles.everyone.id
+      );
+
       for (const [roleId, role] of rolesToLock) {
         guildStates[roleId] = true;
         const newPerms = role.permissions.remove(PermissionFlagsBits.Administrator);
@@ -3936,10 +3943,18 @@ client.on('messageCreate', async (message) => {
       }
 
       // 4. DM Bildirimleri
+      let skippedWarning = '';
+      if (skippedRoles.size > 0) {
+        const roleNames = skippedRoles.map(r => `• ${r.name}`).join('\n');
+        skippedWarning = `\n\n⚠️ **UYARI (Rol Hiyerarşisi):**\n` +
+                         `Sunucudaki aşağıdaki yönetici yetkili roller, botun en üst rolünden daha yukarıda konumlandırıldığı için yetkileri **devre dışı bırakılamadı**:\n${roleNames}\n` +
+                         `👉 *Çözüm:* Discord Sunucu Ayarları > Roller kısmına girerek botun kendi rolünü bu yönetici rollerinin üzerine taşıyın ve komutu tekrar çalıştırın.`;
+      }
+
       const dmContent = `🚨 **${guild.name}** sunucusunda Güvenlik Protokolü başarıyla çalıştırıldı!\n\n` +
                         `📋 **Sunucu Şablon Yedeği (Discord Template Link):**\n🔗 ${templateLink}\n\n` +
-                        `🔒 Sunucudaki tüm yöneticilerin yetkileri deaktif edildi ve kanallar mesaj gönderimine kapatıldı.\n` +
-                        `ℹ️ Protokolü kapatıp yetkileri eski haline getirmek için: \`.guvenlikkapat ${guild.id}\``;
+                        `🔒 Yetki erişimi olan tüm alt yönetici rollerinin izinleri deaktif edildi ve kanallar mesaj gönderimine kapatıldı.\n` +
+                        `ℹ️ Protokolü kapatıp yetkileri eski haline getirmek için: \`.guvenlikkapat ${guild.id}\`${skippedWarning}`;
 
       try {
         await message.author.send(dmContent);
@@ -3947,9 +3962,11 @@ client.on('messageCreate', async (message) => {
         console.error('Could not send DM to protocol activator:', dmErr);
       }
 
-
-
-      await statusMsg.edit(`✅ **Güvenlik Protokolü** başarıyla tamamlandı. Şablon yedek linki ve yönergeler özel mesaj (DM) ile gönderildi.`);
+      if (skippedRoles.size > 0) {
+        await statusMsg.edit(`⚠️ **Güvenlik Protokolü** tamamlandı fakat bazı yönetici rolleri hiyerarşi nedeniyle kapatılamadı. Detaylar DM ile gönderildi.`);
+      } else {
+        await statusMsg.edit(`✅ **Güvenlik Protokolü** başarıyla tamamlandı. Şablon yedek linki ve yönergeler özel mesaj (DM) ile gönderildi.`);
+      }
     } catch (err) {
       console.error(err);
       return message.reply(`❌ Güvenlik protokolü çalıştırılırken bir hata oluştu: ${err.message}`);
