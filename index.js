@@ -1501,10 +1501,29 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  if (!message.content.startsWith(config.prefix)) return;
+  let usedPrefix = '';
+  if (message.content.startsWith(config.prefix)) {
+    usedPrefix = config.prefix;
+  } else if (message.content.toLowerCase().startsWith('owo ')) {
+    usedPrefix = message.content.substring(0, 4);
+  }
 
-  const args = message.content.slice(config.prefix.length).trim().split(/ +/);
+  if (!usedPrefix) return;
+
+  const args = message.content.slice(usedPrefix.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
+
+  // Eğer owo ön eki kullanıldıysa, sadece coin/owo ve etkileşim komutlarına yanıt ver
+  if (usedPrefix.toLowerCase().startsWith('owo')) {
+    const owoCommands = [
+      'cash', 'coin', 'para', 'daily', 'günlük', 'gunluk', 'cf', 'ws', 'wh', 'wb', 'bj',
+      'inv', 'zoo', 'animal', 'sell', 'send', 'give', 'profile', 'p', 'top', 'lb',
+      'kiss', 'hug', 'pat', 'slap', 'kill'
+    ];
+    if (!owoCommands.includes(command)) {
+      return;
+    }
+  }
 
   logEvent('INFO', 'Command', `User: ${message.author.tag} (ID: ${message.author.id}) invoked command: .${command} in channel: #${message.channel.name} (ID: ${message.channel.id})`);
 
