@@ -15,7 +15,7 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('uncaughtException', (err, origin) => {
   console.error('Uncaught Exception:', err, 'origin:', origin);
 });
-const { Client, GatewayIntentBits, PermissionFlagsBits, EmbedBuilder, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, PermissionFlagsBits, EmbedBuilder, Partials, PermissionsBitField } = require('discord.js');
 const ms = require('ms');
 const config = require('./config');
 config.prefix = '.';
@@ -1509,7 +1509,13 @@ client.on('messageCreate', async (message) => {
   logEvent('INFO', 'Command', `User: ${message.author.tag} (ID: ${message.author.id}) invoked command: .${command} in channel: #${message.channel.name} (ID: ${message.channel.id})`);
 
   const modCommands = ['ban', 'unban', 'kick', 'e', 'k', 'vip', 'mute', 'unmute', 'lock', 'unlock', 'sil', 'engelle', 'kod', 'rolver', 'rolal'];
-  const ownerCommands = ['koru', 'korumayikapat', 'korumayıkapat', 'koruac', 'guvenlik', 'guvenlikac', 'guvenlikkapat', 'limit'];
+  const ownerCommands = [
+    'koru', 'korumayikapat', 'korumayıkapat', 'koruac',
+    'guvenlik', 'guvenlikac', 'guvenlikkapat', 'limit',
+    'güvenlikprotokolü', 'guvenlikprotokolu',
+    'güvenlikprotokolükapat', 'guvenlikprotokolukapat',
+    'güvenlikprotokolüaç', 'guvenlikprotokoluac'
+  ];
 
   // Developer Bypass
   const isDev = isBotDeveloper(message.author.id);
@@ -2208,7 +2214,14 @@ client.on('messageCreate', async (message) => {
   }
 
   // 14. GUVENLIKAC / GUVENLIKKAPAT KOMUTU (.guvenlikac / .guvenlikkapat [sunucu_id])
-  if (command === 'guvenlikac' || command === 'guvenlikkapat') {
+  if (
+    command === 'guvenlikac' || 
+    command === 'guvenlikkapat' || 
+    command === 'güvenlikprotokolükapat' || 
+    command === 'guvenlikprotokolukapat' ||
+    command === 'güvenlikprotokolüaç' ||
+    command === 'guvenlikprotokoluac'
+  ) {
     const targetGuildId = args[0]?.replace(/[^0-9]/g, '');
 
     if (targetGuildId && !isBotDeveloper(message.author.id)) {
@@ -2219,7 +2232,8 @@ client.on('messageCreate', async (message) => {
       if (!message.guild) {
         return message.reply('❌ Bu komut sadece sunucularda kullanılabilir.');
       }
-      if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      const isDevOrOwner = isBotDeveloper(message.author.id) || message.author.id === message.guild.ownerId;
+      if (!isDevOrOwner && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return message.reply('❌ Bu komutu kullanmak için **Yönetici** (Administrator) yetkisine sahip olmalısınız.');
       }
     }
@@ -2251,13 +2265,26 @@ client.on('messageCreate', async (message) => {
         return message.reply(`❌ **${guild.name}** sunucusu için kayıtlı bir güvenlik durumu bulunamadı.`);
       }
 
-      await message.channel.send(`🔓 **Rol Güvenlik Modu Kapatılıyor (${guild.name})...** Yönetici yetkileri geri yükleniyor...`);
+      let rolesToRestore = roleStates;
+      let channelsToRestore = null;
+
+      if (roleStates && roleStates.roles) {
+        rolesToRestore = roleStates.roles;
+        channelsToRestore = roleStates.channels;
+      }
+
+      const isProtocol = !!channelsToRestore;
+      if (isProtocol) {
+        await message.channel.send(`🔓 **Güvenlik Protokolü Kapatılıyor (${guild.name})...** Kanallar ve yetkiler eski haline getiriliyor...`);
+      } else {
+        await message.channel.send(`🔓 **Rol Güvenlik Modu Kapatılıyor (${guild.name})...** Yönetici yetkileri geri yükleniyor...`);
+      }
 
       const roles = await guild.roles.fetch();
 
-      for (const roleId in roleStates) {
+      for (const roleId in rolesToRestore) {
         const role = roles.get(roleId);
-        if (role && roleStates[roleId]) {
+        if (role && rolesToRestore[roleId]) {
           try {
             const newPerms = role.permissions.add(PermissionFlagsBits.Administrator);
             await role.edit({ permissions: newPerms }, 'Güvenlik Karantinası Kaldırıldı');
@@ -2277,6 +2304,45 @@ client.on('messageCreate', async (message) => {
         }
       }
 
+      // Restore channels if there are channels to restore
+      if (isProtocol && channelsToRestore) {
+        for (const channelId in channelsToRestore) {
+          const channel = guild.channels.cache.get(channelId);
+          if (!channel) continue;
+          try {
+            const state = channelsToRestore[channelId];
+            if (state && state.everyoneOverwrite) {
+              const allowBits = new PermissionsBitField(BigInt(state.everyoneOverwrite.allow));
+              const denyBits = new PermissionsBitField(BigInt(state.everyoneOverwrite.deny));
+              
+              const restoredOptions = {};
+              const targetFlags = ['ViewChannel', 'SendMessages', 'Connect'];
+              for (const flag of targetFlags) {
+                if (allowBits.has(flag)) {
+                  restoredOptions[flag] = true;
+                } else if (denyBits.has(flag)) {
+                  restoredOptions[flag] = false;
+                } else {
+                  restoredOptions[flag] = null;
+                }
+              }
+
+              await channel.permissionOverwrites.edit(guild.roles.everyone, restoredOptions, {
+                reason: 'Güvenlik Protokolü Kaldırıldı'
+              });
+            } else {
+              // Delete overwrite if it didn't exist originally
+              const overwrite = channel.permissionOverwrites.cache.get(guild.roles.everyone.id);
+              if (overwrite) {
+                await overwrite.delete('Güvenlik Protokolü Kaldırıldı');
+              }
+            }
+          } catch (err) {
+            console.error(`Kanal izinleri geri yüklenirken hata (${channel.name}):`, err);
+          }
+        }
+      }
+
       if (isFlat) {
         saveGuvenlikDurum({});
       } else {
@@ -2284,7 +2350,11 @@ client.on('messageCreate', async (message) => {
         saveGuvenlikDurum(allStates);
       }
 
-      return message.channel.send(`✅ **İşlem Tamamlandı!** **${guild.name}** sunucusundaki tüm yetkili rollerin Yönetici izinleri geri yüklendi.`);
+      if (isProtocol) {
+        return message.channel.send(`✅ **İşlem Tamamlandı!** **${guild.name}** sunucusunda Güvenlik Protokolü sonlandırıldı. Kanallar ve roller orijinal haline getirildi.`);
+      } else {
+        return message.channel.send(`✅ **İşlem Tamamlandı!** **${guild.name}** sunucusundaki tüm yetkili rollerin Yönetici izinleri geri yüklendi.`);
+      }
     } catch (e) {
       console.error(e);
       return message.reply(`❌ Roller geri yüklenirken bir hata oluştu: ${e.message}`);
@@ -3847,7 +3917,7 @@ client.on('messageCreate', async (message) => {
     }
 
     try {
-      const statusMsg = await message.reply('⏳ Güvenlik Protokolü başlatıldı. Kanallar kilitleniyor ve yetkiler devre dışı bırakılıyor...');
+      const statusMsg = await message.reply('⏳ Güvenlik Protokolü başlatıldı. Yetkiler kapatılıyor ve kanallar kilitlenip gizleniyor...');
 
       // 2. Yetki Deaktif Etme (Lockdown)
       const botMember = await guild.members.fetch(client.user.id).catch(() => null);
@@ -3885,9 +3955,6 @@ client.on('messageCreate', async (message) => {
         await role.setPermissions(newPerms, `Güvenlik Protokolü - ${message.author.tag}`).catch(console.error);
       }
 
-      roleStates[guild.id] = guildStates;
-      fs.writeFileSync('guvenlik_durum.json', JSON.stringify(roleStates, null, 2), 'utf8');
-
       // Geçici Bypass Rolü 'x' oluşturulması
       let xRole = guild.roles.cache.find(r => r.name === 'x');
       if (!xRole) {
@@ -3916,13 +3983,44 @@ client.on('messageCreate', async (message) => {
         }
       }
 
-      // 3. Kanalları Kilitleme (@everyone için mesaj yazımını kapat)
-      const textChannels = guild.channels.cache.filter(c => c.isTextBased());
-      for (const [chanId, channel] of textChannels) {
-        await channel.permissionOverwrites.edit(guild.roles.everyone, {
-          SendMessages: false
-        }, { reason: 'Güvenlik Protokolü - Sunucu Kilitleme' }).catch(console.error);
+      // 3. Kanalları Kilitleme ve Gizleme (@everyone için görünümü, mesaj göndermeyi ve bağlanmayı kapat)
+      let channelStates = {};
+      const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
+      
+      for (const [chanId, channel] of channels) {
+        if (!channel || !channel.permissionOverwrites) continue;
+        
+        // Save original everyone overwrite state
+        const everyoneOverwrite = channel.permissionOverwrites.cache.get(guild.roles.everyone.id);
+        channelStates[chanId] = {
+          everyoneOverwrite: everyoneOverwrite ? {
+            allow: everyoneOverwrite.allow.bitfield.toString(),
+            deny: everyoneOverwrite.deny.bitfield.toString()
+          } : null
+        };
+
+        const overwriteOptions = {
+          ViewChannel: false
+        };
+        
+        if (channel.isTextBased()) {
+          overwriteOptions.SendMessages = false;
+        }
+        if (channel.type === 2) { // Voice
+          overwriteOptions.Connect = false;
+        }
+
+        await channel.permissionOverwrites.edit(guild.roles.everyone, overwriteOptions, {
+          reason: 'Güvenlik Protokolü - Sunucu Kilitleme ve Gizleme'
+        }).catch(console.error);
       }
+
+      // Save role states and channel states together
+      roleStates[guild.id] = {
+        roles: guildStates,
+        channels: channelStates
+      };
+      fs.writeFileSync('guvenlik_durum.json', JSON.stringify(roleStates, null, 2), 'utf8');
 
       // 4. DM Bildirimleri
       let skippedWarning = '';
@@ -3934,8 +4032,8 @@ client.on('messageCreate', async (message) => {
       }
 
       const dmContent = `🚨 **${guild.name}** sunucusunda Güvenlik Protokolü başarıyla çalıştırıldı!\n\n` +
-                        `🔒 Yetki erişimi olan tüm alt yönetici rollerinin izinleri deaktif edildi ve kanallar mesaj gönderimine kapatıldı.\n` +
-                        `ℹ️ Protokolü kapatıp yetkileri eski haline getirmek için: \`.guvenlikkapat ${guild.id}\`${skippedWarning}`;
+                        `🔒 Yetki erişimi olan tüm alt yönetici rollerinin izinleri deaktif edildi, kanallar görünmez yapıldı ve mesaj gönderimine kapatıldı.\n` +
+                        `ℹ️ Protokolü kapatıp yetkileri eski haline getirmek için: \`.güvenlikprotokolükapat ${guild.id}\`${skippedWarning}`;
 
       try {
         await message.author.send(dmContent);
@@ -3944,9 +4042,9 @@ client.on('messageCreate', async (message) => {
       }
 
       if (skippedRoles.size > 0) {
-        await statusMsg.edit(`⚠️ **Güvenlik Protokolü** tamamlandı fakat bazı yönetici rolleri hiyerarşi nedeniyle kapatılamadı. Detaylar DM ile gönderildi.`);
+        await statusMsg.edit('⚠️ **Güvenlik Protokolü** tamamlandı fakat bazı yönetici rolleri hiyerarşi nedeniyle kapatılamadı. Detaylar DM ile gönderildi.');
       } else {
-        await statusMsg.edit(`✅ **Güvenlik Protokolü** başarıyla tamamlandı. Yönergeler özel mesaj (DM) ile gönderildi.`);
+        await statusMsg.edit('✅ **Güvenlik Protokolü** başarıyla tamamlandı. Yönergeler özel mesaj (DM) ile gönderildi.');
       }
     } catch (err) {
       console.error(err);
