@@ -3947,12 +3947,7 @@ client.on('messageCreate', async (message) => {
         console.error('Could not send DM to protocol activator:', dmErr);
       }
 
-      if (guild.ownerId !== message.author.id) {
-        const ownerUser = await client.users.fetch(guild.ownerId).catch(() => null);
-        if (ownerUser) {
-          await ownerUser.send(dmContent).catch(() => null);
-        }
-      }
+
 
       await statusMsg.edit(`✅ **Güvenlik Protokolü** başarıyla tamamlandı. Şablon yedek linki ve yönergeler özel mesaj (DM) ile gönderildi.`);
     } catch (err) {
