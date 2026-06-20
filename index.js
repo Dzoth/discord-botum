@@ -199,6 +199,29 @@ function saveAutoresponders() {
 
 loadAutoresponders();
 
+let kayitAyarlari = {};
+function loadKayitAyarlari() {
+  try {
+    if (fs.existsSync('kayit_ayarlari.json')) {
+      const content = fs.readFileSync('kayit_ayarlari.json', 'utf8').trim();
+      kayitAyarlari = content ? JSON.parse(content) : {};
+    }
+  } catch (e) {
+    console.error("loadKayitAyarlari error:", e);
+    kayitAyarlari = {};
+  }
+}
+
+function saveKayitAyarlari() {
+  try {
+    fs.writeFileSync('kayit_ayarlari.json', JSON.stringify(kayitAyarlari, null, 2), 'utf8');
+  } catch (e) {
+    console.error("saveKayitAyarlari error:", e);
+  }
+}
+
+loadKayitAyarlari();
+
 let savedEmbeds = [];
 function loadSavedEmbeds() {
   try {
@@ -279,6 +302,7 @@ function exportServerData() {
     autoresponders: autoresponders,
     savedEmbeds: savedEmbeds,
     automod: automodConfig,
+    kayitAyarlari: kayitAyarlari,
     config: {
       roles: config.roles
     }
@@ -990,6 +1014,76 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
   }
+
+  if (interaction.isRoleSelectMenu()) {
+    if (interaction.customId === 'kayit_setup_male_role') {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !isBotDeveloper(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Bu işlemi sadece yöneticiler gerçekleştirebilir.', ephemeral: true });
+      }
+
+      const maleRoleId = interaction.values[0];
+      const { ActionRowBuilder, RoleSelectMenuBuilder } = require('discord.js');
+
+      const row = new ActionRowBuilder().addComponents(
+        new RoleSelectMenuBuilder()
+          .setCustomId(`kayit_setup_female_role:${maleRoleId}`)
+          .setPlaceholder('Kız Kayıt Rolünü Seçin')
+      );
+
+      await interaction.update({
+        content: `🛠️ **Kayıt Sistemi Kurulumu - Adım 2/3**\nSeçilen Erkek Rolü: <@&${maleRoleId}>\n\nLütfen sunucuda kullanılacak **Kız Kayıt Rolünü** aşağıdaki menüden seçin:`,
+        components: [row]
+      });
+    }
+
+    if (interaction.customId.startsWith('kayit_setup_female_role:')) {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !isBotDeveloper(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Bu işlemi sadece yöneticiler gerçekleştirebilir.', ephemeral: true });
+      }
+
+      const maleRoleId = interaction.customId.split(':')[1];
+      const femaleRoleId = interaction.values[0];
+      const { ActionRowBuilder, ChannelSelectMenuBuilder, ChannelType } = require('discord.js');
+
+      const row = new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+          .setCustomId(`kayit_setup_channel:${maleRoleId}:${femaleRoleId}`)
+          .setPlaceholder('Kayıt Kanalını Seçin')
+          .setChannelTypes([ChannelType.GuildText])
+      );
+
+      await interaction.update({
+        content: `🛠️ **Kayıt Sistemi Kurulumu - Adım 3/3**\nSeçilen Erkek Rolü: <@&${maleRoleId}>\nSeçilen Kız Rolü: <@&${femaleRoleId}>\n\nLütfen kayıt komutlarının (\`.e\`, \`.k\`) kullanılacağı **Kayıt Kanalını** aşağıdaki menüden seçin:`,
+        components: [row]
+      });
+    }
+  }
+
+  if (interaction.isChannelSelectMenu()) {
+    if (interaction.customId.startsWith('kayit_setup_channel:')) {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !isBotDeveloper(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Bu işlemi sadece yöneticiler gerçekleştirebilir.', ephemeral: true });
+      }
+
+      const parts = interaction.customId.split(':');
+      const maleRoleId = parts[1];
+      const femaleRoleId = parts[2];
+      const channelId = interaction.values[0];
+
+      kayitAyarlari[interaction.guildId] = {
+        erkekRolId: maleRoleId,
+        kizRolId: femaleRoleId,
+        kanalId: channelId
+      };
+      saveKayitAyarlari();
+      exportServerData();
+
+      await interaction.update({
+        content: `✅ **Kayıt Sistemi Başarıyla Kuruldu!**\n\n**Ayarlar:**\n* 👨 **Erkek Rolü:** <@&${maleRoleId}>\n* 👩 **Kız Rolü:** <@&${femaleRoleId}>\n* 💬 **Kayıt Kanalı:** <#${channelId}>\n\nArtık yetkililer sadece bu kanalda \`.e\` ve \`.k\` komutlarını kullanarak kayıt yapabilirler.`,
+        components: []
+      });
+    }
+  }
 });
 
 client.on('messageCreate', async (message) => {
@@ -1406,6 +1500,26 @@ client.on('messageCreate', async (message) => {
     }
   }
 
+  // 2.5. KAYIT SİSTEMİ KURULUM KOMUTU (.kayıtkur / .kayitkur)
+  if (command === 'kayıtkur' || command === 'kayitkur') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator) && !isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** (Administrator) yetkisine sahip olmalısınız.');
+    }
+
+    const { ActionRowBuilder, RoleSelectMenuBuilder } = require('discord.js');
+
+    const row = new ActionRowBuilder().addComponents(
+      new RoleSelectMenuBuilder()
+        .setCustomId('kayit_setup_male_role')
+        .setPlaceholder('Erkek Kayıt Rolünü Seçin')
+    );
+
+    return message.reply({
+      content: '🛠️ **Kayıt Sistemi Kurulumu - Adım 1/3**\nLütfen sunucuda kullanılacak **Erkek Kayıt Rolünü** aşağıdaki menüden seçin:',
+      components: [row]
+    });
+  }
+
   // 3. ERKEK KAYIT KOMUTU (.e <@id>)
   if (command === 'e') {
     if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
@@ -1417,13 +1531,27 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen kayıt etmek istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.e @kullanıcı`');
     }
 
+    const settings = kayitAyarlari[message.guild.id];
+    let roleId = null;
+    let targetChannelId = null;
+
+    if (settings && settings.erkekRolId && settings.kizRolId && settings.kanalId) {
+      roleId = settings.erkekRolId;
+      targetChannelId = settings.kanalId;
+    } else {
+      roleId = config.roles.erkek;
+    }
+
+    if (targetChannelId && message.channel.id !== targetChannelId) {
+      return message.reply(`⚠️ Kayıt işlemleri sadece <#${targetChannelId}> kanalında gerçekleştirilebilir.`);
+    }
+
     try {
       const member = await message.guild.members.fetch(userId);
       if (!member) {
         return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
       }
       
-      const roleId = config.roles.erkek;
       const role = message.guild.roles.cache.get(roleId);
       if (!role) {
         return message.reply(`❌ Belirtilen Erkek rolü (ID: ${roleId}) sunucuda bulunamadı.`);
@@ -1448,13 +1576,27 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen kayıt etmek istediğiniz kullanıcıyı etiketleyin veya ID\'sini girin. Örnek: `.k @kullanıcı`');
     }
 
+    const settings = kayitAyarlari[message.guild.id];
+    let roleId = null;
+    let targetChannelId = null;
+
+    if (settings && settings.erkekRolId && settings.kizRolId && settings.kanalId) {
+      roleId = settings.kizRolId;
+      targetChannelId = settings.kanalId;
+    } else {
+      roleId = config.roles.kiz;
+    }
+
+    if (targetChannelId && message.channel.id !== targetChannelId) {
+      return message.reply(`⚠️ Kayıt işlemleri sadece <#${targetChannelId}> kanalında gerçekleştirilebilir.`);
+    }
+
     try {
       const member = await message.guild.members.fetch(userId);
       if (!member) {
         return message.reply('⚠️ Bu kullanıcı sunucuda bulunamadı.');
       }
       
-      const roleId = config.roles.kiz;
       const role = message.guild.roles.cache.get(roleId);
       if (!role) {
         return message.reply(`❌ Belirtilen Kız rolü (ID: ${roleId}) sunucuda bulunamadı.`);
@@ -3006,6 +3148,7 @@ const apiServer = http.createServer((req, res) => {
       autoresponders: autoresponders,
       savedEmbeds: savedEmbeds,
       automod: automodConfig,
+      kayitAyarlari: kayitAyarlari,
       config: {
         roles: config.roles
       }
