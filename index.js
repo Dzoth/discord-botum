@@ -222,6 +222,111 @@ function saveKayitAyarlari() {
 
 loadKayitAyarlari();
 
+let coinData = {};
+function loadCoinData() {
+  try {
+    if (fs.existsSync('coinler.json')) {
+      const content = fs.readFileSync('coinler.json', 'utf8').trim();
+      coinData = content ? JSON.parse(content) : {};
+    }
+  } catch (e) {
+    console.error("loadCoinData error:", e);
+    coinData = {};
+  }
+}
+
+function saveCoinData() {
+  try {
+    fs.writeFileSync('coinler.json', JSON.stringify(coinData, null, 2), 'utf8');
+  } catch (e) {
+    console.error("saveCoinData error:", e);
+  }
+}
+
+function getUserData(userId) {
+  if (!coinData[userId]) {
+    coinData[userId] = {
+      balance: 5000,
+      lastDaily: 0,
+      lastHunt: 0,
+      lastBattle: 0
+    };
+    saveCoinData();
+  }
+  return coinData[userId];
+}
+
+function getBalance(userId) {
+  return getUserData(userId).balance;
+}
+
+function addCoins(userId, amount) {
+  const user = getUserData(userId);
+  user.balance = Math.max(0, user.balance + amount);
+  saveCoinData();
+}
+
+loadCoinData();
+
+const activeBlackjack = new Set();
+const commandCooldowns = new Map();
+
+function checkCooldown(userId, commandName, seconds) {
+  const key = `${userId}:${commandName}`;
+  const now = Date.now();
+  if (commandCooldowns.has(key)) {
+    const expiration = commandCooldowns.get(key);
+    if (now < expiration) {
+      return Math.ceil((expiration - now) / 1000);
+    }
+  }
+  commandCooldowns.set(key, now + (seconds * 1000));
+  return 0;
+}
+
+function parseBet(userId, betStr) {
+  const balance = getBalance(userId);
+  if (!betStr) return 0;
+  
+  const clean = betStr.toLowerCase().trim();
+  if (clean === 'all') return balance;
+  if (clean === 'half') return Math.floor(balance / 2);
+  
+  const parsed = parseInt(clean);
+  if (isNaN(parsed) || parsed <= 0) return 0;
+  return parsed;
+}
+
+function getCardValue(card) {
+  const value = card.slice(0, -1);
+  if (value === 'A') return 11;
+  if (['J', 'Q', 'K'].includes(value)) return 10;
+  return parseInt(value);
+}
+
+function calculateHand(hand) {
+  let score = 0;
+  let aces = 0;
+  for (const card of hand) {
+    const val = getCardValue(card);
+    score += val;
+    if (card.startsWith('A')) aces++;
+  }
+  while (score > 21 && aces > 0) {
+    score -= 10;
+    aces--;
+  }
+  return score;
+}
+
+function drawCard() {
+  const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+  const suits = ['♠', '♥', '♦', '♣'];
+  const val = values[Math.floor(Math.random() * values.length)];
+  const suit = suits[Math.floor(Math.random() * suits.length)];
+  return `${val}${suit}`;
+}
+
 let savedEmbeds = [];
 function loadSavedEmbeds() {
   try {
@@ -3112,6 +3217,327 @@ client.on('messageCreate', async (message) => {
       content: '🎶 Spotify müzik çalar menüsünü açmak için aşağıdaki butona tıklayın:', 
       components: [row] 
     });
+  }
+
+  // ==================== OWO SYSTEM COIN GAMES ====================
+  
+  // 17. COIN BAKİYE SORGULAMA (.cash / .coin / .para)
+  if (command === 'cash' || command === 'coin' || command === 'para') {
+    const balance = getBalance(message.author.id);
+    return message.reply(`💰 **Bakiyeniz:** \`${balance.toLocaleString()}\` coin`);
+  }
+
+  // 18. GÜNLÜK ÖDÜL KOMUTU (.daily / .günlük / .gunluk)
+  if (command === 'daily' || command === 'günlük' || command === 'gunluk') {
+    const user = getUserData(message.author.id);
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+    if (now - user.lastDaily < oneDay) {
+      const remainingMs = oneDay - (now - user.lastDaily);
+      const hours = Math.floor(remainingMs / (60 * 60 * 1000));
+      const minutes = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000));
+      return message.reply(`⏱️ Günlük ödülünü zaten aldın! Tekrar almak için **${hours} saat ${minutes} dakika** beklemelisin.`);
+    }
+    user.lastDaily = now;
+    const reward = 2500;
+    user.balance += reward;
+    saveCoinData();
+    return message.reply(`🎁 Günlük ödülünüz olan **${reward} coin** başarıyla alındı! Yeni bakiyeniz: **${user.balance.toLocaleString()}** coin.`);
+  }
+
+  // 19. COINFLIP / YAZI TURA KOMUTU (.cf <miktar>)
+  if (command === 'cf') {
+    const cooldown = checkCooldown(message.author.id, 'cf', 5);
+    if (cooldown > 0) {
+      return message.reply(`⏱️ Çok hızlısın! Tekrar yazı tura atmak için **${cooldown} saniye** beklemelisin.`);
+    }
+
+    const betInput = args[0];
+    const bet = parseBet(message.author.id, betInput);
+    const balance = getBalance(message.author.id);
+
+    if (bet <= 0) {
+      return message.reply('⚠️ Lütfen geçerli bir bahis miktarı belirtin. Örnek: `.cf 100`, `.cf all`, `.cf half`');
+    }
+    if (balance < bet) {
+      return message.reply(`❌ Yetersiz bakiye! Mevcut bakiyen: **${balance.toLocaleString()}** coin.`);
+    }
+
+    const win = Math.random() < 0.5;
+    if (win) {
+      addCoins(message.author.id, bet);
+      const newBal = getBalance(message.author.id);
+      return message.reply(`🪙 **Yazı Tura** | <@${message.author.id}>\n\n**Kazandın!** Tebrikler, **${bet.toLocaleString()} coin** kazandın!\n💰 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
+    } else {
+      addCoins(message.author.id, -bet);
+      const newBal = getBalance(message.author.id);
+      return message.reply(`🪙 **Yazı Tura** | <@${message.author.id}>\n\n**Kaybettin!** Maalesef **${bet.toLocaleString()} coin** kaybettin.\n💰 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
+    }
+  }
+
+  // 20. SLOTS KOMUTU (.ws <miktar>)
+  if (command === 'ws') {
+    const cooldown = checkCooldown(message.author.id, 'ws', 5);
+    if (cooldown > 0) {
+      return message.reply(`⏱️ Çok hızlısın! Tekrar slot çevirmek için **${cooldown} saniye** beklemelisin.`);
+    }
+
+    const betInput = args[0];
+    const bet = parseBet(message.author.id, betInput);
+    const balance = getBalance(message.author.id);
+
+    if (bet <= 0) {
+      return message.reply('⚠️ Lütfen geçerli bir bahis miktarı belirtin. Örnek: `.ws 100`, `.ws all`, `.ws half`');
+    }
+    if (balance < bet) {
+      return message.reply(`❌ Yetersiz bakiye! Mevcut bakiyen: **${balance.toLocaleString()}** coin.`);
+    }
+
+    const emojis = ['🍒', '🍋', '🍇', '🔔', '💎', '👑'];
+    const s1 = emojis[Math.floor(Math.random() * emojis.length)];
+    const s2 = emojis[Math.floor(Math.random() * emojis.length)];
+    const s3 = emojis[Math.floor(Math.random() * emojis.length)];
+
+    let multiplier = 0;
+    if (s1 === s2 && s2 === s3) {
+      multiplier = (s1 === '💎' || s1 === '👑') ? 5 : 3;
+    } else if (s1 === s2 || s2 === s3 || s1 === s3) {
+      multiplier = 1;
+    } else {
+      multiplier = -1;
+    }
+
+    const reward = multiplier * bet;
+    addCoins(message.author.id, reward);
+    const newBal = getBalance(message.author.id);
+
+    const resultStr = `🎰 **Slots** | <@${message.author.id}>\n\n` +
+                      `**[ ${s1} | ${s2} | ${s3} ]**\n\n`;
+
+    if (multiplier > 0) {
+      return message.reply(resultStr + `🎉 **Kazandın!** Tebrikler, **${reward.toLocaleString()} coin** kazandın!\n💰 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
+    } else {
+      return message.reply(resultStr + `😭 **Kaybettin!** Maalesef **${bet.toLocaleString()} coin** kaybettin.\n💰 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
+    }
+  }
+
+  // 21. HUNT / AVCILIK KOMUTU (.wh)
+  if (command === 'wh') {
+    const cooldown = checkCooldown(message.author.id, 'wh', 15);
+    if (cooldown > 0) {
+      return message.reply(`⏱️ Çok hızlısın! Tekrar avlanmak için **${cooldown} saniye** beklemelisin.`);
+    }
+
+    const animals = [
+      { emoji: '🦁', name: 'Aslan' },
+      { emoji: '🐯', name: 'Kaplan' },
+      { emoji: '🐼', name: 'Panda' },
+      { emoji: '🦊', name: 'Tilki' },
+      { emoji: '🐰', name: 'Tavşan' },
+      { emoji: '🐸', name: 'Kurbağa' },
+      { emoji: '🐷', name: 'Domuz' },
+      { emoji: '🐹', name: 'Hamster' }
+    ];
+
+    const caughtCount = Math.floor(Math.random() * 3) + 1;
+    const caught = [];
+    for (let i = 0; i < caughtCount; i++) {
+      caught.push(animals[Math.floor(Math.random() * animals.length)]);
+    }
+
+    const reward = Math.floor(Math.random() * 201) + 100;
+    addCoins(message.author.id, reward);
+    const newBal = getBalance(message.author.id);
+
+    const caughtStr = caught.map(a => `${a.emoji} ${a.name}`).join(', ');
+    return message.reply(`🔍 **Avcılık** | <@${message.author.id}>\n\n` +
+                         `🌲 Ormana avlanmaya çıktın ve şunları yakaladın:\n👉 **${caughtStr}**\n\n` +
+                         `💰 Kazanılan: **+${reward} coin**\n💵 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
+  }
+
+  // 22. BATTLE / SAVAŞ KOMUTU (.wb)
+  if (command === 'wb') {
+    const cooldown = checkCooldown(message.author.id, 'wb', 20);
+    if (cooldown > 0) {
+      return message.reply(`⏱️ Çok hızlısın! Tekrar savaşmak için **${cooldown} saniye** beklemelisin.`);
+    }
+
+    const monsters = ['👹 Ork', '🐉 Ejderha', '💀 İskelet Şövalye', '🐺 Vahşi Kurt', '🧟 Zombi Reis'];
+    const monsterName = monsters[Math.floor(Math.random() * monsters.length)];
+    const win = Math.random() < 0.6;
+
+    if (win) {
+      const reward = Math.floor(Math.random() * 351) + 150;
+      addCoins(message.author.id, reward);
+      const newBal = getBalance(message.author.id);
+      return message.reply(`⚔️ **Savaş** | <@${message.author.id}>\n\n` +
+                           `💥 **${monsterName}** ile kıyasıya bir savaşa girdin ve **ZAFER** kazandın!\n` +
+                           `💰 Kazanılan: **+${reward} coin**\n💵 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
+    } else {
+      const loss = Math.floor(Math.random() * 101) + 50;
+      addCoins(message.author.id, -loss);
+      const newBal = getBalance(message.author.id);
+      return message.reply(`⚔️ **Savaş** | <@${message.author.id}>\n\n` +
+                           `💀 **${monsterName}** seni bozguna uğrattı ve **YENİLDİN**!\n` +
+                           `💔 Kayıp: **-${loss} coin**\n💵 Yeni Bakiyen: **${newBal.toLocaleString()}** coin.`);
+    }
+  }
+
+  // 23. BLACKJACK KOMUTU (.bj <miktar>)
+  if (command === 'bj') {
+    if (activeBlackjack.has(message.author.id)) {
+      return message.reply('⚠️ Zaten devam eden aktif bir Blackjack oyunun var!');
+    }
+
+    const cooldown = checkCooldown(message.author.id, 'bj', 5);
+    if (cooldown > 0) {
+      return message.reply(`⏱️ Çok hızlısın! Tekrar blackjack oynamak için **${cooldown} saniye** beklemelisin.`);
+    }
+
+    const betInput = args[0];
+    const bet = parseBet(message.author.id, betInput);
+    const balance = getBalance(message.author.id);
+
+    if (bet <= 0) {
+      return message.reply('⚠️ Lütfen geçerli bir bahis miktarı belirtin. Örnek: `.bj 100`, `.bj all`, `.bj half`');
+    }
+    if (balance < bet) {
+      return message.reply(`❌ Yetersiz bakiye! Mevcut bakiyen: **${balance.toLocaleString()}** coin.`);
+    }
+
+    activeBlackjack.add(message.author.id);
+
+    let playerHand = [drawCard(), drawCard()];
+    let dealerHand = [drawCard(), drawCard()];
+
+    let playerScore = calculateHand(playerHand);
+    let dealerScore = calculateHand(dealerHand);
+
+    const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+
+    const getGameEmbed = (isDealerTurn = false) => {
+      const playerCardStr = playerHand.map(c => `\`[ ${c} ]\``).join(' ');
+      const dealerCardStr = isDealerTurn
+        ? dealerHand.map(c => `\`[ ${c} ]\``).join(' ')
+        : `\`[ ${dealerHand[0]} ]\` \`[ ? ]\``;
+
+      const pScore = calculateHand(playerHand);
+      const dScore = isDealerTurn ? calculateHand(dealerHand) : '??';
+
+      return new EmbedBuilder()
+        .setTitle('🃏 Blackjack')
+        .setDescription(`<@${message.author.id}> oyununa başladı! Bahis: **${bet.toLocaleString()} coin**`)
+        .addFields(
+          { name: `🙋 Senin Elin (${pScore})`, value: playerCardStr, inline: true },
+          { name: `🕵️ Kasa Eli (${dScore})`, value: dealerCardStr, inline: true }
+        )
+        .setColor('#2b2d38');
+    };
+
+    if (playerScore === 21) {
+      activeBlackjack.delete(message.author.id);
+      if (dealerScore === 21) {
+        const embed = getGameEmbed(true)
+          .setDescription(`🤝 **Berabere (Push)!** İkinizde de doğal Blackjack var. Bahsin iade edildi.\n💰 Bakiyen: **${balance.toLocaleString()}** coin.`);
+        return message.reply({ embeds: [embed] });
+      } else {
+        const winReward = Math.floor(bet * 1.5);
+        addCoins(message.author.id, winReward);
+        const embed = getGameEmbed(true)
+          .setDescription(`🎉 **Doğal Blackjack!** Kazandın!\n💰 Kazanılan: **+${winReward.toLocaleString()} coin**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`);
+        return message.reply({ embeds: [embed] });
+      }
+    }
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('bj_hit')
+        .setLabel('🃏 Kart Çek (Hit)')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId('bj_stand')
+        .setLabel('🛑 Dur (Stand)')
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    const gameMessage = await message.reply({
+      embeds: [getGameEmbed(false)],
+      components: [row]
+    });
+
+    const collector = gameMessage.createMessageComponentCollector({
+      filter: (i) => i.user.id === message.author.id,
+      time: 45000
+    });
+
+    collector.on('collect', async (interaction) => {
+      if (interaction.customId === 'bj_hit') {
+        playerHand.push(drawCard());
+        playerScore = calculateHand(playerHand);
+
+        if (playerScore > 21) {
+          collector.stop('bust');
+          addCoins(message.author.id, -bet);
+          activeBlackjack.delete(message.author.id);
+
+          const bustEmbed = getGameEmbed(true)
+            .setDescription(`💥 **Bust (21'i aştın)!** Kasa kazandı.\n💔 Kayıp: **-${bet.toLocaleString()} coin**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`)
+            .setColor('#ed4245');
+
+          await interaction.update({ embeds: [bustEmbed], components: [] });
+        } else if (playerScore === 21) {
+          collector.stop('stand_auto');
+          await interaction.deferUpdate();
+          await playDealerTurn(interaction);
+        } else {
+          await interaction.update({ embeds: [getGameEmbed(false)] });
+        }
+      }
+
+      if (interaction.customId === 'bj_stand') {
+        collector.stop('stand');
+        await interaction.deferUpdate();
+        await playDealerTurn(interaction);
+      }
+    });
+
+    collector.on('end', (collected, reason) => {
+      activeBlackjack.delete(message.author.id);
+      if (reason === 'time') {
+        gameMessage.edit({ components: [] }).catch(console.error);
+      }
+    });
+
+    async function playDealerTurn(interaction) {
+      activeBlackjack.delete(message.author.id);
+      while (calculateHand(dealerHand) < 17) {
+        dealerHand.push(drawCard());
+      }
+      dealerScore = calculateHand(dealerHand);
+
+      let finalEmbed = getGameEmbed(true);
+      let desc = '';
+      
+      if (dealerScore > 21) {
+        addCoins(message.author.id, bet);
+        desc = `🎉 **Kasa patladı (Bust)!** Sen kazandın!\n💰 Kazanılan: **+${bet.toLocaleString()} coin**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`;
+        finalEmbed.setColor('#3ba55d');
+      } else if (playerScore > dealerScore) {
+        addCoins(message.author.id, bet);
+        desc = `🎉 **Sen kazandın!** Kasa elinden daha yüksek bir elin var.\n💰 Kazanılan: **+${bet.toLocaleString()} coin**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`;
+        finalEmbed.setColor('#3ba55d');
+      } else if (playerScore < dealerScore) {
+        addCoins(message.author.id, -bet);
+        desc = `😭 **Kasa kazandı!** Kasa eli senin elinden daha yüksek.\n💔 Kayıp: **-${bet.toLocaleString()} coin**\n💵 Yeni Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`;
+        finalEmbed.setColor('#ed4245');
+      } else {
+        desc = `🤝 **Berabere (Push)!** İki tarafın da el değeri eşit. Bahsin iade edildi.\n💰 Bakiyen: **${getBalance(message.author.id).toLocaleString()}** coin.`;
+        finalEmbed.setColor('#faa81a');
+      }
+
+      finalEmbed.setDescription(desc);
+      await gameMessage.edit({ embeds: [finalEmbed], components: [] });
+    }
   }
 });
 
