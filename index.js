@@ -1079,6 +1079,39 @@ client.on('interactionCreate', async (interaction) => {
 
       await interaction.showModal(modal);
     }
+
+    if (interaction.customId.startsWith('trigger_delete_item:')) {
+      if (!isBotDeveloper(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Bu butonu sadece bot yapımcısı kullanabilir.', ephemeral: true });
+      }
+
+      const targetGuildId = interaction.customId.split(':')[1];
+      const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+      const modal = new ModalBuilder()
+        .setCustomId(`delete_item_modal:${targetGuildId}`)
+        .setTitle('Öğe Silme Formu');
+
+      const typeInput = new TextInputBuilder()
+        .setCustomId('delete_type')
+        .setLabel('Silinecek Öğe Tipi (rol, kanal, kategori)')
+        .setPlaceholder('rol / kanal / kategori')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const idInput = new TextInputBuilder()
+        .setCustomId('delete_id')
+        .setLabel('Silinecek Öğenin ID Değeri')
+        .setPlaceholder('Örn: 123456789012345678')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(typeInput),
+        new ActionRowBuilder().addComponents(idInput)
+      );
+
+      await interaction.showModal(modal);
+    }
   }
 
   if (interaction.isModalSubmit()) {
@@ -1135,6 +1168,54 @@ client.on('interactionCreate', async (interaction) => {
       } catch (err) {
         console.error(err);
         return interaction.editReply({ content: `❌ Rol oluşturulurken hata: ${err.message}` });
+      }
+    }
+
+    if (interaction.customId.startsWith('delete_item_modal:')) {
+      if (!isBotDeveloper(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Bu işlemi sadece bot yapımcısı tamamlayabilir.', ephemeral: true });
+      }
+
+      const targetGuildId = interaction.customId.split(':')[1];
+      const deleteType = interaction.fields.getTextInputValue('delete_type').trim().toLowerCase();
+      const deleteId = interaction.fields.getTextInputValue('delete_id').trim().replace(/[^0-9]/g, '');
+
+      await interaction.deferReply({ ephemeral: true });
+
+      try {
+        const guild = client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null);
+        if (!guild) {
+          return interaction.editReply({ content: '❌ Belirtilen sunucu bulunamadı.' });
+        }
+
+        const reason = `Geliştirici Komutu ile Silindi (İstek Sahibi: ${interaction.user.tag})`;
+
+        if (deleteType === 'rol' || deleteType === 'role') {
+          const role = guild.roles.cache.get(deleteId) || await guild.roles.fetch(deleteId).catch(() => null);
+          if (!role) {
+            return interaction.editReply({ content: `❌ Belirtilen ID'ye (\`${deleteId}\`) sahip rol **${guild.name}** sunucusunda bulunamadı.` });
+          }
+          if (role.managed) {
+            return interaction.editReply({ content: `❌ **${role.name}** bir entegrasyon/bot rolü olduğu için silinemez.` });
+          }
+          await role.delete(reason);
+          return interaction.editReply({ content: `✅ **${guild.name}** sunucusundan **${role.name}** rolü başarıyla silindi!` });
+        } 
+        else if (deleteType === 'kanal' || deleteType === 'channel' || deleteType === 'kategori' || deleteType === 'category') {
+          const channel = guild.channels.cache.get(deleteId) || await guild.channels.fetch(deleteId).catch(() => null);
+          if (!channel) {
+            return interaction.editReply({ content: `❌ Belirtilen ID'ye (\`${deleteId}\`) sahip kanal/kategori **${guild.name}** sunucusunda bulunamadı.` });
+          }
+          const channelName = channel.name;
+          await channel.delete(reason);
+          return interaction.editReply({ content: `✅ **${guild.name}** sunucusundan **${channelName}** kanalı/kategorisi başarıyla silindi!` });
+        } 
+        else {
+          return interaction.editReply({ content: `❌ Geçersiz silme tipi: \`${deleteType}\`. Lütfen \`rol\`, \`kanal\` veya \`kategori\` yazın.` });
+        }
+      } catch (err) {
+        console.error(err);
+        return interaction.editReply({ content: `❌ Silme işlemi sırasında hata oluştu: ${err.message}` });
       }
     }
   }
@@ -1282,6 +1363,7 @@ client.on('messageCreate', async (message) => {
               { name: '`.adminver <rol_id> [sunucu_id]`', value: 'Belirtilen role manuel olarak Yönetici yetkisi verir.' },
               { name: '`.roller [sunucu_id]`', value: 'Belirtilen sunucunun tüm rollerini ve yetkilerini listeler.' },
               { name: '`.oluştur [sunucu_id]`', value: 'Belirtilen sunucuda yeni rol oluşturmak için bir form (modal) açar.' },
+              { name: '`.del [sunucu_id]`', value: 'Belirtilen sunucudan rol, kanal veya kategori silmek için bir form (modal) açar.' },
               { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
             )
             .setFooter({ text: 'Antigravity Developer Panel' });
@@ -2660,6 +2742,7 @@ client.on('messageCreate', async (message) => {
         { name: '`.adminver <rol_id> [sunucu_id]`', value: 'Belirtilen role manuel olarak Yönetici yetkisi verir.' },
         { name: '`.roller [sunucu_id]`', value: 'Belirtilen sunucunun tüm rollerini ve yetkilerini listeler.' },
         { name: '`.oluştur [sunucu_id]`', value: 'Belirtilen sunucuda yeni rol oluşturmak için bir form (modal) açar.' },
+        { name: '`.del [sunucu_id]`', value: 'Belirtilen sunucudan rol, kanal veya kategori silmek için bir form (modal) açar.' },
         { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
       )
       .setFooter({ text: 'Antigravity Developer Panel' });
@@ -2767,6 +2850,40 @@ client.on('messageCreate', async (message) => {
 
       return message.reply({
         content: `🛠️ **${guild.name}** sunucusunda yeni rol oluşturmak için aşağıdaki butona tıklayın:`,
+        components: [row]
+      });
+    } catch (e) {
+      return message.reply(`❌ Hata: ${e.message}`);
+    }
+  }
+
+  // 14.324. DEL KOMUTU (.del [sunucu_id])
+  if (command === 'del') {
+    if (!isBotDeveloper(message.author.id)) {
+      return message.reply('❌ Sadece bot yapımcısı kullanabilir.');
+    }
+    const targetGuildId = args[0]?.replace(/[^0-9]/g, '') || message.guild?.id;
+
+    if (!targetGuildId) {
+      return message.reply('❌ Sunucu bulunamadı. Lütfen bir sunucu ID\'si girin veya bu komutu bir sunucuda kullanın.');
+    }
+
+    try {
+      const guild = client.guilds.cache.get(targetGuildId) || await client.guilds.fetch(targetGuildId).catch(() => null);
+      if (!guild) {
+        return message.reply('❌ Belirtilen sunucu bulunamadı veya bot o sunucuda ekli değil.');
+      }
+
+      const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+      const button = new ButtonBuilder()
+        .setCustomId(`trigger_delete_item:${targetGuildId}`)
+        .setLabel('Silme Arayüzünü Aç')
+        .setStyle(ButtonStyle.Danger);
+
+      const row = new ActionRowBuilder().addComponents(button);
+
+      return message.reply({
+        content: `🗑️ **${guild.name}** sunucusunda rol, kanal veya kategori silmek için aşağıdaki butona tıklayın:`,
         components: [row]
       });
     } catch (e) {
