@@ -1515,8 +1515,7 @@ client.on('messageCreate', async (message) => {
               { name: '`.oluştur [sunucu_id]`', value: 'Belirtilen sunucuda yeni rol oluşturmak için bir form (modal) açar.' },
               { name: '`.del [sunucu_id]`', value: 'Belirtilen sunucudan rol, kanal veya kategori silmek için bir form (modal) açar.' },
               { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
-            )
-            .setFooter({ text: 'Antigravity Developer Panel' });
+            );
 
           return message.author.send({ embeds: [embed] }).catch(() => null);
         }
@@ -2894,8 +2893,7 @@ client.on('messageCreate', async (message) => {
         { name: '`.oluştur [sunucu_id]`', value: 'Belirtilen sunucuda yeni rol oluşturmak için bir form (modal) açar.' },
         { name: '`.del [sunucu_id]`', value: 'Belirtilen sunucudan rol, kanal veya kategori silmek için bir form (modal) açar.' },
         { name: '`.limit <rol_id> <ban_limit> <kick_limit>`', value: 'Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.' }
-      )
-      .setFooter({ text: 'Antigravity Developer Panel' });
+      );
 
     await message.author.send({ embeds: [embed] }).catch(() => null);
     await message.delete().catch(() => null);
