@@ -1,3 +1,8 @@
+// ==================== API HOST CONFIGURATION ====================
+const API_BASE = (window.location.protocol === 'file:' || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'))
+    ? 'https://discord-botum-1dbx.onrender.com'
+    : 'http://localhost:3000';
+
 // ==================== MOCK ROLES & LIMIT DATA ====================
 const mockRoles = [
     { id: "1516983424", name: "🛡️ Yönetici", banLimit: 2, kickLimit: 3 },
@@ -123,7 +128,7 @@ document.addEventListener("DOMContentLoaded", () => {
             e.preventDefault();
             const prefix = document.getElementById("setting-prefix").value;
             
-            fetch("http://localhost:3000/api/save-settings", {
+            fetch(API_BASE + "/api/save-settings", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ prefix })
@@ -162,7 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const status = toggleLinkFilter.checked ? "Açıldı" : "Kapatıldı";
             const enabled = toggleLinkFilter.checked;
             
-            fetch("http://localhost:3000/api/toggle-link-filter", {
+            fetch(API_BASE + "/api/toggle-link-filter", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ enabled })
@@ -199,7 +204,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const enabled = togglePanicMode.checked;
             const guildId = activeGuildId;
 
-            fetch("http://localhost:3000/api/toggle-panic", {
+            fetch(API_BASE + "/api/toggle-panic", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ guildId, enabled })
@@ -236,7 +241,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const enabled = toggleRoleSecurity.checked;
             const guildId = activeGuildId;
 
-            fetch("http://localhost:3000/api/toggle-role-security", {
+            fetch(API_BASE + "/api/toggle-role-security", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ guildId, enabled })
@@ -700,7 +705,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 `;
                 
                 tr.querySelector("button").addEventListener("click", () => {
-                    fetch("http://localhost:3000/api/remove-autoresponder", {
+                    fetch(API_BASE + "/api/remove-autoresponder", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ trigger: ar.trigger })
@@ -975,7 +980,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 footer
             };
 
-            fetch("http://localhost:3000/api/save-embed-config", {
+            fetch(API_BASE + "/api/save-embed-config", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(embedPayload)
@@ -1091,7 +1096,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             row.querySelector(".btn-delete").addEventListener("click", () => {
                 if (confirm(`"${emb.name}" gömülü mesajını silmek istediğinize emin misiniz?`)) {
-                    fetch("http://localhost:3000/api/delete-embed-config", {
+                    fetch(API_BASE + "/api/delete-embed-config", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ id: emb.id })
@@ -1218,7 +1223,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function saveAutomodConfigToBackend() {
-        fetch("http://localhost:3000/api/save-automod", {
+        fetch(API_BASE + "/api/save-automod", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(window.automodConfig)
@@ -1318,7 +1323,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
 
-            fetch("http://localhost:3000/api/add-autoresponder", {
+            fetch(API_BASE + "/api/add-autoresponder", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ trigger, response })
