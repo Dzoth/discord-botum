@@ -18,6 +18,7 @@ process.on('uncaughtException', (err, origin) => {
 const { Client, GatewayIntentBits, PermissionFlagsBits, EmbedBuilder, Partials } = require('discord.js');
 const ms = require('ms');
 const config = require('./config');
+config.prefix = '.';
 const fs = require('fs');
 
 let botOwners = [];
@@ -277,7 +278,10 @@ function exportServerData() {
     guilds: [],
     autoresponders: autoresponders,
     savedEmbeds: savedEmbeds,
-    automod: automodConfig
+    automod: automodConfig,
+    config: {
+      roles: config.roles
+    }
   };
   
   client.guilds.cache.forEach(guild => {
@@ -1077,11 +1081,7 @@ client.on('messageCreate', async (message) => {
   const msgLower = message.content.toLowerCase().trim();
   const arRule = autoresponders.find(rule => rule.trigger.toLowerCase() === msgLower);
   if (arRule) {
-    const embed = new EmbedBuilder()
-      .setTitle(arRule.trigger)
-      .setDescription(arRule.response)
-      .setColor('#5865f2');
-    await message.reply({ embeds: [embed] });
+    await message.reply(arRule.response);
     return;
   }
 
@@ -3000,6 +3000,47 @@ const apiServer = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && req.url.startsWith('/api/server-data')) {
+    const data = {
+      guilds: [],
+      autoresponders: autoresponders,
+      savedEmbeds: savedEmbeds,
+      automod: automodConfig,
+      config: {
+        roles: config.roles
+      }
+    };
+    
+    client.guilds.cache.forEach(guild => {
+      const channels = [];
+      guild.channels.cache.forEach(channel => {
+        if (channel.type === 0) {
+          channels.push({
+            id: channel.id,
+            name: channel.name
+          });
+        }
+      });
+
+      const roles = [];
+      guild.roles.cache.forEach(role => {
+        roles.push({
+          id: role.id,
+          name: role.name
+        });
+      });
+
+      data.guilds.push({
+        id: guild.id,
+        name: guild.name,
+        channels: channels,
+        roles: roles
+      });
+    });
+
+    return sendJSON(200, data);
+  }
+
   if (req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -3136,15 +3177,24 @@ const apiServer = http.createServer((req, res) => {
         }
 
         if (req.url === '/api/save-settings') {
-          const { prefix } = params;
-          if (prefix) {
-            config.prefix = prefix;
+          const { maleRole, femaleRole } = params;
+          let changed = false;
+          if (maleRole) {
+            config.roles.erkek = maleRole;
+            changed = true;
+          }
+          if (femaleRole) {
+            config.roles.kiz = femaleRole;
+            changed = true;
+          }
+          if (changed) {
+            config.prefix = '.';
             try {
               fs.writeFileSync('config.js', `module.exports = ${JSON.stringify(config, null, 2)};`, 'utf8');
+              logEvent("INFO", "Config", `Registration roles updated via website`);
             } catch (err) {
               console.error('Failed to write config.js:', err);
             }
-            logEvent("INFO", "Config", `Prefix updated to '${prefix}' via website`);
           }
           return sendJSON(200, { success: true });
         }

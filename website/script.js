@@ -126,34 +126,43 @@ document.addEventListener("DOMContentLoaded", () => {
     if (settingsForm) {
         settingsForm.addEventListener("submit", (e) => {
             e.preventDefault();
-            const prefix = document.getElementById("setting-prefix").value;
+            const maleRole = document.getElementById("setting-male-role").value.trim();
+            const femaleRole = document.getElementById("setting-female-role").value.trim();
             
             fetch(API_BASE + "/api/save-settings", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prefix })
+                body: JSON.stringify({ maleRole, femaleRole })
             })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    showToast(`Genel ayarlar kaydedildi! Ön ek: ${prefix}`, "success");
+                    showToast("Genel kayıt ayarları başarıyla kaydedildi!", "success");
                     pushNewLog({
                         type: "system",
-                        title: "Ayarlar Güncellendi",
+                        title: "Kayıt Ayarları Güncellendi",
                         mod: "Config",
-                        msg: `Genel ayarlar kurucu tarafından güncellendi. Prefix: '${prefix}'`,
+                        msg: `Kayıt rolleri güncellendi. Erkek: '${maleRole}', Kız: '${femaleRole}'`,
                         status: "Başarılı"
                     });
+                    
+                    // Sync locally
+                    if (window.guildsData) {
+                        if (!window.guildsData.config) window.guildsData.config = {};
+                        if (!window.guildsData.config.roles) window.guildsData.config.roles = {};
+                        window.guildsData.config.roles.erkek = maleRole;
+                        window.guildsData.config.roles.kiz = femaleRole;
+                    }
                 }
             })
             .catch(() => {
                 // Offline fallback
-                showToast(`Genel ayarlar kaydedildi! Ön ek: ${prefix} (Simülasyon)`, "success");
+                showToast("Genel kayıt ayarları kaydedildi! (Simülasyon)", "success");
                 pushNewLog({
                     type: "system",
-                    title: "Ayarlar Güncellendi",
+                    title: "Kayıt Ayarları Güncellendi",
                     mod: "Config",
-                    msg: `Genel ayarlar kurucu tarafından güncellendi. Prefix: '${prefix}'`,
+                    msg: `Kayıt rolleri güncellendi. Erkek: '${maleRole}', Kız: '${femaleRole}'`,
                     status: "Başarılı (Simülasyon)"
                 });
             });
@@ -632,6 +641,14 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
+        // 3.6. Load config settings into UI
+        if (window.guildsData && window.guildsData.config && window.guildsData.config.roles) {
+            const maleInput = document.getElementById("setting-male-role");
+            const femaleInput = document.getElementById("setting-female-role");
+            if (maleInput) maleInput.value = window.guildsData.config.roles.erkek || "";
+            if (femaleInput) femaleInput.value = window.guildsData.config.roles.kiz || "";
+        }
+
         // 4. Update the "Sunucularım" view list to match active state
         const serversListGrid = document.querySelector(".servers-list-grid");
         if (serversListGrid) {
@@ -747,7 +764,24 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function loadServerData() {
-        // Dynamic script element injection to bypass CORS on file:// protocol
+        // Try fetching server-data directly from live API first
+        fetch(API_BASE + "/api/server-data?t=" + Date.now())
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.guilds && data.guilds.length > 0) {
+                    window.guildsData = data;
+                    allGuilds = data.guilds;
+                    updateDashboardGuilds();
+                } else {
+                    loadServerDataFallback();
+                }
+            })
+            .catch(() => {
+                loadServerDataFallback();
+            });
+    }
+
+    function loadServerDataFallback() {
         const scriptId = "dynamic-server-data-script";
         let script = document.getElementById(scriptId);
         if (script) {
