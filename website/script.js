@@ -379,8 +379,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const auditSettingsGrid = document.getElementById("audit-toggles-grid");
     const auditChannelSection = document.querySelector(".audit-channel-section");
 
-    // Load saved settings or use defaults
-    let auditConfig = {
+    const fallbackAuditConfig = {
         enabled: false,
         channel: "",
         options: {
@@ -411,32 +410,79 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
-    const savedConfig = localStorage.getItem("antigravity_audit_config");
-    if (savedConfig) {
-        try {
-            auditConfig = JSON.parse(savedConfig);
-        } catch (e) {
-            console.error("Failed to parse saved audit config:", e);
+    window.loadAuditConfigIntoUI = function(config) {
+        if (!config) config = fallbackAuditConfig;
+        
+        if (auditGlobalToggle) {
+            auditGlobalToggle.checked = !!config.enabled;
+            toggleAuditUIState(config.enabled);
         }
+        
+        if (auditChannelSelect) {
+            auditChannelSelect.value = config.channel || "";
+        }
+        
+        Object.keys(fallbackAuditConfig.options).forEach(optId => {
+            const checkbox = document.getElementById(optId);
+            if (checkbox) {
+                checkbox.checked = config.options && config.options[optId] !== undefined ? !!config.options[optId] : false;
+            }
+        });
+    };
+
+    function saveAuditConfigToBackend() {
+        const config = {
+            enabled: auditGlobalToggle ? auditGlobalToggle.checked : false,
+            channel: auditChannelSelect ? auditChannelSelect.value : "",
+            options: {}
+        };
+        
+        Object.keys(fallbackAuditConfig.options).forEach(optId => {
+            const checkbox = document.getElementById(optId);
+            config.options[optId] = checkbox ? checkbox.checked : false;
+        });
+        
+        fetch(API_BASE + "/api/save-audit-config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                guildId: activeGuildId,
+                config: config
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                if (window.guildsData) {
+                    if (!window.guildsData.auditLog) window.guildsData.auditLog = {};
+                    window.guildsData.auditLog[activeGuildId] = JSON.parse(JSON.stringify(config));
+                }
+            }
+        })
+        .catch(() => {
+            console.log("Audit log config saved (Simülasyon)", config);
+            if (window.guildsData) {
+                if (!window.guildsData.auditLog) window.guildsData.auditLog = {};
+                window.guildsData.auditLog[activeGuildId] = JSON.parse(JSON.stringify(config));
+            }
+        });
     }
 
-    // Apply config to UI
-    if (auditGlobalToggle) {
-        auditGlobalToggle.checked = auditConfig.enabled;
-        
-        // Update visual disabled states
-        toggleAuditUIState(auditConfig.enabled);
+    // Apply config to UI initially
+    const initialConfig = (window.guildsData && window.guildsData.auditLog && window.guildsData.auditLog[activeGuildId]) || fallbackAuditConfig;
+    loadAuditConfigIntoUI(initialConfig);
 
+    if (auditGlobalToggle) {
         auditGlobalToggle.addEventListener("change", () => {
-            auditConfig.enabled = auditGlobalToggle.checked;
-            toggleAuditUIState(auditConfig.enabled);
-            saveAuditConfig();
+            const isEnabled = auditGlobalToggle.checked;
+            toggleAuditUIState(isEnabled);
+            saveAuditConfigToBackend();
             
-            const status = auditConfig.enabled ? "Açıldı" : "Kapatıldı";
-            showToast(`Denetim Kaydı ${status}!`, auditConfig.enabled ? "success" : "error");
+            const status = isEnabled ? "Açıldı" : "Kapatıldı";
+            showToast(`Denetim Kaydı ${status}!`, isEnabled ? "success" : "error");
             
             pushNewLog({
-                type: auditConfig.enabled ? "success" : "warning",
+                type: isEnabled ? "success" : "warning",
                 title: "Denetim Kaydı Durumu",
                 mod: "AuditLog",
                 msg: `Denetim kaydı sistemi kurucu tarafından ${status.toLowerCase()}.`,
@@ -446,11 +492,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (auditChannelSelect) {
-        auditChannelSelect.value = auditConfig.channel;
-        
         auditChannelSelect.addEventListener("change", () => {
-            auditConfig.channel = auditChannelSelect.value;
-            saveAuditConfig();
+            saveAuditConfigToBackend();
             const channelName = auditChannelSelect.options[auditChannelSelect.selectedIndex].text;
             showToast(`Log kanalı güncellendi: ${channelName}`, "success");
             
@@ -464,15 +507,12 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Apply option toggles
-    Object.keys(auditConfig.options).forEach(optId => {
+    // Apply option toggles change listeners
+    Object.keys(fallbackAuditConfig.options).forEach(optId => {
         const checkbox = document.getElementById(optId);
         if (checkbox) {
-            checkbox.checked = auditConfig.options[optId];
-            
             checkbox.addEventListener("change", () => {
-                auditConfig.options[optId] = checkbox.checked;
-                saveAuditConfig();
+                saveAuditConfigToBackend();
                 
                 const labelText = checkbox.closest(".audit-toggle-item").querySelector("span").textContent;
                 const status = checkbox.checked ? "Aktif" : "Pasif";
@@ -497,10 +537,6 @@ document.addEventListener("DOMContentLoaded", () => {
             if (auditChannelSection) auditChannelSection.classList.add("audit-settings-disabled");
             if (auditSettingsGrid) auditSettingsGrid.classList.add("audit-settings-disabled");
         }
-    }
-
-    function saveAuditConfig() {
-        localStorage.setItem("antigravity_audit_config", JSON.stringify(auditConfig));
     }
 
     // ==================== DYNAMIC CHANNELS & ROLES POPULATION (MATCHING discord guild) ====================
@@ -546,6 +582,98 @@ document.addEventListener("DOMContentLoaded", () => {
                 kufur: { enabled: false, exemptChannels: [], exemptRoles: [] },
                 link: { enabled: false, exemptChannels: [], exemptRoles: [] },
                 kayitsizCikisBan: { enabled: false }
+            }
+        },
+        auditLog: {
+            "1513978496311885874": {
+                enabled: false,
+                channel: "",
+                options: {
+                    "opt-member-join": false,
+                    "opt-member-leave": false,
+                    "opt-username-update": false,
+                    "opt-member-roles-update": false,
+                    "opt-member-mute": false,
+                    "opt-member-ban": false,
+                    "opt-member-unban": false,
+                    "opt-mod-mute": false,
+                    "opt-mod-unmute": false,
+                    "opt-mod-ban": false,
+                    "opt-mod-unban": false,
+                    "opt-mod-kick": false,
+                    "opt-message-update": false,
+                    "opt-message-delete": false,
+                    "opt-guild-update": false,
+                    "opt-emoji-create": false,
+                    "opt-emoji-update": false,
+                    "opt-emoji-delete": false,
+                    "opt-channel-create": false,
+                    "opt-channel-update": false,
+                    "opt-channel-delete": false,
+                    "opt-role-create": false,
+                    "opt-role-update": false,
+                    "opt-role-delete": false
+                }
+            },
+            "1513978496311885875": {
+                enabled: false,
+                channel: "",
+                options: {
+                    "opt-member-join": false,
+                    "opt-member-leave": false,
+                    "opt-username-update": false,
+                    "opt-member-roles-update": false,
+                    "opt-member-mute": false,
+                    "opt-member-ban": false,
+                    "opt-member-unban": false,
+                    "opt-mod-mute": false,
+                    "opt-mod-unmute": false,
+                    "opt-mod-ban": false,
+                    "opt-mod-unban": false,
+                    "opt-mod-kick": false,
+                    "opt-message-update": false,
+                    "opt-message-delete": false,
+                    "opt-guild-update": false,
+                    "opt-emoji-create": false,
+                    "opt-emoji-update": false,
+                    "opt-emoji-delete": false,
+                    "opt-channel-create": false,
+                    "opt-channel-update": false,
+                    "opt-channel-delete": false,
+                    "opt-role-create": false,
+                    "opt-role-update": false,
+                    "opt-role-delete": false
+                }
+            },
+            "1515069697492516955": {
+                enabled: false,
+                channel: "",
+                options: {
+                    "opt-member-join": false,
+                    "opt-member-leave": false,
+                    "opt-username-update": false,
+                    "opt-member-roles-update": false,
+                    "opt-member-mute": false,
+                    "opt-member-ban": false,
+                    "opt-member-unban": false,
+                    "opt-mod-mute": false,
+                    "opt-mod-unmute": false,
+                    "opt-mod-ban": false,
+                    "opt-mod-unban": false,
+                    "opt-mod-kick": false,
+                    "opt-message-update": false,
+                    "opt-message-delete": false,
+                    "opt-guild-update": false,
+                    "opt-emoji-create": false,
+                    "opt-emoji-update": false,
+                    "opt-emoji-delete": false,
+                    "opt-channel-create": false,
+                    "opt-channel-update": false,
+                    "opt-channel-delete": false,
+                    "opt-role-create": false,
+                    "opt-role-update": false,
+                    "opt-role-delete": false
+                }
             }
         },
         guilds: [
@@ -726,6 +854,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 loadAutomodConfigIntoUI(guildAutomod);
             } else {
                 loadAutomodConfigIntoUI(fallbackAutomodConfig);
+            }
+        }
+
+        // 3.5.1. Load Audit Log Config into UI per server
+        if (typeof loadAuditConfigIntoUI === "function") {
+            if (window.guildsData && window.guildsData.auditLog) {
+                const guildAudit = window.guildsData.auditLog[activeGuildId] || fallbackAuditConfig;
+                loadAuditConfigIntoUI(guildAudit);
+            } else {
+                loadAuditConfigIntoUI(fallbackAuditConfig);
             }
         }
 

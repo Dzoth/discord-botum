@@ -260,6 +260,96 @@ function saveAccountFilterConfig() {
 
 loadAccountFilterConfig();
 
+let auditLogConfig = {};
+
+function getDefaultAuditLogOptions() {
+  return {
+    "opt-member-join": false,
+    "opt-member-leave": false,
+    "opt-username-update": false,
+    "opt-member-roles-update": false,
+    "opt-member-mute": false,
+    "opt-member-ban": false,
+    "opt-member-unban": false,
+    "opt-mod-mute": false,
+    "opt-mod-unmute": false,
+    "opt-mod-ban": false,
+    "opt-mod-unban": false,
+    "opt-mod-kick": false,
+    "opt-message-update": false,
+    "opt-message-delete": false,
+    "opt-guild-update": false,
+    "opt-emoji-create": false,
+    "opt-emoji-update": false,
+    "opt-emoji-delete": false,
+    "opt-channel-create": false,
+    "opt-channel-update": false,
+    "opt-channel-delete": false,
+    "opt-role-create": false,
+    "opt-role-update": false,
+    "opt-role-delete": false
+  };
+}
+
+function getDefaultAuditLogConfig() {
+  return {
+    enabled: false,
+    channel: "",
+    options: getDefaultAuditLogOptions()
+  };
+}
+
+function getGuildAuditLogConfig(guildId) {
+  if (!guildId) return getDefaultAuditLogConfig();
+  
+  if (!auditLogConfig[guildId]) {
+    auditLogConfig[guildId] = getDefaultAuditLogConfig();
+  }
+  
+  const gConfig = auditLogConfig[guildId];
+  if (gConfig.enabled === undefined) gConfig.enabled = false;
+  if (gConfig.channel === undefined) gConfig.channel = "";
+  if (!gConfig.options) gConfig.options = getDefaultAuditLogOptions();
+  
+  return gConfig;
+}
+
+function getCleanAuditLogConfig() {
+  const clean = {};
+  for (const key in auditLogConfig) {
+    clean[key] = auditLogConfig[key];
+  }
+  if (client) {
+    client.guilds.cache.forEach(guild => {
+      if (!clean[guild.id]) {
+        clean[guild.id] = getGuildAuditLogConfig(guild.id);
+      }
+    });
+  }
+  return clean;
+}
+
+function loadAuditLogConfig() {
+  try {
+    if (fs.existsSync('denetim_ayarlari.json')) {
+      const content = fs.readFileSync('denetim_ayarlari.json', 'utf8').trim();
+      auditLogConfig = content ? JSON.parse(content) : {};
+    }
+  } catch (e) {
+    console.error("loadAuditLogConfig error:", e);
+  }
+}
+
+function saveAuditLogConfig() {
+  try {
+    fs.writeFileSync('denetim_ayarlari.json', JSON.stringify(auditLogConfig, null, 2), 'utf8');
+  } catch (e) {
+    console.error("saveAuditLogConfig error:", e);
+  }
+}
+
+loadAuditLogConfig();
+
 let coinData = {};
 function loadCoinData() {
   try {
@@ -523,6 +613,7 @@ function exportServerData() {
     autoresponders: autoresponders,
     savedEmbeds: savedEmbeds,
     automod: getCleanAutomodConfig(),
+    auditLog: getCleanAuditLogConfig(),
     kayitAyarlari: kayitAyarlari,
     accountFilter: accountFilterConfig,
     config: {
@@ -4625,6 +4716,7 @@ const apiServer = http.createServer((req, res) => {
       autoresponders: autoresponders,
       savedEmbeds: savedEmbeds,
       automod: getCleanAutomodConfig(),
+      auditLog: getCleanAuditLogConfig(),
       kayitAyarlari: kayitAyarlari,
       accountFilter: accountFilterConfig,
       config: {
@@ -5048,6 +5140,22 @@ const apiServer = http.createServer((req, res) => {
           saveAutomodConfig();
           exportServerData();
           logEvent("INFO", "Automod", `Automod configuration updated via website for guild ${guildId}`);
+          return sendJSON(200, { success: true });
+        }
+
+        if (req.url === '/api/save-audit-config') {
+          const { guildId, config: newConfig } = params;
+          if (!guildId) {
+            return sendJSON(400, { error: 'guildId is required' });
+          }
+          auditLogConfig[guildId] = {
+            enabled: !!newConfig.enabled,
+            channel: newConfig.channel || '',
+            options: newConfig.options || getDefaultAuditLogOptions()
+          };
+          saveAuditLogConfig();
+          exportServerData();
+          logEvent("INFO", "AuditLog", `Audit Log config updated via website for guild ${guildId}`);
           return sendJSON(200, { success: true });
         }
 
