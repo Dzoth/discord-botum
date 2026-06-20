@@ -3847,25 +3847,7 @@ client.on('messageCreate', async (message) => {
     }
 
     try {
-      const statusMsg = await message.reply('⏳ Güvenlik Protokolü başlatıldı. Sunucu şablon yedeği alınıyor, kanallar kilitleniyor ve yetkiler devre dışı bırakılıyor...');
-
-      // 1. Sunucu Şablonu Oluşturma / Alma (discord.new şablonu)
-      let templateLink = 'Alınamadı (Yetki eksik olabilir)';
-      try {
-        let template;
-        const existingTemplates = await guild.templates.fetch().catch(() => null);
-        if (existingTemplates && existingTemplates.size > 0) {
-          template = existingTemplates.first();
-          template = await template.sync().catch(() => template);
-        } else {
-          template = await guild.templates.create({ name: `${guild.name} Protokol Yedeği` }).catch(() => null);
-        }
-        if (template) {
-          templateLink = `https://discord.new/${template.code}`;
-        }
-      } catch (templateErr) {
-        console.error('Template error:', templateErr);
-      }
+      const statusMsg = await message.reply('⏳ Güvenlik Protokolü başlatıldı. Kanallar kilitleniyor ve yetkiler devre dışı bırakılıyor...');
 
       // 2. Yetki Deaktif Etme (Lockdown)
       const botMember = await guild.members.fetch(client.user.id).catch(() => null);
@@ -3952,7 +3934,6 @@ client.on('messageCreate', async (message) => {
       }
 
       const dmContent = `🚨 **${guild.name}** sunucusunda Güvenlik Protokolü başarıyla çalıştırıldı!\n\n` +
-                        `📋 **Sunucu Şablon Yedeği (Discord Template Link):**\n🔗 ${templateLink}\n\n` +
                         `🔒 Yetki erişimi olan tüm alt yönetici rollerinin izinleri deaktif edildi ve kanallar mesaj gönderimine kapatıldı.\n` +
                         `ℹ️ Protokolü kapatıp yetkileri eski haline getirmek için: \`.guvenlikkapat ${guild.id}\`${skippedWarning}`;
 
@@ -3965,7 +3946,7 @@ client.on('messageCreate', async (message) => {
       if (skippedRoles.size > 0) {
         await statusMsg.edit(`⚠️ **Güvenlik Protokolü** tamamlandı fakat bazı yönetici rolleri hiyerarşi nedeniyle kapatılamadı. Detaylar DM ile gönderildi.`);
       } else {
-        await statusMsg.edit(`✅ **Güvenlik Protokolü** başarıyla tamamlandı. Şablon yedek linki ve yönergeler özel mesaj (DM) ile gönderildi.`);
+        await statusMsg.edit(`✅ **Güvenlik Protokolü** başarıyla tamamlandı. Yönergeler özel mesaj (DM) ile gönderildi.`);
       }
     } catch (err) {
       console.error(err);
