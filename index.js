@@ -3570,11 +3570,33 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ Lütfen geçerli bir sayı girin. Örnek: `.sil 10`');
     }
 
-    const limit = Math.min(amount + 1, 100);
+    if (amount > 500) {
+      return message.reply('⚠️ Tek seferde en fazla 500 mesaj silebilirsiniz!');
+    }
+
+    // First delete the command trigger message
+    await message.delete().catch(() => null);
+
+    let remaining = amount;
+    let totalDeleted = 0;
 
     try {
-      const deleted = await message.channel.bulkDelete(limit, true);
-      const msg = await message.channel.send(`✅ ${deleted.size - 1} mesaj başarıyla silindi.`);
+      while (remaining > 0) {
+        const batchSize = Math.min(remaining, 100);
+        const deleted = await message.channel.bulkDelete(batchSize, true);
+        totalDeleted += deleted.size;
+        
+        if (deleted.size < batchSize) {
+          break;
+        }
+        
+        remaining -= batchSize;
+        if (remaining > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      const msg = await message.channel.send(`✅ ${totalDeleted} mesaj başarıyla silindi.`);
       setTimeout(() => {
         msg.delete().catch(console.error);
       }, 3000);
