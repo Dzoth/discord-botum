@@ -243,9 +243,9 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             output_lines.append("--- Render yt-dlp Diagnostic ---")
             
             import yt_dlp
-            # Test video
-            url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-            clients = ['mweb', 'web_embedded', 'ios', 'android', 'tv', 'web']
+            # Test music video
+            url = "https://www.youtube.com/watch?v=YNIl8-eNWfQ"
+            clients = ['android_music', 'android', 'mweb', 'web_embedded', 'ios', 'tv', 'web']
             
             for client in clients:
                 ydl_opts = {
