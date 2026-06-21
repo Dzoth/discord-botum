@@ -3,9 +3,8 @@ const fs = require('fs');
 const { Readable } = require('stream');
 
 // Provide the custom JavaScript evaluator to resolve deciphering failures in Node
-Platform.shim.eval = (data, env) => {
-  const code = typeof data === 'string' ? data : data.output;
-  return new Function(...Object.keys(env), code)(...Object.values(env));
+Platform.shim.eval = async (data) => {
+  return new Function(data.output)();
 };
 
 async function main() {

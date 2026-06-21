@@ -673,7 +673,7 @@ load_kufurler()
 # --- BOT OLAY DİNLEYİCİLERİ (EVENT LISTENERS) ---
 @bot.event
 async def on_ready():
-    print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [System] Bot ready as {bot.user}. Guilds: {len(bot.guilds)}")
+    log_event("INFO", "System", f"Bot ready as {bot.user}. Guilds: {len(bot.guilds)}")
 
 @bot.event
 async def on_message(message):
