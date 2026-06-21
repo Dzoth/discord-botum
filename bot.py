@@ -243,31 +243,36 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             output_lines.append("--- Render yt-dlp Diagnostic ---")
             
             import yt_dlp
-            # Test music video
-            url = "https://www.youtube.com/watch?v=YNIl8-eNWfQ"
-            clients = ['android_music', 'android', 'mweb', 'web_embedded', 'ios', 'tv', 'web']
-            
-            for client in clients:
-                ydl_opts = {
-                    'format': 'bestaudio/best',
-                    'quiet': True,
-                    'no_warnings': True,
-                    'nocheckcertificate': True,
-                    'extractor_args': {
-                        'youtube': {
-                            'player_client': [client]
-                        }
+            query = "ytsearch3:Model Mey"
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'quiet': True,
+                'no_warnings': True,
+                'nocheckcertificate': True,
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android']
                     }
                 }
-                try:
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        output_lines.append(f"Testing client: {client}")
-                        info = ydl.extract_info(url, download=False)
-                        stream_url = info.get('url')
-                        title = info.get('title')
-                        output_lines.append(f"  SUCCESS! Title: {title} | Stream URL: {stream_url[:50]}...")
-                except Exception as e:
-                    output_lines.append(f"  FAILED: {str(e)[:150]}")
+            }
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(query, download=False)
+                    entries = info.get('entries', [])
+                    output_lines.append(f"Found {len(entries)} results for search.")
+                    for idx, entry in enumerate(entries):
+                        video_id = entry.get('id')
+                        video_title = entry.get('title')
+                        output_lines.append(f"Result {idx+1}: {video_title} (ID: {video_id})")
+                        try:
+                            video_url = f"https://www.youtube.com/watch?v={video_id}"
+                            v_info = ydl.extract_info(video_url, download=False)
+                            stream_url = v_info.get('url')
+                            output_lines.append(f"  SUCCESS! Stream URL: {stream_url[:50]}...")
+                        except Exception as ve:
+                            output_lines.append(f"  FAILED: {str(ve)[:100]}")
+            except Exception as e:
+                output_lines.append(f"Search failed: {e}")
             
             self.wfile.write("\n".join(output_lines).encode("utf-8"))
         else:
