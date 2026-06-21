@@ -2067,7 +2067,8 @@ async def yardim_command(ctx):
         value="`.spo [@üye]` : Dinlenen Spotify şarkısını ilerleme çubuğuyla gösterir.\n"
               "`.acv [@üye]` : Detaylı oyun oynama sürelerini ve giriş serisini raporlar.\n"
               "`.adamasmaca` : Bulunduğunuz kanalda adam asmaca oyunu başlatır.\n"
-              "`.play` : Ses kanalında şarkı arama ve oynatma menüsü açar.",
+              "`.play` : Ses kanalında şarkı arama ve oynatma menüsü açar.\n"
+              "`.stop` : Çalan şarkıyı durdurur ve ses kanalından ayrılır.",
         inline=False
     )
     embed.set_footer(text="Ön ek (prefix) her zaman nokta (.) olmak zorundadır.")
@@ -2464,6 +2465,23 @@ async def play_command(ctx, *, query: str = None):
     except Exception as e:
         print(f"Direct Play Search Error: {e}")
         await status_msg.edit(content="❌ Arama yapılırken bir hata oluştu.")
+
+@bot.command(name="stop")
+async def stop_command(ctx):
+    voice_client = ctx.guild.voice_client
+    if not voice_client:
+        await ctx.reply("❌ Bot zaten herhangi bir ses kanalında değil.")
+        return
+        
+    if not ctx.author.voice or ctx.author.voice.channel != voice_client.channel:
+        await ctx.reply("⚠️ Bu komutu kullanmak için bot ile aynı ses kanalında olmalısınız!")
+        return
+
+    if voice_client.is_playing() or voice_client.is_paused():
+        voice_client.stop()
+        
+    await voice_client.disconnect()
+    await ctx.reply("⏹️ Müzik durduruldu ve ses kanalından ayrılındı.")
 
 @bot.command(name="adamasmaca")
 async def adamasmaca_command(ctx):
