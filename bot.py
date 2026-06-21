@@ -2289,11 +2289,11 @@ async def play_command(ctx, *, query: str = None):
     except Exception as e:
         print(f"Voice client error: {e}")
 
-    # Case 1: Pull from Spotify Presence (if query is None or "spotify"/"spo")
+    # Case 1: Pull from Spotify Presence (if query is explicitly "spotify" or "spo")
     is_explicit_spotify = query and query.strip().lower() in ("spotify", "spo")
     
-    spotify_song_details = None
-    if not query or is_explicit_spotify:
+    if is_explicit_spotify:
+        spotify_song_details = None
         # Check active Spotify presence
         for act in ctx.author.activities:
             if isinstance(act, discord.Spotify):
@@ -2303,7 +2303,6 @@ async def play_command(ctx, *, query: str = None):
                 }
                 break
 
-    if is_explicit_spotify:
         if not spotify_song_details:
             await ctx.reply("❌ Şu anda Discord'da aktif olarak Spotify dinlemiyorsunuz!")
             return
@@ -2313,14 +2312,9 @@ async def play_command(ctx, *, query: str = None):
         return
 
     if not query:  # Just ".play"
-        if spotify_song_details:
-            status_msg = await ctx.reply(f"🔍 Spotify'ınızda çalan **{spotify_song_details['title']} - {spotify_song_details['artist']}** şarkısı YouTube'da aranıyor...")
-            await play_song_directly(ctx, spotify_song_details['title'], spotify_song_details['artist'], "spotify_presence", status_msg)
-            return
-        else:
-            view = SearchTriggerView(ctx.author.id)
-            await ctx.reply("🔍 YouTube ve Spotify'da arama yapmak ve müzik çalmak için aşağıdaki butona tıklayın (sadece sizin görebileceğiniz gizli arama kutusu açılacaktır):", view=view)
-            return
+        view = SearchTriggerView(ctx.author.id)
+        await ctx.reply("🔍 YouTube ve Spotify'da arama yapmak ve müzik çalmak için aşağıdaki butona tıklayın (sadece sizin görebileceğiniz gizli arama kutusu açılacaktır):", view=view)
+        return
 
     # Case 2: Query is provided
     spotify_enabled = os.getenv("SPOTIFY_CLIENT_ID") and os.getenv("SPOTIFY_CLIENT_SECRET")
