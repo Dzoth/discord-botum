@@ -1352,11 +1352,12 @@ async def perform_unified_search(query):
     # Spotify Search (up to 3 results)
     spotify_results = await search_spotify(query)
     
-    # YouTube Search (up to 3 results)
+    # YouTube Search (up to 6 results if Spotify is disabled, otherwise 3)
+    limit = 6 if not spotify_results else 3
     yt_results = []
     try:
         search_data = search_youtube_nodejs(query)
-        for item in search_data[:3]:  # Limit to 3 results
+        for item in search_data[:limit]:
             yt_results.append({
                 "title": item.get("title") or "Bilinmeyen Şarkı",
                 "uploader": item.get("uploader") or "Bilinmeyen Kanal",
@@ -1379,12 +1380,9 @@ class SongSelect(discord.ui.Select):
             url = entry.get('url', '')
             source = entry.get('source', 'youtube')
 
-            if source == "spotify":
-                label = f"🎵 [Spotify] {title}"
-                desc = f"Sanatçı: {uploader}"
-            else:
-                label = f"🎥 [YouTube] {title}"
-                desc = f"Kanal: {uploader}"
+            # Make all options look like clean music tracks
+            label = f"🎵 {title}"
+            desc = f"Sanatçı: {uploader}"
 
             options.append(
                 discord.SelectOption(
@@ -1418,10 +1416,10 @@ class SongSelect(discord.ui.Select):
             await interaction.followup.send("❌ Şarkı seçimi doğrulanırken bir hata oluştu.", ephemeral=True)
             return
 
-        title_clean = selected_option.label.replace("🎵 [Spotify] ", "").replace("🎥 [YouTube] ", "")
+        title_clean = selected_option.label.replace("🎵 ", "")
         artist_clean = selected_option.description.replace("Sanatçı: ", "").replace("Kanal: ", "")
         
-        is_spotify = "spotify" in url.lower() or "spotify" in selected_option.label.lower()
+        is_spotify = "spotify" in url.lower()
         source_name = "spotify_search" if is_spotify else "youtube_search"
 
         import uuid
@@ -1489,13 +1487,10 @@ class SongSelect(discord.ui.Select):
 
             embed = discord.Embed(
                 title=f"▶️ Oynatılıyor: {title_clean}",
-                description=f"👤 **Sanatçı:** {artist_clean}\n🎵 **Kaynak:** {'Spotify' if is_spotify else 'YouTube'}\n\n`▶️ 🔘───────────────────`",
-                color=discord.Color.from_rgb(29, 185, 84) if is_spotify else discord.Color.red()
+                description=f"👤 **Sanatçı:** {artist_clean}\n🎵 **Kaynak:** Spotify Premium\n\n`▶️ 🔘───────────────────`",
+                color=discord.Color.from_rgb(29, 185, 84)
             )
-            if is_spotify:
-                embed.set_thumbnail(url="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png")
-            else:
-                embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/YouTube_full-color_icon_%282017%29.svg/1024px-YouTube_full-color_icon_%282017%29.svg.png")
+            embed.set_thumbnail(url="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png")
             
             await interaction.channel.send(content=f"🎶 **{title_clean}** oynatılıyor...", embed=embed)
             
