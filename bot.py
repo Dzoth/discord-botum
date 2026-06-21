@@ -242,6 +242,16 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             output_lines = []
             output_lines.append("--- Render yt-dlp Diagnostic ---")
             
+            import subprocess
+            node_status = "Not checked"
+            try:
+                node_ver = subprocess.run(["node", "-v"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+                node_status = f"Node.js installed: {node_ver.stdout.strip()}"
+            except Exception as ne:
+                node_status = f"Node.js not found/failed: {ne}"
+            
+            output_lines.append(f"Environment: {node_status}")
+            
             import yt_dlp
             query = "ytsearch3:Model Mey"
             ydl_opts = {
