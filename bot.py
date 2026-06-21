@@ -3560,6 +3560,32 @@ async def ust_command(ctx, role_id: int = None, guild_id: int = None):
     view = RoleMoveTargetSelectView(role_to_move, roles, ctx.author.id)
     await ctx.reply(f"🔄 **{role_to_move.name}** rolünü taşımak istediğiniz hedef rolü seçin (Sunucu: **{guild.name}**):", view=view)
 
+@bot.command(name="güncelle")
+@is_developer()
+async def guncelle_command(ctx):
+    status_msg = await ctx.reply("🔄 Güncellemeler kontrol ediliyor ve indiriliyor...")
+    try:
+        import subprocess
+        res = await asyncio.to_thread(
+            subprocess.run,
+            ["git", "pull"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8',
+            errors='ignore',
+            timeout=30
+        )
+        if "Already up to date" in res.stdout or "Already up-to-date" in res.stdout:
+            await status_msg.edit(content="✅ Bot zaten en güncel sürümde.")
+            return
+            
+        await status_msg.edit(content=f"📥 **Güncellemeler indirildi!** Bot yeniden başlatılıyor...\n```\n{res.stdout}\n```")
+        import sys
+        sys.exit(0)
+    except Exception as e:
+        await status_msg.edit(content=f"❌ Güncelleme sırasında bir hata oluştu: {e}")
+
 # --- ANA CALISTIRMA ---
 if __name__ == "__main__":
     if not TOKEN:
