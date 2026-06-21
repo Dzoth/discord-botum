@@ -1356,13 +1356,19 @@ class SongSelect(discord.ui.Select):
             import yt_dlp
             
             # If it is a Spotify URL, search YouTube under the hood
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'quiet': True,
+                'no_warnings': True,
+                'nocheckcertificate': True,
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'ios']
+                    }
+                }
+            }
             if is_spotify:
                 search_query = f"ytsearch1:{title_clean} {artist_clean}"
-                ydl_opts = {
-                    'format': 'bestaudio/best',
-                    'quiet': True,
-                    'no_warnings': True,
-                }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(search_query, download=False)
                     entries = info.get('entries', [])
@@ -1371,11 +1377,6 @@ class SongSelect(discord.ui.Select):
                         return
                     stream_url = entries[0].get('url')
             else:
-                ydl_opts = {
-                    'format': 'bestaudio/best',
-                    'quiet': True,
-                    'no_warnings': True,
-                }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=False)
                     stream_url = info.get('url')
@@ -1446,13 +1447,17 @@ class SearchModal(discord.ui.Modal, title="Şarkı Ara ve Oynat"):
             entries = await perform_unified_search(query)
 
             if not entries:
-                await interaction.followup.send("❌ Herhangi bir platformda eşleşen bir şarkı bulunamadı.", ephemeral=True)
+                spotify_enabled = os.getenv("SPOTIFY_CLIENT_ID") and os.getenv("SPOTIFY_CLIENT_SECRET")
+                note = "" if spotify_enabled else "\n💡 *Spotify araması devre dışı (Aktifleştirmek için SPOTIFY_CLIENT_ID ve SPOTIFY_CLIENT_SECRET ekleyin!)*"
+                await interaction.followup.send(f"❌ Herhangi bir platformda eşleşen bir şarkı bulunamadı.{note}", ephemeral=True)
                 return
 
             view = SongSelectView(entries, self.executor_id, self.original_msg)
             await interaction.followup.send("Lütfen çalmak istediğiniz şarkıyı seçin:", view=view, ephemeral=True)
         except Exception as e:
-            print(f"Search Error: {e}")
+            import traceback
+            err_tb = traceback.format_exc()
+            log_event("ERROR", "Music", f"Search Modal Error: {e}\n{err_tb}")
             await interaction.followup.send("❌ Arama yapılırken bir hata oluştu.", ephemeral=True)
 
 class SearchTriggerView(discord.ui.View):
@@ -2213,6 +2218,12 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
             'format': 'bestaudio/best',
             'quiet': True,
             'no_warnings': True,
+            'nocheckcertificate': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios']
+                }
+            }
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(search_query, download=False)
@@ -2312,7 +2323,9 @@ async def play_command(ctx, *, query: str = None):
             return
 
     # Case 2: Query is provided
-    status_msg = await ctx.reply(f"🔍 **{query}** için YouTube ve Spotify taranıyor...")
+    spotify_enabled = os.getenv("SPOTIFY_CLIENT_ID") and os.getenv("SPOTIFY_CLIENT_SECRET")
+    note = "" if spotify_enabled else "\n💡 *Spotify araması devre dışı (Aktifleştirmek için SPOTIFY_CLIENT_ID ve SPOTIFY_CLIENT_SECRET ekleyin!)*"
+    status_msg = await ctx.reply(f"🔍 **{query}** için YouTube ve Spotify taranıyor...{note}")
     try:
         entries = await perform_unified_search(query)
         if not entries:
