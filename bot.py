@@ -2469,13 +2469,25 @@ async def play_command(ctx, *, query: str = None):
 @bot.command(name="stop")
 async def stop_command(ctx):
     voice_client = ctx.guild.voice_client
+    bot_member = ctx.guild.me
+    is_ghost = False
+    
+    # Handle ghost connection (bot physically in channel but voice_client is None)
+    if not voice_client and bot_member.voice and bot_member.voice.channel:
+        is_ghost = True
+        try:
+            voice_client = await bot_member.voice.channel.connect()
+        except Exception as e:
+            log_event("WARNING", "Music", f"Failed to connect to resolve ghost voice connection: {e}")
+
     if not voice_client:
         await ctx.reply("❌ Bot zaten herhangi bir ses kanalında değil.")
         return
         
-    if not ctx.author.voice or ctx.author.voice.channel != voice_client.channel:
-        await ctx.reply("⚠️ Bu komutu kullanmak için bot ile aynı ses kanalında olmalısınız!")
-        return
+    if not is_ghost:
+        if not ctx.author.voice or ctx.author.voice.channel != voice_client.channel:
+            await ctx.reply("⚠️ Bu komutu kullanmak için bot ile aynı ses kanalında olmalısınız!")
+            return
 
     if voice_client.is_playing() or voice_client.is_paused():
         voice_client.stop()
