@@ -1333,6 +1333,20 @@ class BlackjackView(discord.ui.View):
             pass
 
 # 5. Play Şarkı Seçim Arayüzü (.play)
+# --- NODEJS SEARCH HELPER ---
+def search_youtube_nodejs(query):
+    try:
+        cmd = ["node", "search.js", query]
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=15)
+        if res.returncode == 0:
+            return json.loads(res.stdout)
+        else:
+            print(f"Node search failed: {res.stderr}")
+            return []
+    except Exception as e:
+        print(f"Node search exception: {e}")
+        return []
+
 # --- UNIFIED SEARCH HELPER ---
 async def perform_unified_search(query):
     # Spotify Search (up to 3 results)
@@ -1341,24 +1355,14 @@ async def perform_unified_search(query):
     # YouTube Search (up to 3 results)
     yt_results = []
     try:
-        import yt_dlp
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'noplaylist': True,
-            'quiet': True,
-            'extract_flat': True,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch3:{query}", download=False)
-            entries = info.get('entries', [])
-            for entry in entries:
-                if entry:
-                    yt_results.append({
-                        "title": entry.get("title") or "Bilinmeyen Şarkı",
-                        "uploader": entry.get("uploader") or entry.get("channel") or "Bilinmeyen Kanal",
-                        "url": f"https://www.youtube.com/watch?v={entry.get('id')}" if entry.get('id') else entry.get('url'),
-                        "source": "youtube"
-                    })
+        search_data = search_youtube_nodejs(query)
+        for item in search_data[:3]:  # Limit to 3 results
+            yt_results.append({
+                "title": item.get("title") or "Bilinmeyen Şarkı",
+                "uploader": item.get("uploader") or "Bilinmeyen Kanal",
+                "url": item.get("url") or f"https://www.youtube.com/watch?v={item.get('id')}",
+                "source": "youtube"
+            })
     except Exception as e:
         print(f"YouTube search error: {e}")
 
@@ -1423,43 +1427,21 @@ class SongSelect(discord.ui.Select):
         import uuid
         temp_filename = f"temp_{guild.id}_{uuid.uuid4().hex}.mp3"
         try:
-            import yt_dlp
-            
-            # If it is a Spotify URL, search YouTube under the hood
+            # If it is a Spotify URL, search YouTube under the hood using our Node.js helper
             if is_spotify:
-                search_query = f"ytsearch1:{title_clean} {artist_clean}"
-                ydl_opts = {
-                    'format': 'bestaudio/best',
-                    'quiet': True,
-                    'no_warnings': True,
-                    'nocheckcertificate': True,
-                    'extractor_args': {
-                        'youtube': {
-                            'player_client': ['android']
-                        }
-                    }
-                }
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(search_query, download=False)
-                    entries = info.get('entries', [])
-                    if not entries:
-                        await interaction.followup.send("❌ Bu Spotify şarkısı YouTube'da bulunamadı.", ephemeral=True)
-                        return
-                    video_id = entries[0].get('id')
+                search_query = f"{title_clean} {artist_clean}"
+                results = search_youtube_nodejs(search_query)
+                if not results:
+                    await interaction.followup.send("❌ Bu Spotify şarkısı YouTube'da bulunamadı.", ephemeral=True)
+                    return
+                video_id = results[0].get('id')
             else:
                 video_id = extract_video_id(url)
                 if not video_id:
-                    search_query = f"ytsearch1:{title_clean} {artist_clean}"
-                    ydl_opts = {
-                        'format': 'bestaudio/best',
-                        'quiet': True,
-                        'no_warnings': True,
-                    }
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        info = ydl.extract_info(search_query, download=False)
-                        entries = info.get('entries', [])
-                        if entries:
-                            video_id = entries[0].get('id')
+                    search_query = f"{title_clean} {artist_clean}"
+                    results = search_youtube_nodejs(search_query)
+                    if results:
+                        video_id = results[0].get('id')
 
             if not video_id:
                 await interaction.followup.send("❌ Video ID tespit edilemedi.", ephemeral=True)
@@ -2319,26 +2301,12 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
     import uuid
     temp_filename = f"temp_{guild.id}_{uuid.uuid4().hex}.mp3"
     try:
-        import yt_dlp
-        search_query = f"ytsearch1:{title} {artist}"
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'quiet': True,
-            'no_warnings': True,
-            'nocheckcertificate': True,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android']
-                }
-            }
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(search_query, download=False)
-            entries = info.get('entries', [])
-            if not entries:
-                await status_msg.edit(content="❌ Şarkı YouTube'da bulunamadı.")
-                return
-            video_id = entries[0].get('id')
+        search_query = f"{title} {artist}"
+        results = search_youtube_nodejs(search_query)
+        if not results:
+            await status_msg.edit(content="❌ Şarkı YouTube'da bulunamadı.")
+            return
+        video_id = results[0].get('id')
 
         if not video_id:
             await status_msg.edit(content="❌ Video ID tespit edilemedi.")

@@ -1,6 +1,12 @@
-const { Innertube } = require('youtubei.js');
+const { Innertube, Platform } = require('youtubei.js');
 const fs = require('fs');
 const { Readable } = require('stream');
+
+// Provide the custom JavaScript evaluator to resolve deciphering failures in Node
+Platform.shim.eval = (data, env) => {
+  const code = typeof data === 'string' ? data : data.output;
+  return new Function(...Object.keys(env), code)(...Object.values(env));
+};
 
 async function main() {
   const args = process.argv.slice(2);
@@ -16,14 +22,34 @@ async function main() {
     console.log(`[DOWNLOAD] Initializing Innertube...`);
     const yt = await Innertube.create();
     
-    console.log(`[DOWNLOAD] Fetching info for Video ID: ${videoId} using client: TV`);
-    const info = await yt.getInfo(videoId, { client: 'TV' });
+    let info = null;
+    let stream = null;
+    let success = false;
+    let lastError = null;
     
-    console.log(`[DOWNLOAD] Downloading audio...`);
-    const stream = await info.download({
-      type: 'audio',
-      quality: 'best'
-    });
+    // Try multiple clients in order
+    const clients = ['TV', 'WEB', 'ANDROID'];
+    
+    for (const client of clients) {
+      try {
+        console.log(`[DOWNLOAD] Attempting Video ID: ${videoId} using client: ${client}`);
+        info = await yt.getInfo(videoId, { client });
+        stream = await info.download({
+          type: 'audio',
+          quality: 'best'
+        });
+        success = true;
+        console.log(`[DOWNLOAD] Stream obtained successfully with client: ${client}`);
+        break;
+      } catch (err) {
+        lastError = err;
+        console.error(`[DOWNLOAD] Client ${client} failed: ${err.message || err}`);
+      }
+    }
+    
+    if (!success) {
+      throw lastError || new Error("All clients failed to download stream");
+    }
     
     const nodeStream = Readable.fromWeb(stream);
     const writeStream = fs.createWriteStream(outputPath);
