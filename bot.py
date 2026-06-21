@@ -2390,51 +2390,21 @@ async def play_command(ctx, *, query: str = None):
     except Exception as e:
         print(f"Voice client error: {e}")
 
-    # Check for Spotify Presence if query is empty or explicitly "spotify"/"spo"
-    check_spotify_presence = not query or (query and query.strip().lower() in ("spotify", "spo"))
-    
-    if check_spotify_presence:
-        spotify_song_details = None
-        # Check active Spotify presence
-        for act in ctx.author.activities:
-            if isinstance(act, discord.Spotify):
-                spotify_song_details = {
-                    "title": act.title,
-                    "artist": act.artist,
-                }
-                break
-
-        if spotify_song_details:
-            status_msg = await ctx.reply(f"🔍 Spotify'ınızda çalan **{spotify_song_details['title']} - {spotify_song_details['artist']}** şarkısı YouTube'da aranıyor...")
-            await play_song_directly(ctx, spotify_song_details['title'], spotify_song_details['artist'], "spotify_presence", status_msg)
-            return
-        elif query and query.strip().lower() in ("spotify", "spo"):
-            # Explicitly requested spotify but not playing
-            await ctx.reply("❌ Şu anda Discord'da aktif olarak Spotify dinlemiyorsunuz!")
-            return
-
-    # If no query and not playing Spotify, warn the user
-    if not query:
-        await ctx.reply("⚠️ Lütfen çalmak istediğiniz şarkı adını girin veya bilgisayarınızda Spotify açıp müzik dinleyin!\n👉 Örnek: `.play Duman - Yanıbaşıma` veya `.play spotify`")
+    if not query:  # Just ".play"
+        view = SearchTriggerView(ctx.author.id)
+        await ctx.reply("🎶 YouTube'da arama yapmak ve müzik çalmak için aşağıdaki butona tıklayın:", view=view)
         return
 
-    # Direct play: Query is provided
-    status_msg = await ctx.reply(f"🔍 **{query}** aranıyor...")
+    # Query is provided
+    status_msg = await ctx.reply(f"🔍 **{query}** için YouTube ve Spotify taranıyor...")
     try:
         entries = await perform_unified_search(query)
         if not entries:
-            await status_msg.edit(content="❌ Herhangi bir platformda eşleşen bir şarkı bulunamadı.")
+            await status_msg.edit(content="❌ Eşleşen bir şarkı bulunamadı.")
             return
 
-        # Play the first match directly!
-        entry = entries[0]
-        title_clean = entry['title']
-        artist_clean = entry['uploader']
-        is_spotify = entry.get('source') == 'spotify'
-        source_name = "spotify_search" if is_spotify else "youtube_search"
-
-        await status_msg.edit(content=f"⏳ **{title_clean} - {artist_clean}** indiriliyor ve hazırlanıyor...")
-        await play_song_directly(ctx, title_clean, artist_clean, source_name, status_msg)
+        view = SongSelectView(entries, ctx.author.id, status_msg)
+        await status_msg.edit(content="Lütfen çalmak istediğiniz şarkıyı seçin:", view=view)
     except Exception as e:
         print(f"Direct Play Search Error: {e}")
         await status_msg.edit(content="❌ Arama yapılırken bir hata oluştu.")
