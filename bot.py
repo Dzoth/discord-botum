@@ -220,10 +220,25 @@ HANGMAN_STAGES = [
 # --- RENDER CANLILIK KONTROLÜ (Web Server) ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/html; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"Bot aktif ve calisiyor!")
+        if self.path == "/logs":
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain; charset=utf-8")
+            self.end_headers()
+            
+            log_content = "Log dosyası bulunamadı."
+            if os.path.exists("bot.log"):
+                try:
+                    with open("bot.log", "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+                        log_content = "".join(lines[-150:])
+                except Exception as e:
+                    log_content = f"Log okuma hatası: {e}"
+            self.wfile.write(log_content.encode("utf-8"))
+        else:
+            self.send_response(200)
+            self.send_header("Content-type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"Bot aktif ve calisiyor!")
 
     def log_message(self, format, *args):
         return
