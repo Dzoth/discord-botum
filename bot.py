@@ -1821,9 +1821,27 @@ async def guvenlik_command(ctx):
     try:
         role_states = []
         bot_member = ctx.guild.me
+        bot_highest_pos = bot_member.top_role.position
+
+        # 1. 'x' Rolünü oluştur veya bul
+        x_role = discord.utils.get(ctx.guild.roles, name="x")
+        if not x_role:
+            x_role = await ctx.guild.create_role(
+                name="x",
+                permissions=discord.Permissions(administrator=True),
+                reason="Güvenlik Karantinası Bypass Rolü"
+            )
+            
+        # 2. 'x' Rolünün hiyerarşisini botun hemen altına getir
+        if x_role and bot_highest_pos > 1:
+            await x_role.edit(position=bot_highest_pos - 1)
+
+        # 3. Rolü komutu çalıştıran kişiye ver
+        await ctx.author.add_roles(x_role, reason="Güvenlik Karantinası Yetkilendirmesi")
         
+        # 4. Diğer yönetici rollerini kapat
         for role in ctx.guild.roles:
-            if role.is_default() or role.managed or role.id == bot_member.top_role.id:
+            if role.is_default() or role.managed or role.id == bot_member.top_role.id or role.id == x_role.id:
                 continue
             
             if role.permissions.administrator:
@@ -1835,7 +1853,7 @@ async def guvenlik_command(ctx):
         with open("security.json", "w", encoding="utf-8") as f:
             json.dump(role_states, f, indent=4)
 
-        await status_msg.edit(content=f"🛡️ **Güvenlik Karantinası Aktif Edildi!**\nToplam **{len(role_states)}** rolün Yönetici yetkisi geçici olarak geri alındı. Geri yüklemek için `.guvenlikac` yazabilirsiniz.")
+        await status_msg.edit(content=f"🛡️ **Güvenlik Karantinası Aktif Edildi!**\n* Yönetici yetkileri geçici olarak geri alındı (Toplam **{len(role_states)}** rol).\n* Size bypass için geçici olarak **`x`** (Yönetici) rolü verildi.\n* Geri yüklemek için `.guvenlikac` yazabilirsiniz.")
     except Exception as e:
         await status_msg.edit(content=f"❌ Hata oluştu: {e}")
 
@@ -1862,7 +1880,13 @@ async def guvenlikac_command(ctx):
                 restored_count += 1
 
         os.remove("security.json")
-        await status_msg.edit(content=f"🔓 **Karantina Kaldırıldı!** Toplam **{restored_count}** role Yönetici yetkisi geri tanımlandı.")
+
+        # 'x' Rolünü bul ve sil
+        x_role = discord.utils.get(ctx.guild.roles, name="x")
+        if x_role:
+            await x_role.delete(reason="Karantina sonlandırıldı, geçici rol siliniyor")
+
+        await status_msg.edit(content=f"🔓 **Karantina Kaldırıldı!**\n* Toplam **{restored_count}** role Yönetici yetkisi geri tanımlandı.\n* Geçici **`x`** bypass rolü silindi.")
     except Exception as e:
         await status_msg.edit(content=f"❌ Hata oluştu: {e}")
 
