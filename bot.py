@@ -1450,31 +1450,42 @@ class SongSelect(discord.ui.Select):
         import uuid
         temp_filename = f"temp_{guild.id}_{uuid.uuid4().hex}.mp3"
         try:
-            # If it is a Spotify URL, search YouTube under the hood using our Node.js helper
-            if is_spotify:
+            # Resolve video_id and download with fallback
+            success = False
+            err_msg = ""
+            tried_ids = []
+
+            # Determine initial video_id to try
+            selected_video_id = None
+            if not is_spotify:
+                selected_video_id = extract_video_id(url)
+
+            if selected_video_id:
+                log_event("INFO", "Music", f"Attempting download for selected YouTube video (ID: {selected_video_id})")
+                success, err_msg = download_with_youtubeijs(selected_video_id, temp_filename)
+                tried_ids.append(selected_video_id)
+
+            if not success:
+                # Search YouTube and try alternative results
                 search_query = f"{title_clean} {artist_clean}"
                 results = search_youtube_nodejs(search_query)
-                if not results:
-                    await interaction.followup.send("❌ Bu Spotify şarkısı YouTube'da bulunamadı.", ephemeral=True)
-                    return
-                video_id = results[0].get('id')
-            else:
-                video_id = extract_video_id(url)
-                if not video_id:
-                    search_query = f"{title_clean} {artist_clean}"
-                    results = search_youtube_nodejs(search_query)
-                    if results:
-                        video_id = results[0].get('id')
+                if results:
+                    for i, item in enumerate(results[:3]):
+                        alt_video_id = item.get('id')
+                        if not alt_video_id or alt_video_id in tried_ids:
+                            continue
+                        log_event("INFO", "Music", f"Attempting fallback download for {title_clean} (Try {i+1}/3, ID: {alt_video_id})")
+                        success, err_msg = download_with_youtubeijs(alt_video_id, temp_filename)
+                        tried_ids.append(alt_video_id)
+                        if success:
+                            log_event("INFO", "Music", f"Successfully downloaded fallback {title_clean} (ID: {alt_video_id})")
+                            break
+                        else:
+                            log_event("WARNING", "Music", f"Fallback download failed for ID {alt_video_id}: {err_msg}")
 
-            if not video_id:
-                await interaction.followup.send("❌ Video ID tespit edilemedi.", ephemeral=True)
-                return
-
-            # Download using youtubei.js
-            success, err_msg = download_with_youtubeijs(video_id, temp_filename)
             if not success:
-                log_event("ERROR", "Music", f"Innertube Download failed for ID {video_id}: {err_msg}")
-                await interaction.followup.send(f"❌ Şarkı indirilirken hata oluştu. Lütfen tekrar deneyin.", ephemeral=True)
+                log_event("ERROR", "Music", f"All fallback downloads failed for {title_clean}. Last error: {err_msg}")
+                await interaction.followup.send(f"❌ Şarkı indirilemedi (Yaş kısıtlaması veya engelleme nedeniyle). Alternatif aramalar da başarısız oldu.", ephemeral=True)
                 if os.path.exists(temp_filename):
                     try: os.remove(temp_filename)
                     except: pass
@@ -2344,17 +2355,24 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
         if not results:
             await status_msg.edit(content="❌ Şarkı YouTube'da bulunamadı.")
             return
-        video_id = results[0].get('id')
+        # Download with fallback
+        success = False
+        err_msg = ""
+        for i, item in enumerate(results[:3]):
+            video_id = item.get('id')
+            if not video_id:
+                continue
+            log_event("INFO", "Music", f"Attempting direct download for {title} (Try {i+1}/3, ID: {video_id})")
+            success, err_msg = download_with_youtubeijs(video_id, temp_filename)
+            if success:
+                log_event("INFO", "Music", f"Successfully downloaded fallback {title} (ID: {video_id})")
+                break
+            else:
+                log_event("WARNING", "Music", f"Direct download failed for ID {video_id}: {err_msg}")
 
-        if not video_id:
-            await status_msg.edit(content="❌ Video ID tespit edilemedi.")
-            return
-
-        # Download using youtubei.js
-        success, err_msg = download_with_youtubeijs(video_id, temp_filename)
         if not success:
-            log_event("ERROR", "Music", f"Innertube Direct Download failed for ID {video_id}: {err_msg}")
-            await status_msg.edit(content=f"❌ Şarkı indirilirken hata oluştu. Lütfen tekrar deneyin.")
+            log_event("ERROR", "Music", f"All fallback downloads failed for direct play of {title}. Last error: {err_msg}")
+            await status_msg.edit(content=f"❌ Şarkı indirilemedi (Yaş kısıtlaması veya engelleme nedeniyle). Alternatif aramalar da başarısız oldu.")
             if os.path.exists(temp_filename):
                 try: os.remove(temp_filename)
                 except: pass
