@@ -1405,7 +1405,9 @@ class SongSelect(discord.ui.Select):
                 except:
                     pass
         except Exception as e:
-            print(f"Play Error: {e}")
+            import traceback
+            err_tb = traceback.format_exc()
+            log_event("ERROR", "Music", f"Play Error: {e}\n{err_tb}")
             await interaction.followup.send("❌ Şarkı oynatılırken bir hata oluştu.", ephemeral=True)
 
 class SongSelectView(discord.ui.View):
@@ -2239,7 +2241,9 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
         except:
             pass
     except Exception as e:
-        print(f"Direct Play Error: {e}")
+        import traceback
+        err_tb = traceback.format_exc()
+        log_event("ERROR", "Music", f"Direct Play Error: {e}\n{err_tb}")
         await status_msg.edit(content="❌ Şarkı oynatılırken bir hata oluştu.")
 
 # 7. Müzik & Oyun Komutları
