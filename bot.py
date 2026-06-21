@@ -67,10 +67,33 @@ async def get_spotify_token():
         print(f"Error fetching Spotify token: {e}")
     return None
 
+def search_spotify_anonymous_sync(query):
+    try:
+        from spotify_scraper import SpotifyClient
+        with SpotifyClient() as client:
+            hits = client.search(query, types=("track",), limit=3)
+            results = []
+            for t in hits.tracks:
+                artists = ", ".join([a.name for a in t.artists]) if hasattr(t, 'artists') else 'Bilinmeyen Sanatçı'
+                url = getattr(t, 'url', '')
+                results.append({
+                    "title": t.name,
+                    "uploader": artists,  # mapping to "uploader" to reuse existing Select logic
+                    "url": url,
+                    "source": "spotify"
+                })
+            return results
+    except Exception as e:
+        print(f"Spotify anonymous search error: {e}")
+        return []
+
+async def search_spotify_anonymous(query):
+    return await asyncio.to_thread(search_spotify_anonymous_sync, query)
+
 async def search_spotify(query):
     token = await get_spotify_token()
     if not token:
-        return []
+        return await search_spotify_anonymous(query)
     try:
         url = "https://api.spotify.com/v1/search"
         headers = {"Authorization": f"Bearer {token}"}
@@ -90,9 +113,11 @@ async def search_spotify(query):
                             "source": "spotify"
                         })
                     return results
+                else:
+                    print(f"Spotify Auth failed status: {response.status}")
     except Exception as e:
         print(f"Spotify search error: {e}")
-    return []
+    return await search_spotify_anonymous(query)
 
 def log_played_song(title, artist, source, user):
     try:
