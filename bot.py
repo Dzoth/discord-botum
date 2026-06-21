@@ -1821,7 +1821,6 @@ async def guvenlik_command(ctx):
     try:
         role_states = []
         bot_member = ctx.guild.me
-        bot_highest_pos = bot_member.top_role.position
 
         # 1. 'x' Rolünü oluştur veya bul
         x_role = discord.utils.get(ctx.guild.roles, name="x")
@@ -1833,6 +1832,7 @@ async def guvenlik_command(ctx):
             )
             
         # 2. 'x' Rolünün hiyerarşisini botun hemen altına getir
+        bot_highest_pos = ctx.guild.me.top_role.position
         if x_role and bot_highest_pos > 1:
             await x_role.edit(position=bot_highest_pos - 1)
 
@@ -1899,7 +1899,6 @@ async def guvenlikprotokolu_command(ctx):
     try:
         guild = ctx.guild
         bot_member = guild.me
-        bot_highest_pos = bot_member.top_role.position
         
         # 1. Kanalların yetki yedeklerini al (logla)
         save_channel_states(guild)
@@ -1914,6 +1913,7 @@ async def guvenlikprotokolu_command(ctx):
             )
             
         # 3. 'x' Rolünün hiyerarşisini botun hemen altına getir
+        bot_highest_pos = guild.me.top_role.position
         if x_role and bot_highest_pos > 1:
             await x_role.edit(position=bot_highest_pos - 1)
 
