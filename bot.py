@@ -2971,17 +2971,47 @@ async def roller_command(ctx, target_guild_id: int = None):
 @is_developer()
 async def ozel_command(ctx):
     embed = discord.Embed(
-        title="🛠️ Bot Geliştirici Özel Komutları",
+        title="🛠️ Geliştirici Yönetim Paneli",
+        description="Geliştirici özel komutları ve tüm genel bot komutları aşağıda listelenmiştir:",
         color=discord.Color.blurple()
     )
-    embed.add_field(name="`.yaz <kanal_id> <mesaj>`", value="Belirtilen kanala bot adına mesaj gönderir.", inline=False)
-    embed.add_field(name="`.adminver <rol_id> [sunucu_id]`", value="Belirtilen role Yönetici yetkisi verir.", inline=False)
-    embed.add_field(name="`.roller [sunucu_id]`", value="Belirtilen sunucunun tüm rollerini listeler.", inline=False)
-    embed.add_field(name="`.olustur [sunucu_id]`", value="Buton ve modal ile yeni bir rol oluşturur.", inline=False)
-    embed.add_field(name="`.del [sunucu_id]`", value="Sunucudan rol, kanal veya kategori silmek için panel açar.", inline=False)
-    embed.add_field(name="`.ust <taşınacak_rol_id> [sunucu_id]`", value="Belirtilen rolü başka bir rolün üstüne/altına taşır.", inline=False)
-    embed.add_field(name="`.güvenlikprotokolü`", value="Tüm sunucuyu acil durum moduna alır (karantina).", inline=False)
-    embed.add_field(name="`.protokolüaç`", value="Sunucu karantina durumunu çözer ve eski haline getirir.", inline=False)
+    
+    tum_komutlar = (
+        "**🛡️ Yetkili & Mod**\n"
+        "`.ban` `.kick` `.mute` `.unmute`\n"
+        "`.lock` `.unlock` `.sil` `.sicil`\n"
+        "`.e` `.k` `.vip` `.rolver` `.rolal`\n"
+        "`.limit` `.owner` `.yardim`\n\n"
+        "**💰 Ekonomi & OwO**\n"
+        "`.coin` `.daily` `.cf` `.ws` `.bj`\n"
+        "`.wh` `.zoo` `.sell` `.send`\n"
+        "`.profile` `.top`\n\n"
+        "**🎮 Genel & Müzik**\n"
+        "`.spo` `.acv` `.adamasmaca`\n"
+        "`.play` `.stop`"
+    )
+    
+    bana_ozeller = (
+        "`.yaz <kanal> <mesaj>`\n"
+        "Bot adına mesaj gönderir.\n\n"
+        "`.adminver <rol> [sunucu]`\n"
+        "Role Yönetici yetkisi verir.\n\n"
+        "`.roller [sunucu]`\n"
+        "Sunucu rollerini listeler.\n\n"
+        "`.olustur [sunucu]`\n"
+        "Yeni bir rol oluşturur.\n\n"
+        "`.del [sunucu]`\n"
+        "Rol/kanal silme paneli açar.\n\n"
+        "`.ust <rol> [sunucu]`\n"
+        "Rol sırasını değiştirir.\n\n"
+        "`.güvenlikprotokolü`\n"
+        "Sunucuyu karantinaya alır.\n\n"
+        "`.protokolüaç`\n"
+        "Karantinayı kaldırır."
+    )
+    
+    embed.add_field(name="📖 Tüm Genel Komutlar", value=tum_komutlar, inline=True)
+    embed.add_field(name="🛠️ Bana Özel Komutlar", value=bana_ozeller, inline=True)
     
     try:
         await ctx.author.send(embed=embed)
