@@ -1823,7 +1823,7 @@ async def guvenlik_command(ctx):
         bot_member = ctx.guild.me
         
         for role in ctx.guild.roles:
-            if role.is_default() or role.managed or role.id == bot_member.roles.highest.id:
+            if role.is_default() or role.managed or role.id == bot_member.top_role.id:
                 continue
             
             if role.permissions.administrator:
@@ -1875,7 +1875,7 @@ async def guvenlikprotokolu_command(ctx):
     try:
         guild = ctx.guild
         bot_member = guild.me
-        bot_highest_pos = bot_member.roles.highest.position
+        bot_highest_pos = bot_member.top_role.position
         
         # 1. Kanalların yetki yedeklerini al (logla)
         save_channel_states(guild)
@@ -1901,7 +1901,7 @@ async def guvenlikprotokolu_command(ctx):
         # 5. Diğer tüm rolleri tara ve Yönetici yetkisini kapat
         role_states = []
         for role in guild.roles:
-            if role.managed or role.id == bot_member.roles.highest.id or role.is_default() or role.id == x_role.id:
+            if role.managed or role.id == bot_member.top_role.id or role.is_default() or role.id == x_role.id:
                 continue
             
             if role.permissions.administrator:
@@ -2849,7 +2849,7 @@ class DeleteTypeSelect(discord.ui.Select):
         bot_member = self.guild.me
         
         if selected_type == "role":
-            bot_highest = bot_member.roles.highest.position
+            bot_highest = bot_member.top_role.position
             roles = [r for r in self.guild.roles if not r.managed and not r.is_default() and r.position < bot_highest]
             if not roles:
                 await interaction.followup.send("❌ Silinebilecek uygun rol bulunamadı.", ephemeral=True)
@@ -3024,7 +3024,7 @@ async def ust_command(ctx, role_id: int = None, guild_id: int = None):
         await ctx.reply("❌ Taşınacak rol bulunamadı.")
         return
         
-    bot_highest = guild.me.roles.highest.position
+    bot_highest = guild.me.top_role.position
     if role_to_move.position >= bot_highest:
         await ctx.reply(f"❌ **{role_to_move.name}** rolü botun hiyerarşisinin üstünde veya aynı hizada olduğu için taşınamaz.")
         return
