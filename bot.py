@@ -1525,7 +1525,7 @@ class SongSelect(discord.ui.Select):
 
             embed = discord.Embed(
                 title=f"▶️ Oynatılıyor: {title_clean}",
-                description=f"👤 **Sanatçı:** {artist_clean}\n🎵 **Kaynak:** Spotify Premium\n\n`▶️ 🔘───────────────────`",
+                description=f"👤 **Sanatçı:** {artist_clean}\n🎵 **Kaynak:** Spotify Premium",
                 color=discord.Color.from_rgb(29, 185, 84)
             )
             embed.set_thumbnail(url="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png")
@@ -2415,7 +2415,7 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
 
         embed = discord.Embed(
             title=f"▶️ Oynatılıyor: {title}",
-            description=f"👤 **Sanatçı:** {artist}\n🎵 **Kaynak:** Spotify (Profil Durumu)\n\n`▶️ 🔘───────────────────`",
+            description=f"👤 **Sanatçı:** {artist}\n🎵 **Kaynak:** Spotify (Profil Durumu)",
             color=discord.Color.from_rgb(29, 185, 84)
         )
         embed.set_thumbnail(url="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png")
@@ -2453,7 +2453,7 @@ async def play_command(ctx, *, query: str = None):
 
     if not query:  # Just ".play"
         view = SearchTriggerView(ctx.author.id)
-        await ctx.reply("🎶 YouTube'da arama yapmak ve müzik çalmak için aşağıdaki butona tıklayın:", view=view)
+        await ctx.reply("🎶 Şarkı aratmak için aşağıdaki butona tıklayın:", view=view)
         return
 
     # Query is provided
