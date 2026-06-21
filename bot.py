@@ -155,7 +155,7 @@ def extract_video_id(url):
 def download_with_youtubeijs(video_id, output_path):
     try:
         cmd = ["node", "downloader.js", video_id, output_path]
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore', timeout=60)
         if res.returncode == 0:
             return True, res.stdout
         else:
@@ -1362,7 +1362,7 @@ class BlackjackView(discord.ui.View):
 def search_youtube_nodejs(query):
     try:
         cmd = ["node", "search.js", query]
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=15)
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore', timeout=15)
         if res.returncode == 0:
             return json.loads(res.stdout)
         else:

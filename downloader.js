@@ -37,12 +37,28 @@ async function main() {
           type: 'audio',
           quality: 'best'
         });
+        
+        // Pipe and consume the stream inside the loop to verify it works
+        const nodeStream = Readable.fromWeb(stream);
+        const writeStream = fs.createWriteStream(outputPath);
+        
+        await new Promise((resolve, reject) => {
+          nodeStream.pipe(writeStream);
+          nodeStream.on('error', (err) => reject(err));
+          writeStream.on('error', (err) => reject(err));
+          writeStream.on('finish', () => resolve());
+        });
+        
         success = true;
-        console.log(`[DOWNLOAD] Stream obtained successfully with client: ${client}`);
+        console.log(`[DOWNLOAD] Saved to ${outputPath} using client: ${client}`);
         break;
       } catch (err) {
         lastError = err;
         console.error(`[DOWNLOAD] Client ${client} failed: ${err.message || err}`);
+        // Clean up partial output file if it exists
+        if (fs.existsSync(outputPath)) {
+          try { fs.unlinkSync(outputPath); } catch (e) {}
+        }
       }
     }
     
@@ -50,17 +66,6 @@ async function main() {
       throw lastError || new Error("All clients failed to download stream");
     }
     
-    const nodeStream = Readable.fromWeb(stream);
-    const writeStream = fs.createWriteStream(outputPath);
-    
-    await new Promise((resolve, reject) => {
-      nodeStream.pipe(writeStream);
-      nodeStream.on('error', (err) => reject(err));
-      writeStream.on('error', (err) => reject(err));
-      writeStream.on('finish', () => resolve());
-    });
-    
-    console.log(`[DOWNLOAD] Success: Saved to ${outputPath}`);
     process.exit(0);
   } catch (err) {
     console.error(`[DOWNLOAD] Error:`, err.message || err);
