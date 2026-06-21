@@ -299,6 +299,60 @@ def save_sicil(data):
     except Exception as e:
         print(f"Error saving sicil.json: {e}")
 
+# 2.5 Kayıt Ayarları, Automod ve Küfürler Yükleyicileri
+kayitAyarlari = {}
+def load_kayit_ayarlari():
+    global kayitAyarlari
+    if os.path.exists("kayit_ayarlari.json"):
+        try:
+            with open("kayit_ayarlari.json", "r", encoding="utf-8") as f:
+                kayitAyarlari = json.load(f)
+        except Exception as e:
+            print(f"Error loading kayit_ayarlari.json: {e}")
+            kayitAyarlari = {}
+    else:
+        kayitAyarlari = {}
+
+def save_kayit_ayarlari():
+    try:
+        with open("kayit_ayarlari.json", "w", encoding="utf-8") as f:
+            json.dump(kayitAyarlari, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving kayit_ayarlari.json: {e}")
+
+automodConfig = {}
+def load_automod():
+    global automodConfig
+    if os.path.exists("automod.json"):
+        try:
+            with open("automod.json", "r", encoding="utf-8") as f:
+                automodConfig = json.load(f)
+        except Exception as e:
+            print(f"Error loading automod.json: {e}")
+            automodConfig = {}
+    else:
+        automodConfig = {}
+
+def save_automod():
+    try:
+        with open("automod.json", "w", encoding="utf-8") as f:
+            json.dump(automodConfig, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving automod.json: {e}")
+
+swearWords = []
+def load_kufurler():
+    global swearWords
+    if os.path.exists("kufurler.json"):
+        try:
+            with open("kufurler.json", "r", encoding="utf-8") as f:
+                swearWords = json.load(f)
+        except Exception as e:
+            print(f"Error loading kufurler.json: {e}")
+            swearWords = []
+    else:
+        swearWords = []
+
 # Kanal Yetkilerini Yedekleme ve Geri Yükleme Fonksiyonları
 def save_channel_states(guild):
     states = {}
@@ -422,6 +476,9 @@ def update_user_streak(user_id_str: str):
 
 # --- BOT BASLANGIC GECMISI YUKLE ---
 load_coin_data()
+load_kayit_ayarlari()
+load_automod()
+load_kufurler()
 
 # --- BOT OLAY DİNLEYİCİLERİ (EVENT LISTENERS) ---
 @bot.event
@@ -432,6 +489,106 @@ async def on_ready():
 async def on_message(message):
     if message.author.bot:
         return
+
+    # Automod kontrolleri
+    if message.guild:
+        is_exempt = False
+        if message.author.id == DEVELOPER_ID:
+            is_exempt = True
+        else:
+            perms = message.channel.permissions_for(message.author)
+            if perms.administrator or perms.manage_messages:
+                is_exempt = True
+                
+        if not is_exempt:
+            guild_id = str(message.guild.id)
+            guild_automod = automodConfig.get(guild_id, {})
+            
+            # 1. Reklam Filtresi
+            reklam_cfg = guild_automod.get("reklam", {})
+            if reklam_cfg.get("enabled", False):
+                exempt_channels = reklam_cfg.get("exemptChannels", [])
+                exempt_roles = [int(rid) for rid in reklam_cfg.get("exemptRoles", [])]
+                has_exempt_role = any(role.id in exempt_roles for role in message.author.roles)
+                
+                if str(message.channel.id) not in exempt_channels and not has_exempt_role:
+                    invite_pattern = r"(discord\.gg|discord\.com/invite)/[a-zA-Z0-9\-]+"
+                    if re.search(invite_pattern, message.content, re.IGNORECASE):
+                        try:
+                            await message.delete()
+                            action = reklam_cfg.get("action", "delete")
+                            if action == "warn":
+                                warn = await message.channel.send(f"⚠️ {message.author.mention}, bu sunucuda reklam davet linkleri paylaşmak yasaktır!")
+                                await asyncio.sleep(5)
+                                await warn.delete()
+                            elif action == "mute":
+                                try:
+                                    timeout_duration = datetime.timedelta(minutes=10)
+                                    await message.author.timeout(timeout_duration, reason="Automod: Reklam Paylaşımı")
+                                    warn = await message.channel.send(f"🔇 {message.author.mention} reklam paylaştığı için 10 dakika susturuldu.")
+                                    await asyncio.sleep(8)
+                                    await warn.delete()
+                                except Exception as timeout_err:
+                                    print(f"Failed to timeout user: {timeout_err}")
+                                    warn = await message.channel.send(f"⚠️ {message.author.mention}, reklam paylaşmak yasaktır!")
+                                    await asyncio.sleep(5)
+                                    await warn.delete()
+                            log_event("INFO", "Automod", f"Deleted invite link from {message.author} in #{message.channel} (Action: {action})")
+                            return
+                        except Exception as err:
+                            print(f"Error in reklam automod: {err}")
+
+            # 2. Küfür Filtresi
+            kufur_cfg = guild_automod.get("kufur", {})
+            if kufur_cfg.get("enabled", False):
+                exempt_channels = kufur_cfg.get("exemptChannels", [])
+                exempt_roles = [int(rid) for rid in kufur_cfg.get("exemptRoles", [])]
+                has_exempt_role = any(role.id in exempt_roles for role in message.author.roles)
+                
+                if str(message.channel.id) not in exempt_channels and not has_exempt_role:
+                    content_lower = tr_lower(message.content)
+                    has_swear = False
+                    for word in swearWords:
+                        word_lower = tr_lower(word)
+                        if len(word_lower) <= 3:
+                            if re.search(r'\b' + re.escape(word_lower) + r'\b', content_lower):
+                                has_swear = True
+                                break
+                        else:
+                            if word_lower in content_lower:
+                                has_swear = True
+                                break
+                                
+                    if has_swear:
+                        try:
+                            await message.delete()
+                            warn = await message.channel.send(f"⚠️ {message.author.mention}, lütfen kelimelerinize dikkat edin! Küfür/hakaret yasaktır.")
+                            await asyncio.sleep(5)
+                            await warn.delete()
+                            log_event("INFO", "Automod", f"Deleted message containing swear word from {message.author} in #{message.channel}")
+                            return
+                        except Exception as err:
+                            print(f"Error in kufur automod: {err}")
+
+            # 3. Link Filtresi
+            link_cfg = guild_automod.get("link", {})
+            if link_cfg.get("enabled", False):
+                exempt_channels = link_cfg.get("exemptChannels", [])
+                exempt_roles = [int(rid) for rid in link_cfg.get("exemptRoles", [])]
+                has_exempt_role = any(role.id in exempt_roles for role in message.author.roles)
+                
+                if str(message.channel.id) not in exempt_channels and not has_exempt_role:
+                    url_pattern = r"https?://\S+|discord\.gg/\S+"
+                    if re.search(url_pattern, message.content, re.IGNORECASE):
+                        try:
+                            await message.delete()
+                            warn = await message.channel.send(f"⚠️ {message.author.mention}, bu kanalda harici link paylaşılması yasaktır!")
+                            await asyncio.sleep(5)
+                            await warn.delete()
+                            log_event("INFO", "Automod", f"Deleted link from {message.author} in #{message.channel}")
+                            return
+                        except Exception as err:
+                            print(f"Error in link automod: {err}")
 
     update_user_streak(str(message.author.id))
 
@@ -1270,6 +1427,15 @@ async def e_command(ctx, target: str = None):
         await ctx.reply("⚠️ Lütfen kayıt etmek istediğiniz kullanıcıyı etiketleyin veya ID'sini girin. Örnek: `.e @kullanıcı`")
         return
     
+    guild_id_str = str(ctx.guild.id)
+    settings = kayitAyarlari.get(guild_id_str, {})
+    role_id = int(settings.get("erkekRolId", ROLE_ERKEK_ID))
+    target_channel_id = settings.get("kanalId")
+    
+    if target_channel_id and ctx.channel.id != int(target_channel_id):
+        await ctx.reply(f"⚠️ Kayıt işlemleri sadece <#{target_channel_id}> kanalında gerçekleştirilebilir.")
+        return
+
     user_id = resolve_user_id(target)
     if not user_id:
         await ctx.reply("❌ Geçersiz kullanıcı formatı.")
@@ -1281,9 +1447,9 @@ async def e_command(ctx, target: str = None):
             await ctx.reply("⚠️ Bu kullanıcı sunucuda bulunamadı.")
             return
         
-        role = ctx.guild.get_role(ROLE_ERKEK_ID)
+        role = ctx.guild.get_role(role_id)
         if not role:
-            await ctx.reply(f"❌ Erkek rolü (ID: {ROLE_ERKEK_ID}) sunucuda bulunamadı.")
+            await ctx.reply(f"❌ Erkek rolü (ID: {role_id}) sunucuda bulunamadı.")
             return
         
         await member.add_roles(role, reason=f"Kayıt: {ctx.author}")
@@ -1301,6 +1467,15 @@ async def k_command(ctx, target: str = None):
         await ctx.reply("⚠️ Lütfen kayıt etmek istediğiniz kullanıcıyı etiketleyin veya ID'sini girin. Örnek: `.k @kullanıcı`")
         return
     
+    guild_id_str = str(ctx.guild.id)
+    settings = kayitAyarlari.get(guild_id_str, {})
+    role_id = int(settings.get("kizRolId", ROLE_KIZ_ID))
+    target_channel_id = settings.get("kanalId")
+    
+    if target_channel_id and ctx.channel.id != int(target_channel_id):
+        await ctx.reply(f"⚠️ Kayıt işlemleri sadece <#{target_channel_id}> kanalında gerçekleştirilebilir.")
+        return
+
     user_id = resolve_user_id(target)
     if not user_id:
         await ctx.reply("❌ Geçersiz kullanıcı formatı.")
@@ -1312,9 +1487,9 @@ async def k_command(ctx, target: str = None):
             await ctx.reply("⚠️ Bu kullanıcı sunucuda bulunamadı.")
             return
         
-        role = ctx.guild.get_role(ROLE_KIZ_ID)
+        role = ctx.guild.get_role(role_id)
         if not role:
-            await ctx.reply(f"❌ Kız rolü (ID: {ROLE_KIZ_ID}) sunucuda bulunamadı.")
+            await ctx.reply(f"❌ Kız rolü (ID: {role_id}) sunucuda bulunamadı.")
             return
         
         await member.add_roles(role, reason=f"Kayıt: {ctx.author}")
@@ -1829,6 +2004,41 @@ async def adamasmaca_command(ctx):
     display = " ".join(["_" for _ in random_word])
     await ctx.reply(f"🎮 **Adam Asmaca Oyunu Başladı!**\nKelime: `{display}` (Kelime {len(random_word)} harfli)\n💡 *Tahmin etmek için doğrudan tek bir harf yazın.*\n" + HANGMAN_STAGES[0])
 
+# --- ROL YAPMA / EĞLENCE KOMUTLARI ---
+async def execute_action(ctx, target_str, cmd_name, action_cfg):
+    target_id = resolve_user_id(target_str) if target_str else None
+    
+    if not target_id or target_id == ctx.author.id:
+        await ctx.reply(action_cfg["self"])
+        return
+        
+    await ctx.reply(f"💞 {ctx.author.mention}, <@{target_id}> {action_cfg['text']}")
+
+@bot.command(name="kiss")
+async def kiss_command(ctx, target: str = None):
+    cfg = {'text': 'kullanıcısını öptü! 💋', 'self': 'Chu... Yalnızlık seviyesi: 999. Kendini öpüyorsun! 🥺'}
+    await execute_action(ctx, target, "kiss", cfg)
+
+@bot.command(name="hug")
+async def hug_command(ctx, target: str = None):
+    cfg = {'text': 'kullanıcısına sarıldı! 🤗', 'self': 'Kendine sarıldın... Üzülme, ben sana sarılırım! 🤗'}
+    await execute_action(ctx, target, "hug", cfg)
+
+@bot.command(name="pat")
+async def pat_command(ctx, target: str = None):
+    cfg = {'text': 'kullanıcısının kafasını okşadı! 🐱', 'self': 'Kendi kafanı okşadın. Aferin bana! 😊'}
+    await execute_action(ctx, target, "pat", cfg)
+
+@bot.command(name="slap")
+async def slap_command(ctx, target: str = None):
+    cfg = {'text': 'kullanıcısına tokat attı! 💥', 'self': 'Kendine tokat attın! Bu acıttı... Neden yaptın? 😭'}
+    await execute_action(ctx, target, "slap", cfg)
+
+@bot.command(name="kill")
+async def kill_command(ctx, target: str = None):
+    cfg = {'text': 'kullanıcısını öldürdü! 💀', 'self': 'Kendini imha ettin! Hoşçakal acımasız dünya... ☠️'}
+    await execute_action(ctx, target, "kill", cfg)
+
 # 8. OwO Ekonomi Komutları
 @bot.command(name="coin", aliases=["cash", "para"])
 async def coin_command(ctx):
@@ -2153,6 +2363,33 @@ async def top_command(ctx):
     )
     await ctx.reply(embed=embed)
 
+@bot.command(name="wb")
+async def wb_command(ctx):
+    cooldown = check_cooldown(ctx.author.id, "wb", 20)
+    if cooldown > 0:
+        await ctx.reply(f"⏱️ Tekrar savaşmak için **{cooldown} saniye** beklemelisiniz.")
+        return
+
+    monsters = ["👹 Ork", "🐉 Ejderha", "💀 İskelet Şövalye", "🐺 Vahşi Kurt", "🧟 Zombi Reis"]
+    monster = random.choice(monsters)
+    win = random.random() < 0.6
+    
+    user = get_user_data(ctx.author.id)
+    user["stats"]["battles"] = user["stats"].get("battles", 0) + 1
+    
+    if win:
+        user["stats"]["wins"] = user["stats"].get("wins", 0) + 1
+        reward = random.randint(150, 500)
+        user["balance"] += reward
+        save_coin_data()
+        await ctx.reply(f"⚔️ **Savaş** | {ctx.author.mention}\n\n💥 **{monster}** ile savaştın ve **KAZANDIN**!\n💰 Kazanılan: **+{reward} coin**\n💵 Bakiye: **{user['balance']:,}** coin.")
+    else:
+        user["stats"]["losses"] = user["stats"].get("losses", 0) + 1
+        loss = random.randint(50, 150)
+        user["balance"] = max(0, user["balance"] - loss)
+        save_coin_data()
+        await ctx.reply(f"⚔️ **Savaş** | {ctx.author.mention}\n\n💀 **{monster}** seni yendi ve **KAYBETTİN**!\n💔 Kayıp: **-{loss} coin**\n💵 Bakiye: **{user['balance']:,}** coin.")
+
 # 9. Geliştiriciye Özel Yönetim Komutları
 @bot.command(name="yaz")
 @is_developer()
@@ -2222,6 +2459,9 @@ async def ozel_command(ctx):
     embed.add_field(name="`.yaz <kanal_id> <mesaj>`", value="Belirtilen kanala bot adına mesaj gönderir.", inline=False)
     embed.add_field(name="`.adminver <rol_id> [sunucu_id]`", value="Belirtilen role Yönetici yetkisi verir.", inline=False)
     embed.add_field(name="`.roller [sunucu_id]`", value="Belirtilen sunucunun tüm rollerini listeler.", inline=False)
+    embed.add_field(name="`.olustur [sunucu_id]`", value="Buton ve modal ile yeni bir rol oluşturur.", inline=False)
+    embed.add_field(name="`.del [sunucu_id]`", value="Sunucudan rol, kanal veya kategori silmek için panel açar.", inline=False)
+    embed.add_field(name="`.ust <taşınacak_rol_id> [sunucu_id]`", value="Belirtilen rolü başka bir rolün üstüne/altına taşır.", inline=False)
     embed.add_field(name="`.güvenlikprotokolü`", value="Tüm sunucuyu acil durum moduna alır (karantina).", inline=False)
     embed.add_field(name="`.protokolüaç`", value="Sunucu karantina durumunu çözer ve eski haline getirir.", inline=False)
     
@@ -2293,6 +2533,514 @@ async def sil_command(ctx, amount: int = None):
     deleted = await ctx.channel.purge(limit=amount)
     msg = await ctx.send(f"🗑️ **{len(deleted)}** adet mesaj başarıyla silindi.")
     await msg.delete(delay=5)
+
+# --- YENİ EKLENEN KAYIT, GÜVENLİK VE GELİŞTİRİCİ KOMUTLARI ---
+
+# 1. Kayıt Sistemi Kurulumu (kayitkur)
+class KayitKurChannelSelect(discord.ui.ChannelSelect):
+    def __init__(self, male_role_id, female_role_id, executor_id):
+        self.male_role_id = male_role_id
+        self.female_role_id = female_role_id
+        self.executor_id = executor_id
+        super().__init__(
+            placeholder="Kayıt Kanalını Seçin",
+            min_values=1,
+            max_values=1,
+            channel_types=[discord.ChannelType.text]
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.executor_id:
+            await interaction.response.send_message("⚠️ Bu menüyü sadece komutu başlatan yönetici kullanabilir.", ephemeral=True)
+            return
+
+        channel = self.values[0]
+        guild_id_str = str(interaction.guild.id)
+        
+        kayit_data = load_kayit_ayarlari()
+        kayit_data[guild_id_str] = {
+            "erkekRolId": str(self.male_role_id),
+            "kizRolId": str(self.female_role_id),
+            "kanalId": str(channel.id)
+        }
+        global kayitAyarlari
+        kayitAyarlari = kayit_data
+        save_kayit_ayarlari()
+        
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            content=(
+                f"✅ **Kayıt Sistemi Başarıyla Kuruldu!**\n\n"
+                f"**Ayarlar:**\n"
+                f"* 👨 **Erkek Rolü:** <@&{self.male_role_id}>\n"
+                f"* 👩 **Kız Rolü:** <@&{self.female_role_id}>\n"
+                f"* 💬 **Kayıt Kanalı:** {channel.mention}\n\n"
+                f"Artık yetkililer sadece bu kanalda `.e` ve `.k` komutlarını kullanarak kayıt yapabilirler."
+            ),
+            view=None
+        )
+
+class KayitKurChannelView(discord.ui.View):
+    def __init__(self, male_role_id, female_role_id, executor_id):
+        super().__init__(timeout=120)
+        self.add_item(KayitKurChannelSelect(male_role_id, female_role_id, executor_id))
+
+class KayitKurFemaleRoleSelect(discord.ui.RoleSelect):
+    def __init__(self, male_role_id, executor_id):
+        self.male_role_id = male_role_id
+        self.executor_id = executor_id
+        super().__init__(placeholder="Kız Kayıt Rolünü Seçin", min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.executor_id:
+            await interaction.response.send_message("⚠️ Bu menüyü sadece komutu başlatan yönetici kullanabilir.", ephemeral=True)
+            return
+
+        female_role = self.values[0]
+        view = KayitKurChannelView(self.male_role_id, female_role.id, self.executor_id)
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            content=(
+                f"🛠️ **Kayıt Sistemi Kurulumu - Adım 3/3**\n"
+                f"Seçilen Erkek Rolü: <@&{self.male_role_id}>\n"
+                f"Seçilen Kız Rolü: {female_role.mention}\n\n"
+                f"Lütfen kayıt komutlarının (`.e`, `.k`) kullanılacağı **Kayıt Kanalını** aşağıdaki menüden seçin:"
+            ),
+            view=view
+        )
+
+class KayitKurFemaleRoleView(discord.ui.View):
+    def __init__(self, male_role_id, executor_id):
+        super().__init__(timeout=120)
+        self.add_item(KayitKurFemaleRoleSelect(male_role_id, executor_id))
+
+class KayitKurMaleRoleSelect(discord.ui.RoleSelect):
+    def __init__(self, executor_id):
+        self.executor_id = executor_id
+        super().__init__(placeholder="Erkek Kayıt Rolünü Seçin", min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.executor_id:
+            await interaction.response.send_message("⚠️ Bu menüyü sadece komutu başlatan yönetici kullanabilir.", ephemeral=True)
+            return
+
+        male_role = self.values[0]
+        view = KayitKurFemaleRoleView(male_role.id, self.executor_id)
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            content=(
+                f"🛠️ **Kayıt Sistemi Kurulumu - Adım 2/3**\n"
+                f"Seçilen Erkek Rolü: {male_role.mention}\n\n"
+                f"Lütfen sunucuda kullanılacak **Kız Kayıt Rolünü** aşağıdaki menüden seçin:"
+            ),
+            view=view
+        )
+
+class KayitKurMaleRoleView(discord.ui.View):
+    def __init__(self, executor_id):
+        super().__init__(timeout=120)
+        self.add_item(KayitKurMaleRoleSelect(executor_id))
+
+@bot.command(name="kayitkur", aliases=["kayıtkur"])
+@is_owner_or_has_permissions(administrator=True)
+async def kayitkur_command(ctx):
+    view = KayitKurMaleRoleView(ctx.author.id)
+    await ctx.reply(
+        content="🛠️ **Kayıt Sistemi Kurulumu - Adım 1/3**\nLütfen sunucuda kullanılacak **Erkek Kayıt Rolünü** aşağıdaki menüden seçin:",
+        view=view
+    )
+
+# 2. Link/GIF Filtresi Engelleme Komutu (.engelle)
+@bot.command(name="engelle")
+@is_owner_or_has_permissions(manage_messages=True)
+async def engelle_command(ctx):
+    guild_id = str(ctx.guild.id)
+    
+    # Initialize if not present
+    if guild_id not in automodConfig:
+        automodConfig[guild_id] = {
+            "reklam": {"enabled": False, "action": "delete", "exemptChannels": [], "exemptRoles": []},
+            "kufur": {"enabled": False, "exemptChannels": [], "exemptRoles": []},
+            "link": {"enabled": False, "exemptChannels": [], "exemptRoles": []}
+        }
+    elif "link" not in automodConfig[guild_id]:
+        automodConfig[guild_id]["link"] = {"enabled": False, "exemptChannels": [], "exemptRoles": []}
+        
+    current_state = automodConfig[guild_id]["link"].get("enabled", False)
+    new_state = not current_state
+    automodConfig[guild_id]["link"]["enabled"] = new_state
+    
+    save_automod()
+    
+    if new_state:
+        await ctx.reply("🔒 **Link Filtresi Aktif!** Artık yetkililer dışındaki üyelerin link paylaşması engellenecek.")
+    else:
+        await ctx.reply("🔓 **Link Filtresi Kapatıldı!** Link paylaşımları serbest.")
+
+# 3. Nitro Promo Kodu Oluşturucu (.kod)
+@bot.command(name="kod")
+async def kod_command(ctx):
+    chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    promo_code = "".join(random.choice(chars) for _ in range(16))
+    promo_link = f"https://discord.gift/{promo_code}"
+    
+    embed = discord.Embed(
+        title="🎁 Rastgele Discord Nitro Kodu",
+        description=f"İşte oluşturulan rastgele Nitro promo linki:\n\n`{promo_link}`\n\n[Buraya Tıklayarak Dene]({promo_link})\n\n💡 *Not: Bu kod rastgele karakterlerden oluşturulmuştur ve çalışma olasılığı son derece düşüktür.*",
+        color=0xFF00FF
+    )
+    await ctx.reply(embed=embed)
+
+# 4. Geliştirici Rol Oluşturucu (.olustur)
+class RoleCreateModal(discord.ui.Modal, title="Yeni Rol Oluştur"):
+    role_name = discord.ui.TextInput(label="Rol İsmi", placeholder="Örn: Yönetici, Kurucu, Mod", required=True)
+    role_perms = discord.ui.TextInput(label="Yetkiler (Virgülle ayırın)", placeholder="Örn: Yönetici, Rolleri Yönet, Ban, Kick, Yok", required=False)
+
+    def __init__(self, guild):
+        super().__init__()
+        self.guild = guild
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id != DEVELOPER_ID:
+            await interaction.response.send_message("❌ Bu işlemi sadece bot yapımcısı tamamlayabilir.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        name = self.role_name.value
+        perms_str = self.role_perms.value.lower() if self.role_perms.value else ""
+        
+        permissions = discord.Permissions.none()
+        perms_list = [p.strip() for p in perms_str.split(",") if p.strip()]
+        
+        for p in perms_list:
+            if "yönetici" in p or "yonetici" in p or p == "admin" or p == "administrator":
+                permissions.update(administrator=True)
+            if "rol" in p or "roles" in p or p == "manageroles":
+                permissions.update(manage_roles=True)
+            if "kanal" in p or "channels" in p or p == "managechannels":
+                permissions.update(manage_channels=True)
+            if "mesaj" in p or "messages" in p or p == "managemessages":
+                permissions.update(manage_messages=True)
+            if p == "ban" or "yasak" in p or p == "banmembers":
+                permissions.update(ban_members=True)
+            if p == "kick" or "at" in p or p == "kickmembers":
+                permissions.update(kick_members=True)
+
+        try:
+            new_role = await self.guild.create_role(
+                name=name,
+                permissions=permissions,
+                reason=f"Geliştirici Komutu ile Oluşturuldu (İstek Sahibi: {interaction.user.name})"
+            )
+            await interaction.followup.send(
+                f"✅ **{self.guild.name}** sunucusunda **{new_role.name}** rolü başarıyla oluşturuldu! (ID: `{new_role.id}`, Yetkiler: `{self.role_perms.value or 'Varsayılan'}`)",
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.followup.send(f"❌ Rol oluşturulurken hata: {e}", ephemeral=True)
+
+class RoleCreateButtonView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=120)
+        self.guild = guild
+
+    @discord.ui.button(label="Rol Oluşturma Formunu Aç", style=discord.ButtonStyle.primary)
+    async def open_form(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != DEVELOPER_ID:
+            await interaction.response.send_message("❌ Bu butonu sadece bot yapımcısı kullanabilir.", ephemeral=True)
+            return
+        await interaction.response.send_modal(RoleCreateModal(self.guild))
+
+@bot.command(name="olustur", aliases=["oluştur"])
+@is_developer()
+async def olustur_command(ctx, guild_id: int = None):
+    target_guild_id = guild_id or ctx.guild.id
+    if not target_guild_id:
+        await ctx.reply("❌ Lütfen bir sunucu ID'si girin veya komutu sunucuda kullanın.")
+        return
+        
+    guild = bot.get_guild(target_guild_id) or await bot.fetch_guild(target_guild_id)
+    if not guild:
+        await ctx.reply("❌ Sunucu bulunamadı.")
+        return
+        
+    view = RoleCreateButtonView(guild)
+    await ctx.reply(f"🛠️ **{guild.name}** sunucusunda yeni rol oluşturmak için aşağıdaki butona tıklayın:", view=view)
+
+# 5. Geliştirici Öğe Silme Paneli (.del)
+class DeleteItemSelect(discord.ui.Select):
+    def __init__(self, item_type, guild, options):
+        self.item_type = item_type
+        self.guild = guild
+        super().__init__(
+            placeholder=f"Silinecek {item_type} öğelerini seçin...",
+            min_values=1,
+            max_values=min(len(options), 5),
+            options=options
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != DEVELOPER_ID:
+            await interaction.response.send_message("❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        selected_ids = self.values
+        reason = f"Geliştirici Komutu ile Silindi (İstek Sahibi: {interaction.user.name})"
+        
+        deleted_names = []
+        failed_names = []
+        
+        for item_id in selected_ids:
+            item_id = int(item_id)
+            if self.item_type == "role":
+                item = self.guild.get_role(item_id)
+                if item:
+                    try:
+                        name = item.name
+                        await item.delete(reason=reason)
+                        deleted_names.append(name)
+                    except Exception as e:
+                        failed_names.append(f"{name} ({e})")
+                else:
+                    failed_names.append(f"{item_id} (Bulunamadı)")
+            elif self.item_type in ("channel", "category"):
+                item = self.guild.get_channel(item_id)
+                if item:
+                    try:
+                        name = item.name
+                        await item.delete(reason=reason)
+                        deleted_names.append(name)
+                    except Exception as e:
+                        failed_names.append(f"{name} ({e})")
+                else:
+                    failed_names.append(f"{item_id} (Bulunamadı)")
+
+        msg = ""
+        if deleted_names:
+            msg += f"✅ Başarıyla silinen {self.item_type}ler: **{', '.join(deleted_names)}**\n"
+        if failed_names:
+            msg += f"❌ Silinemeyen {self.item_type}ler: {', '.join(failed_names)}\n"
+            
+        await interaction.edit_original_response(content=msg or "❌ Hiçbir öğe silinemedi.", view=None)
+
+class DeleteItemSelectView(discord.ui.View):
+    def __init__(self, item_type, guild, options):
+        super().__init__(timeout=120)
+        self.add_item(DeleteItemSelect(item_type, guild, options))
+
+class DeleteTypeSelect(discord.ui.Select):
+    def __init__(self, guild):
+        self.guild = guild
+        options = [
+            discord.SelectOption(label="Rol Sil", value="role", description="Sunucudan belirtilen rolleri siler.", emoji="🛡️"),
+            discord.SelectOption(label="Kanal Sil", value="channel", description="Sunucudan kanalları toplu siler.", emoji="💬"),
+            discord.SelectOption(label="Kategori Sil", value="category", description="Sunucudan belirtilen kategorileri siler.", emoji="📁")
+        ]
+        super().__init__(placeholder="Silinecek öğe türünü seçin...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != DEVELOPER_ID:
+            await interaction.response.send_message("❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        selected_type = self.values[0]
+        bot_member = self.guild.me
+        
+        if selected_type == "role":
+            bot_highest = bot_member.roles.highest.position
+            roles = [r for r in self.guild.roles if not r.managed and not r.is_default() and r.position < bot_highest]
+            if not roles:
+                await interaction.followup.send("❌ Silinebilecek uygun rol bulunamadı.", ephemeral=True)
+                return
+            sorted_roles = sorted(roles, key=lambda x: x.name)[:25]
+            options = [
+                discord.SelectOption(label=r.name, value=str(r.id), description=f"ID: {r.id}")
+                for r in sorted_roles
+            ]
+            view = DeleteItemSelectView("role", self.guild, options)
+            await interaction.edit_original_response(content=f"🛡️ **{self.guild.name}** sunucusundan silmek istediğiniz rolleri seçin (Maks 5 adet):", view=view)
+            
+        elif selected_type == "category":
+            categories = self.guild.categories
+            if not categories:
+                await interaction.followup.send("❌ Silinebilecek kategori bulunamadı.", ephemeral=True)
+                return
+            sorted_categories = sorted(categories, key=lambda x: x.name)[:25]
+            options = [
+                discord.SelectOption(label=c.name, value=str(c.id), description=f"ID: {c.id}")
+                for c in sorted_categories
+            ]
+            view = DeleteItemSelectView("category", self.guild, options)
+            await interaction.edit_original_response(content=f"📁 **{self.guild.name}** sunucusundan silmek istediğiniz kategorileri seçin (Maks 5 adet):", view=view)
+            
+        elif selected_type == "channel":
+            channels = [c for c in self.guild.channels if isinstance(c, (discord.TextChannel, discord.VoiceChannel))]
+            if not channels:
+                await interaction.followup.send("❌ Silinebilecek kanal bulunamadı.", ephemeral=True)
+                return
+            sorted_channels = sorted(channels, key=lambda x: x.name)[:25]
+            options = [
+                discord.SelectOption(
+                    label=c.name,
+                    value=str(c.id),
+                    description=f"{'💬 Metin' if isinstance(c, discord.TextChannel) else '🔊 Ses'} | ID: {c.id}"
+                )
+                for c in sorted_channels
+            ]
+            view = DeleteItemSelectView("channel", self.guild, options)
+            await interaction.edit_original_response(content=f"💬 **{self.guild.name}** sunucusundan silmek istediğiniz kanalları seçin (Maks 5 adet):", view=view)
+
+class DeleteTypeSelectView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=120)
+        self.add_item(DeleteTypeSelect(guild))
+
+@bot.command(name="del")
+@is_developer()
+async def del_command(ctx, guild_id: int = None):
+    target_guild_id = guild_id or ctx.guild.id
+    if not target_guild_id:
+        await ctx.reply("❌ Sunucu bulunamadı.")
+        return
+        
+    guild = bot.get_guild(target_guild_id) or await bot.fetch_guild(target_guild_id)
+    if not guild:
+        await ctx.reply("❌ Sunucu bulunamadı.")
+        return
+        
+    view = DeleteTypeSelectView(guild)
+    embed = discord.Embed(
+        title="🗑️ Öğe Silme Paneli",
+        description=f"**{guild.name}** sunucusunda silme işlemi gerçekleştirmek için lütfen listeden öğe türünü seçin.",
+        color=0xFF0000
+    )
+    embed.set_footer(text="Sadece geliştiricilere özeldir.")
+    await ctx.reply(embed=embed, view=view)
+
+# 6. Geliştirici Rol Sıralama Komutu (.üst)
+class RoleMovePositionView(discord.ui.View):
+    def __init__(self, role_to_move, target_role, collector_user_id):
+        super().__init__(timeout=120)
+        self.role_to_move = role_to_move
+        self.target_role = target_role
+        self.collector_user_id = collector_user_id
+
+    @discord.ui.button(label="Üstüne Çek", style=discord.ButtonStyle.success)
+    async def move_above(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.collector_user_id:
+            await interaction.response.send_message("❌ Bu işlemi sadece komutu başlatan kişi yapabilir.", ephemeral=True)
+            return
+            
+        await interaction.response.defer()
+        try:
+            new_pos = self.target_role.position
+            if self.role_to_move.position < self.target_role.position:
+                new_pos = self.target_role.position
+            else:
+                new_pos = self.target_role.position + 1
+
+            await self.role_to_move.edit(position=new_pos)
+            await interaction.edit_original_response(
+                content=f"✅ **{self.role_to_move.name}** rolü başarıyla **{self.target_role.name}** rolünün **üstüne** taşındı (Yeni Pozisyon: {new_pos}).",
+                view=None
+            )
+        except Exception as e:
+            await interaction.followup.send(f"❌ Rol taşınırken hata oluştu: {e}", ephemeral=True)
+
+    @discord.ui.button(label="Altına Çek", style=discord.ButtonStyle.danger)
+    async def move_below(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.collector_user_id:
+            await interaction.response.send_message("❌ Bu işlemi sadece komutu başlatan kişi yapabilir.", ephemeral=True)
+            return
+            
+        await interaction.response.defer()
+        try:
+            new_pos = self.target_role.position
+            if self.role_to_move.position > self.target_role.position:
+                new_pos = self.target_role.position
+            else:
+                new_pos = self.target_role.position - 1
+                
+            await self.role_to_move.edit(position=max(1, new_pos))
+            await interaction.edit_original_response(
+                content=f"✅ **{self.role_to_move.name}** rolü başarıyla **{self.target_role.name}** rolünün **altına** taşındı (Yeni Pozisyon: {new_pos}).",
+                view=None
+            )
+        except Exception as e:
+            await interaction.followup.send(f"❌ Rol taşınırken hata oluştu: {e}", ephemeral=True)
+
+class RoleMoveTargetSelect(discord.ui.Select):
+    def __init__(self, role_to_move, roles, collector_user_id):
+        self.role_to_move = role_to_move
+        self.collector_user_id = collector_user_id
+        options = [
+            discord.SelectOption(label=r.name, value=str(r.id), description=f"Pozisyon: {r.position} | ID: {r.id}")
+            for r in roles
+        ]
+        super().__init__(placeholder="Hedef rolü seçin...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.collector_user_id:
+            await interaction.response.send_message("❌ Bu işlemi sadece komutu başlatan kişi yapabilir.", ephemeral=True)
+            return
+
+        target_role_id = int(self.values[0])
+        target_role = self.role_to_move.guild.get_role(target_role_id)
+        if not target_role:
+            await interaction.response.send_message("❌ Hedef rol bulunamadı.", ephemeral=True)
+            return
+
+        view = RoleMovePositionView(self.role_to_move, target_role, self.collector_user_id)
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            content=f"Seçilen Hedef Rol: **{target_role.name}** (Pozisyon: {target_role.position})\n\n**{self.role_to_move.name}** rolünü bu rolün neresine taşımak istersiniz?",
+            view=view
+        )
+
+class RoleMoveTargetSelectView(discord.ui.View):
+    def __init__(self, role_to_move, roles, collector_user_id):
+        super().__init__(timeout=120)
+        self.add_item(RoleMoveTargetSelect(role_to_move, roles, collector_user_id))
+
+@bot.command(name="ust", aliases=["üst"])
+@is_developer()
+async def ust_command(ctx, role_id: int = None, guild_id: int = None):
+    if not role_id:
+        await ctx.reply("⚠️ Kullanım: `.üst <taşınacak_rol_id> [sunucu_id]`")
+        return
+        
+    guild = ctx.guild
+    if guild_id:
+        guild = bot.get_guild(guild_id) or await bot.fetch_guild(guild_id)
+        
+    if not guild:
+        await ctx.reply("❌ Sunucu bulunamadı.")
+        return
+        
+    role_to_move = guild.get_role(role_id)
+    if not role_to_move:
+        await ctx.reply("❌ Taşınacak rol bulunamadı.")
+        return
+        
+    bot_highest = guild.me.roles.highest.position
+    if role_to_move.position >= bot_highest:
+        await ctx.reply(f"❌ **{role_to_move.name}** rolü botun hiyerarşisinin üstünde veya aynı hizada olduğu için taşınamaz.")
+        return
+        
+    roles = [
+        r for r in guild.roles
+        if r.id != role_to_move.id and not r.is_default() and r.position < bot_highest
+    ]
+    roles = sorted(roles, key=lambda x: x.position, reverse=True)[:25]
+    
+    if not roles:
+        await ctx.reply("⚠️ Hedef olarak seçilebilecek başka uygun rol bulunamadı.")
+        return
+        
+    view = RoleMoveTargetSelectView(role_to_move, roles, ctx.author.id)
+    await ctx.reply(f"🔄 **{role_to_move.name}** rolünü taşımak istediğiniz hedef rolü seçin (Sunucu: **{guild.name}**):", view=view)
 
 # --- ANA CALISTIRMA ---
 if __name__ == "__main__":
