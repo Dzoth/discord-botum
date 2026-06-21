@@ -16,7 +16,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Bot Yapılandırması ve İzinler
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix=".", intents=intents)
+bot = commands.Bot(command_prefix=".", intents=intents, help_command=None)
 
 # Global ID ve Değişken Tanımlamaları
 DEVELOPER_ID = 440287582379835412
