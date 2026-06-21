@@ -10,8 +10,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Bağımlılıkları kopyala ve yükle
-COPY requirements.txt ./
+COPY requirements.txt package.json package-lock.json ./
 RUN pip install --no-cache-dir -r requirements.txt
+RUN npm install
 
 # Tüm kodları kopyala
 COPY . .

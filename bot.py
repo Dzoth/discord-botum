@@ -121,6 +121,23 @@ def log_played_song(title, artist, source, user):
     except Exception as e:
         print(f"Error logging song: {e}")
 
+def extract_video_id(url):
+    if not url:
+        return None
+    match = re.search(r"(?:v=|\/|embed\/|youtu\.be\/)([a-zA-Z0-9_-]{11})", url)
+    return match.group(1) if match else None
+
+def download_with_youtubeijs(video_id, output_path):
+    try:
+        cmd = ["node", "downloader.js", video_id, output_path]
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+        if res.returncode == 0:
+            return True, res.stdout
+        else:
+            return False, f"Exit code {res.returncode}. Stderr: {res.stderr}"
+    except Exception as e:
+        return False, f"Exception: {e}"
+
 # Bot Yapılandırması ve İzinler
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=".", intents=intents, help_command=None)
@@ -1403,53 +1420,87 @@ class SongSelect(discord.ui.Select):
         is_spotify = "spotify" in url.lower() or "spotify" in selected_option.label.lower()
         source_name = "spotify_search" if is_spotify else "youtube_search"
 
+        import uuid
+        temp_filename = f"temp_{guild.id}_{uuid.uuid4().hex}.mp3"
         try:
             import yt_dlp
             
             # If it is a Spotify URL, search YouTube under the hood
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'quiet': True,
-                'no_warnings': True,
-                'nocheckcertificate': True,
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android', 'ios']
-                    }
-                }
-            }
             if is_spotify:
                 search_query = f"ytsearch1:{title_clean} {artist_clean}"
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'quiet': True,
+                    'no_warnings': True,
+                    'nocheckcertificate': True,
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': ['android']
+                        }
+                    }
+                }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(search_query, download=False)
                     entries = info.get('entries', [])
                     if not entries:
                         await interaction.followup.send("❌ Bu Spotify şarkısı YouTube'da bulunamadı.", ephemeral=True)
                         return
-                    stream_url = entries[0].get('url')
+                    video_id = entries[0].get('id')
             else:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    stream_url = info.get('url')
+                video_id = extract_video_id(url)
+                if not video_id:
+                    search_query = f"ytsearch1:{title_clean} {artist_clean}"
+                    ydl_opts = {
+                        'format': 'bestaudio/best',
+                        'quiet': True,
+                        'no_warnings': True,
+                    }
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(search_query, download=False)
+                        entries = info.get('entries', [])
+                        if entries:
+                            video_id = entries[0].get('id')
+
+            if not video_id:
+                await interaction.followup.send("❌ Video ID tespit edilemedi.", ephemeral=True)
+                return
+
+            # Download using youtubei.js
+            success, err_msg = download_with_youtubeijs(video_id, temp_filename)
+            if not success:
+                log_event("ERROR", "Music", f"Innertube Download failed for ID {video_id}: {err_msg}")
+                await interaction.followup.send(f"❌ Şarkı indirilirken hata oluştu. Lütfen tekrar deneyin.", ephemeral=True)
+                if os.path.exists(temp_filename):
+                    try: os.remove(temp_filename)
+                    except: pass
+                return
 
             voice_client = guild.voice_client
             if not voice_client:
-                # Try to connect if user is in a channel
                 if interaction.user.voice and interaction.user.voice.channel:
                     voice_client = await interaction.user.voice.channel.connect()
                 else:
                     await interaction.followup.send("⚠️ Lütfen bir ses kanalına bağlanın!", ephemeral=True)
+                    if os.path.exists(temp_filename):
+                        try: os.remove(temp_filename)
+                        except: pass
                     return
 
             if voice_client.is_playing() or voice_client.is_paused():
                 voice_client.stop()
 
-            ffmpeg_opts = {
-                'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-                'options': '-vn'
-            }
-            source = discord.FFmpegPCMAudio(stream_url, **ffmpeg_opts)
-            voice_client.play(source, after=lambda e: print(f"Playback finished: {e}") if e else None)
+            def cleanup(error):
+                if error:
+                    print(f"Playback finished with error: {error}")
+                try:
+                    if os.path.exists(temp_filename):
+                        os.remove(temp_filename)
+                        print(f"Cleaned up temp file: {temp_filename}")
+                except Exception as ex:
+                    print(f"Cleanup error: {ex}")
+
+            source = discord.FFmpegPCMAudio(temp_filename)
+            voice_client.play(source, after=cleanup)
 
             # Log the played song
             log_played_song(title_clean, artist_clean, source_name, interaction.user)
@@ -1475,6 +1526,9 @@ class SongSelect(discord.ui.Select):
             import traceback
             err_tb = traceback.format_exc()
             log_event("ERROR", "Music", f"Play Error: {e}\n{err_tb}")
+            if os.path.exists(temp_filename):
+                try: os.remove(temp_filename)
+                except: pass
             await interaction.followup.send("❌ Şarkı oynatılırken bir hata oluştu.", ephemeral=True)
 
 class SongSelectView(discord.ui.View):
@@ -2262,6 +2316,8 @@ async def protokolukapat_command(ctx):
 # 7. Müzik & Oyun Komutları
 async def play_song_directly(ctx, title, artist, source, status_msg):
     guild = ctx.guild
+    import uuid
+    temp_filename = f"temp_{guild.id}_{uuid.uuid4().hex}.mp3"
     try:
         import yt_dlp
         search_query = f"ytsearch1:{title} {artist}"
@@ -2272,7 +2328,7 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
             'nocheckcertificate': True,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'ios']
+                    'player_client': ['android']
                 }
             }
         }
@@ -2282,7 +2338,21 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
             if not entries:
                 await status_msg.edit(content="❌ Şarkı YouTube'da bulunamadı.")
                 return
-            stream_url = entries[0].get('url')
+            video_id = entries[0].get('id')
+
+        if not video_id:
+            await status_msg.edit(content="❌ Video ID tespit edilemedi.")
+            return
+
+        # Download using youtubei.js
+        success, err_msg = download_with_youtubeijs(video_id, temp_filename)
+        if not success:
+            log_event("ERROR", "Music", f"Innertube Direct Download failed for ID {video_id}: {err_msg}")
+            await status_msg.edit(content=f"❌ Şarkı indirilirken hata oluştu. Lütfen tekrar deneyin.")
+            if os.path.exists(temp_filename):
+                try: os.remove(temp_filename)
+                except: pass
+            return
 
         voice_client = guild.voice_client
         if not voice_client:
@@ -2290,17 +2360,26 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
                 voice_client = await ctx.author.voice.channel.connect()
             else:
                 await status_msg.edit(content="⚠️ Lütfen bir ses kanalına bağlanın!")
+                if os.path.exists(temp_filename):
+                    try: os.remove(temp_filename)
+                    except: pass
                 return
 
         if voice_client.is_playing() or voice_client.is_paused():
             voice_client.stop()
 
-        ffmpeg_opts = {
-            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-            'options': '-vn'
-        }
-        ffmpeg_source = discord.FFmpegPCMAudio(stream_url, **ffmpeg_opts)
-        voice_client.play(ffmpeg_source, after=lambda e: print(f"Playback finished: {e}") if e else None)
+        def cleanup(error):
+            if error:
+                print(f"Playback finished with error: {error}")
+            try:
+                if os.path.exists(temp_filename):
+                    os.remove(temp_filename)
+                    print(f"Cleaned up temp file: {temp_filename}")
+            except Exception as ex:
+                print(f"Cleanup error: {ex}")
+
+        ffmpeg_source = discord.FFmpegPCMAudio(temp_filename)
+        voice_client.play(ffmpeg_source, after=cleanup)
 
         # Log the played song
         log_played_song(title, artist, source, ctx.author)
@@ -2321,6 +2400,9 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
         import traceback
         err_tb = traceback.format_exc()
         log_event("ERROR", "Music", f"Direct Play Error: {e}\n{err_tb}")
+        if os.path.exists(temp_filename):
+            try: os.remove(temp_filename)
+            except: pass
         await status_msg.edit(content="❌ Şarkı oynatılırken bir hata oluştu.")
 
 # 7. Müzik & Oyun Komutları
