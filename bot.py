@@ -1556,7 +1556,25 @@ class SearchTriggerView(discord.ui.View):
         modal = SearchModal(self.executor_id, interaction.message)
         await interaction.response.send_modal(modal)
 
-# --- BOT KOMUTLARI ---
+# --- LOG OKUMA KOMUTU ---
+@bot.command(name="readlogs")
+async def readlogs_command(ctx):
+    if ctx.author.id != DEVELOPER_ID:
+        await ctx.reply("❌ Bu komut sadece bot geliştiricisine özeldir.")
+        return
+        
+    log_file = "bot.log"
+    if not os.path.exists(log_file):
+        await ctx.reply("❌ Log dosyası bulunamadı.")
+        return
+        
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            log_content = "".join(lines[-25:])
+            await ctx.reply(f"📋 **Son Log Kayıtları:**\n```\n{log_content[-1900:]}\n```")
+    except Exception as e:
+        await ctx.reply(f"❌ Log okuma hatası: {e}")
 
 # 1. Moderasyon Komutları
 @bot.command(name="ban")

@@ -6,6 +6,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     ffmpeg \
+    libopus0 \
+    libopus-dev \
     nodejs \
     npm \
     && rm -rf /var/lib/apt/lists/*
