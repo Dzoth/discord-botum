@@ -22,3 +22,7 @@ temp_*.mp3
 # OS files
 .DS_Store
 Thumbs.db
+
+# Backup files
+bot_backup.py
+
