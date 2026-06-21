@@ -163,6 +163,9 @@ def download_with_youtubeijs(video_id, output_path):
     except Exception as e:
         return False, f"Exception: {e}"
 
+async def download_with_youtubeijs_async(video_id, output_path):
+    return await asyncio.to_thread(download_with_youtubeijs, video_id, output_path)
+
 # Bot Yapılandırması ve İzinler
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=".", intents=intents, help_command=None)
@@ -1372,6 +1375,9 @@ def search_youtube_nodejs(query):
         print(f"Node search exception: {e}")
         return []
 
+async def search_youtube_nodejs_async(query):
+    return await asyncio.to_thread(search_youtube_nodejs, query)
+
 # --- UNIFIED SEARCH HELPER ---
 async def perform_unified_search(query):
     # Spotify Search (up to 3 results)
@@ -1381,7 +1387,7 @@ async def perform_unified_search(query):
     limit = 6 if not spotify_results else 3
     yt_results = []
     try:
-        search_data = search_youtube_nodejs(query)
+        search_data = await search_youtube_nodejs_async(query)
         for item in search_data[:limit]:
             yt_results.append({
                 "title": item.get("title") or "Bilinmeyen Şarkı",
@@ -1462,20 +1468,20 @@ class SongSelect(discord.ui.Select):
 
             if selected_video_id:
                 log_event("INFO", "Music", f"Attempting download for selected YouTube video (ID: {selected_video_id})")
-                success, err_msg = download_with_youtubeijs(selected_video_id, temp_filename)
+                success, err_msg = await download_with_youtubeijs_async(selected_video_id, temp_filename)
                 tried_ids.append(selected_video_id)
 
             if not success:
                 # Search YouTube and try alternative results
                 search_query = f"{title_clean} {artist_clean}"
-                results = search_youtube_nodejs(search_query)
+                results = await search_youtube_nodejs_async(search_query)
                 if results:
                     for i, item in enumerate(results[:3]):
                         alt_video_id = item.get('id')
                         if not alt_video_id or alt_video_id in tried_ids:
                             continue
                         log_event("INFO", "Music", f"Attempting fallback download for {title_clean} (Try {i+1}/3, ID: {alt_video_id})")
-                        success, err_msg = download_with_youtubeijs(alt_video_id, temp_filename)
+                        success, err_msg = await download_with_youtubeijs_async(alt_video_id, temp_filename)
                         tried_ids.append(alt_video_id)
                         if success:
                             log_event("INFO", "Music", f"Successfully downloaded fallback {title_clean} (ID: {alt_video_id})")
@@ -2354,7 +2360,7 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
     temp_filename = f"temp_{guild.id}_{uuid.uuid4().hex}.mp3"
     try:
         search_query = f"{title} {artist}"
-        results = search_youtube_nodejs(search_query)
+        results = await search_youtube_nodejs_async(search_query)
         if not results:
             await status_msg.edit(content="❌ Şarkı YouTube'da bulunamadı.")
             return
@@ -2366,7 +2372,7 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
             if not video_id:
                 continue
             log_event("INFO", "Music", f"Attempting direct download for {title} (Try {i+1}/3, ID: {video_id})")
-            success, err_msg = download_with_youtubeijs(video_id, temp_filename)
+            success, err_msg = await download_with_youtubeijs_async(video_id, temp_filename)
             if success:
                 log_event("INFO", "Music", f"Successfully downloaded fallback {title} (ID: {video_id})")
                 break
