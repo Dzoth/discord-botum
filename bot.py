@@ -5,6 +5,9 @@ import random
 import datetime
 import asyncio
 import threading
+import base64
+import aiohttp
+import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import discord
 from discord.ext import commands
@@ -13,6 +16,110 @@ from dotenv import load_dotenv
 # Environment dosyasını yükle
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
+
+# FFmpeg check & initialization
+try:
+    subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print("FFmpeg is available on system path.")
+except FileNotFoundError:
+    print("FFmpeg not found in system path, checking static-ffmpeg...")
+    try:
+        import static_ffmpeg
+        static_ffmpeg.add_paths()
+        print("FFmpeg configured via static-ffmpeg.")
+    except Exception as e:
+        print(f"Warning: Failed to import or load static-ffmpeg: {e}")
+
+# --- SPOTIFY API & LOGGING HELPERS ---
+spotify_token = None
+spotify_token_expires = None
+
+async def get_spotify_token():
+    global spotify_token, spotify_token_expires
+    client_id = os.getenv("SPOTIFY_CLIENT_ID")
+    client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        return None
+        
+    now = datetime.datetime.now()
+    if spotify_token and spotify_token_expires and now < spotify_token_expires:
+        return spotify_token
+
+    try:
+        url = "https://accounts.spotify.com/api/token"
+        auth_header = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+        headers = {
+            "Authorization": f"Basic {auth_header}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        data = {"grant_type": "client_credentials"}
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, data=data, timeout=10) as response:
+                if response.status == 200:
+                    res_json = await response.json()
+                    spotify_token = res_json.get("access_token")
+                    expires_in = res_json.get("expires_in", 3600)
+                    spotify_token_expires = now + datetime.timedelta(seconds=expires_in - 60)
+                    return spotify_token
+                else:
+                    print(f"Spotify Auth failed status: {response.status}")
+    except Exception as e:
+        print(f"Error fetching Spotify token: {e}")
+    return None
+
+async def search_spotify(query):
+    token = await get_spotify_token()
+    if not token:
+        return []
+    try:
+        url = "https://api.spotify.com/v1/search"
+        headers = {"Authorization": f"Bearer {token}"}
+        params = {"q": query, "type": "track", "limit": 3}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, params=params, timeout=10) as response:
+                if response.status == 200:
+                    res_json = await response.json()
+                    tracks = res_json.get("tracks", {}).get("items", [])
+                    results = []
+                    for t in tracks:
+                        artists = ", ".join([a["name"] for a in t.get("artists", [])])
+                        results.append({
+                            "title": t.get("name"),
+                            "uploader": artists,  # mapping to "uploader" to reuse existing Select logic
+                            "url": t.get("external_urls", {}).get("spotify"),
+                            "source": "spotify"
+                        })
+                    return results
+    except Exception as e:
+        print(f"Spotify search error: {e}")
+    return []
+
+def log_played_song(title, artist, source, user):
+    try:
+        log_file = "spotify_sarkilar.json"
+        songs = []
+        if os.path.exists(log_file):
+            with open(log_file, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content:
+                    songs = json.loads(content)
+        
+        if not isinstance(songs, list):
+            songs = []
+
+        songs.append({
+            "title": title,
+            "artist": artist,
+            "source": source,
+            "user": str(user),
+            "user_id": user.id,
+            "timestamp": datetime.datetime.now().isoformat()
+        })
+
+        with open(log_file, "w", encoding="utf-8") as f:
+            json.dump(songs, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error logging song: {e}")
 
 # Bot Yapılandırması ve İzinler
 intents = discord.Intents.all()
@@ -1143,15 +1250,63 @@ class BlackjackView(discord.ui.View):
             pass
 
 # 5. Play Şarkı Seçim Arayüzü (.play)
+# --- UNIFIED SEARCH HELPER ---
+async def perform_unified_search(query):
+    # Spotify Search (up to 3 results)
+    spotify_results = await search_spotify(query)
+    
+    # YouTube Search (up to 3 results)
+    yt_results = []
+    try:
+        import yt_dlp
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'noplaylist': True,
+            'quiet': True,
+            'extract_flat': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"ytsearch3:{query}", download=False)
+            entries = info.get('entries', [])
+            for entry in entries:
+                if entry:
+                    yt_results.append({
+                        "title": entry.get("title") or "Bilinmeyen Şarkı",
+                        "uploader": entry.get("uploader") or entry.get("channel") or "Bilinmeyen Kanal",
+                        "url": f"https://www.youtube.com/watch?v={entry.get('id')}" if entry.get('id') else entry.get('url'),
+                        "source": "youtube"
+                    })
+    except Exception as e:
+        print(f"YouTube search error: {e}")
+
+    # Merge results (Spotify first if found, then YouTube)
+    return spotify_results + yt_results
+
+# 5. Play Şarkı Seçim Arayüzü (.play)
 class SongSelect(discord.ui.Select):
     def __init__(self, entries, executor_id, original_msg):
-        options = [
-            discord.SelectOption(
-                label=f"{entry.get('title')[:90]}",
-                value=entry.get('url'),
-                description=f"Kanal: {entry.get('uploader', 'Bilinmiyor')[:40]}"
-            ) for entry in entries[:5]
-        ]
+        options = []
+        for entry in entries[:6]:  # Show up to 6 options
+            title = entry.get('title', 'Bilinmeyen Şarkı')[:70]
+            uploader = entry.get('uploader', 'Bilinmeyen Kanal/Sanatçı')[:40]
+            url = entry.get('url', '')
+            source = entry.get('source', 'youtube')
+
+            if source == "spotify":
+                label = f"🎵 [Spotify] {title}"
+                desc = f"Sanatçı: {uploader}"
+            else:
+                label = f"🎥 [YouTube] {title}"
+                desc = f"Kanal: {uploader}"
+
+            options.append(
+                discord.SelectOption(
+                    label=label[:100],
+                    value=url[:100],  # Discord value constraint is 100 chars
+                    description=desc[:100]
+                )
+            )
+
         super().__init__(placeholder="Çalmak istediğiniz şarkıyı seçin...", options=options)
         self.executor_id = executor_id
         self.original_msg = original_msg
@@ -1165,22 +1320,59 @@ class SongSelect(discord.ui.Select):
         url = self.values[0]
         guild = interaction.guild
 
-        # Müzik indirme ve çalma
+        # Find selected option to get display metadata
+        selected_option = None
+        for opt in self.options:
+            if opt.value == url:
+                selected_option = opt
+                break
+
+        if not selected_option:
+            await interaction.followup.send("❌ Şarkı seçimi doğrulanırken bir hata oluştu.", ephemeral=True)
+            return
+
+        title_clean = selected_option.label.replace("🎵 [Spotify] ", "").replace("🎥 [YouTube] ", "")
+        artist_clean = selected_option.description.replace("Sanatçı: ", "").replace("Kanal: ", "")
+        
+        is_spotify = "spotify" in url.lower() or "spotify" in selected_option.label.lower()
+        source_name = "spotify_search" if is_spotify else "youtube_search"
+
         try:
             import yt_dlp
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'quiet': True,
-                'no_warnings': True,
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                stream_url = info.get('url')
-                title = info.get('title')
+            
+            # If it is a Spotify URL, search YouTube under the hood
+            if is_spotify:
+                search_query = f"ytsearch1:{title_clean} {artist_clean}"
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'quiet': True,
+                    'no_warnings': True,
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(search_query, download=False)
+                    entries = info.get('entries', [])
+                    if not entries:
+                        await interaction.followup.send("❌ Bu Spotify şarkısı YouTube'da bulunamadı.", ephemeral=True)
+                        return
+                    stream_url = entries[0].get('url')
+            else:
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'quiet': True,
+                    'no_warnings': True,
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    stream_url = info.get('url')
 
             voice_client = guild.voice_client
             if not voice_client:
-                return
+                # Try to connect if user is in a channel
+                if interaction.user.voice and interaction.user.voice.channel:
+                    voice_client = await interaction.user.voice.channel.connect()
+                else:
+                    await interaction.followup.send("⚠️ Lütfen bir ses kanalına bağlanın!", ephemeral=True)
+                    return
 
             if voice_client.is_playing() or voice_client.is_paused():
                 voice_client.stop()
@@ -1192,14 +1384,26 @@ class SongSelect(discord.ui.Select):
             source = discord.FFmpegPCMAudio(stream_url, **ffmpeg_opts)
             voice_client.play(source, after=lambda e: print(f"Playback finished: {e}") if e else None)
 
+            # Log the played song
+            log_played_song(title_clean, artist_clean, source_name, interaction.user)
+
             embed = discord.Embed(
-                title=f"▶️ Oynatılıyor: {title}",
-                description=f"🎵 **Kaynak:** YouTube\n\n`▶️ 🔘───────────────────`",
-                color=discord.Color.from_rgb(29, 185, 84)
+                title=f"▶️ Oynatılıyor: {title_clean}",
+                description=f"👤 **Sanatçı:** {artist_clean}\n🎵 **Kaynak:** {'Spotify' if is_spotify else 'YouTube'}\n\n`▶️ 🔘───────────────────`",
+                color=discord.Color.from_rgb(29, 185, 84) if is_spotify else discord.Color.red()
             )
-            embed.set_thumbnail(url="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png")
-            await interaction.channel.send(content=f"🎶 **{title}** oynatılıyor...", embed=embed)
-            await self.original_msg.delete()
+            if is_spotify:
+                embed.set_thumbnail(url="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png")
+            else:
+                embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/YouTube_full-color_icon_%282017%29.svg/1024px-YouTube_full-color_icon_%282017%29.svg.png")
+            
+            await interaction.channel.send(content=f"🎶 **{title_clean}** oynatılıyor...", embed=embed)
+            
+            if self.original_msg:
+                try:
+                    await self.original_msg.delete()
+                except:
+                    pass
         except Exception as e:
             print(f"Play Error: {e}")
             await interaction.followup.send("❌ Şarkı oynatılırken bir hata oluştu.", ephemeral=True)
@@ -1222,19 +1426,10 @@ class SearchModal(discord.ui.Modal, title="Şarkı Ara ve Oynat"):
         query = self.search_input.value.strip()
 
         try:
-            import yt_dlp
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'noplaylist': True,
-                'quiet': True,
-                'extract_flat': True,
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(f"ytsearch5:{query}", download=False)
-                entries = info.get('entries', [])
+            entries = await perform_unified_search(query)
 
             if not entries:
-                await interaction.followup.send("❌ YouTube'da eşleşen bir şarkı bulunamadı.", ephemeral=True)
+                await interaction.followup.send("❌ Herhangi bir platformda eşleşen bir şarkı bulunamadı.", ephemeral=True)
                 return
 
             view = SongSelectView(entries, self.executor_id, self.original_msg)
@@ -1992,8 +2187,64 @@ async def protokolukapat_command(ctx):
         await status_msg.edit(content=f"❌ Hata: {e}")
 
 # 7. Müzik & Oyun Komutları
+async def play_song_directly(ctx, title, artist, source, status_msg):
+    guild = ctx.guild
+    try:
+        import yt_dlp
+        search_query = f"ytsearch1:{title} {artist}"
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'quiet': True,
+            'no_warnings': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(search_query, download=False)
+            entries = info.get('entries', [])
+            if not entries:
+                await status_msg.edit(content="❌ Şarkı YouTube'da bulunamadı.")
+                return
+            stream_url = entries[0].get('url')
+
+        voice_client = guild.voice_client
+        if not voice_client:
+            if ctx.author.voice and ctx.author.voice.channel:
+                voice_client = await ctx.author.voice.channel.connect()
+            else:
+                await status_msg.edit(content="⚠️ Lütfen bir ses kanalına bağlanın!")
+                return
+
+        if voice_client.is_playing() or voice_client.is_paused():
+            voice_client.stop()
+
+        ffmpeg_opts = {
+            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+            'options': '-vn'
+        }
+        ffmpeg_source = discord.FFmpegPCMAudio(stream_url, **ffmpeg_opts)
+        voice_client.play(ffmpeg_source, after=lambda e: print(f"Playback finished: {e}") if e else None)
+
+        # Log the played song
+        log_played_song(title, artist, source, ctx.author)
+
+        embed = discord.Embed(
+            title=f"▶️ Oynatılıyor: {title}",
+            description=f"👤 **Sanatçı:** {artist}\n🎵 **Kaynak:** Spotify (Profil Durumu)\n\n`▶️ 🔘───────────────────`",
+            color=discord.Color.from_rgb(29, 185, 84)
+        )
+        embed.set_thumbnail(url="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png")
+        
+        await ctx.channel.send(content=f"🎶 **{title}** oynatılıyor...", embed=embed)
+        try:
+            await status_msg.delete()
+        except:
+            pass
+    except Exception as e:
+        print(f"Direct Play Error: {e}")
+        await status_msg.edit(content="❌ Şarkı oynatılırken bir hata oluştu.")
+
+# 7. Müzik & Oyun Komutları
 @bot.command(name="play")
-async def play_command(ctx):
+async def play_command(ctx, *, query: str = None):
     if not ctx.author.voice or not ctx.author.voice.channel:
         await ctx.reply("⚠️ Bu komutu kullanmak için bir ses kanalında olmalısınız!")
         return
@@ -2008,8 +2259,52 @@ async def play_command(ctx):
     except Exception as e:
         print(f"Voice client error: {e}")
 
-    view = SearchTriggerView(ctx.author.id)
-    await ctx.reply("🔍 YouTube'da arama yapmak ve müzik çalmak için aşağıdaki butona tıklayın (sadece sizin görebileceğiniz gizli arama kutusu açılacaktır):", view=view)
+    # Case 1: Pull from Spotify Presence (if query is None or "spotify"/"spo")
+    is_explicit_spotify = query and query.strip().lower() in ("spotify", "spo")
+    
+    spotify_song_details = None
+    if not query or is_explicit_spotify:
+        # Check active Spotify presence
+        for act in ctx.author.activities:
+            if isinstance(act, discord.Spotify):
+                spotify_song_details = {
+                    "title": act.title,
+                    "artist": act.artist,
+                }
+                break
+
+    if is_explicit_spotify:
+        if not spotify_song_details:
+            await ctx.reply("❌ Şu anda Discord'da aktif olarak Spotify dinlemiyorsunuz!")
+            return
+            
+        status_msg = await ctx.reply(f"🔍 Spotify'ınızda çalan **{spotify_song_details['title']} - {spotify_song_details['artist']}** şarkısı YouTube'da aranıyor...")
+        await play_song_directly(ctx, spotify_song_details['title'], spotify_song_details['artist'], "spotify_presence", status_msg)
+        return
+
+    if not query:  # Just ".play"
+        if spotify_song_details:
+            status_msg = await ctx.reply(f"🔍 Spotify'ınızda çalan **{spotify_song_details['title']} - {spotify_song_details['artist']}** şarkısı YouTube'da aranıyor...")
+            await play_song_directly(ctx, spotify_song_details['title'], spotify_song_details['artist'], "spotify_presence", status_msg)
+            return
+        else:
+            view = SearchTriggerView(ctx.author.id)
+            await ctx.reply("🔍 YouTube ve Spotify'da arama yapmak ve müzik çalmak için aşağıdaki butona tıklayın (sadece sizin görebileceğiniz gizli arama kutusu açılacaktır):", view=view)
+            return
+
+    # Case 2: Query is provided
+    status_msg = await ctx.reply(f"🔍 **{query}** için YouTube ve Spotify taranıyor...")
+    try:
+        entries = await perform_unified_search(query)
+        if not entries:
+            await status_msg.edit(content="❌ Herhangi bir platformda eşleşen bir şarkı bulunamadı.")
+            return
+
+        view = SongSelectView(entries, ctx.author.id, status_msg)
+        await status_msg.edit(content="Lütfen çalmak istediğiniz şarkıyı seçin:", view=view)
+    except Exception as e:
+        print(f"Direct Play Search Error: {e}")
+        await status_msg.edit(content="❌ Arama yapılırken bir hata oluştu.")
 
 @bot.command(name="adamasmaca")
 async def adamasmaca_command(ctx):

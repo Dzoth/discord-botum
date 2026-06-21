@@ -5,6 +5,7 @@ WORKDIR /app
 # Gerekli sistem kütüphaneleri (gerekirse)
 RUN apt-get update && apt-get install -y \
     build-essential \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Bağımlılıkları kopyala ve yükle
