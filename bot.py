@@ -234,6 +234,42 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
                 except Exception as e:
                     log_content = f"Log okuma hatası: {e}"
             self.wfile.write(log_content.encode("utf-8"))
+        elif self.path == "/test":
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain; charset=utf-8")
+            self.end_headers()
+            
+            output_lines = []
+            output_lines.append("--- Render yt-dlp Diagnostic ---")
+            
+            import yt_dlp
+            # Test video
+            url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            clients = ['mweb', 'web_embedded', 'ios', 'android', 'tv', 'web']
+            
+            for client in clients:
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'quiet': True,
+                    'no_warnings': True,
+                    'nocheckcertificate': True,
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': [client]
+                        }
+                    }
+                }
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        output_lines.append(f"Testing client: {client}")
+                        info = ydl.extract_info(url, download=False)
+                        stream_url = info.get('url')
+                        title = info.get('title')
+                        output_lines.append(f"  SUCCESS! Title: {title} | Stream URL: {stream_url[:50]}...")
+                except Exception as e:
+                    output_lines.append(f"  FAILED: {str(e)[:150]}")
+            
+            self.wfile.write("\n".join(output_lines).encode("utf-8"))
         else:
             self.send_response(200)
             self.send_header("Content-type", "text/html; charset=utf-8")
