@@ -1507,13 +1507,15 @@ class SongSelect(discord.ui.Select):
 
             def cleanup(error):
                 if error:
-                    print(f"Playback finished with error: {error}")
+                    log_event("ERROR", "Music", f"Playback finished with error: {error}")
+                else:
+                    log_event("INFO", "Music", "Playback finished successfully.")
                 try:
                     if os.path.exists(temp_filename):
                         os.remove(temp_filename)
-                        print(f"Cleaned up temp file: {temp_filename}")
+                        log_event("INFO", "Music", f"Cleaned up temp file: {temp_filename}")
                 except Exception as ex:
-                    print(f"Cleanup error: {ex}")
+                    log_event("ERROR", "Music", f"Cleanup error: {ex}")
 
             source = discord.FFmpegPCMAudio(temp_filename)
             voice_client.play(source, after=cleanup)
@@ -2395,13 +2397,15 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
 
         def cleanup(error):
             if error:
-                print(f"Playback finished with error: {error}")
+                log_event("ERROR", "Music", f"Playback finished with error: {error}")
+            else:
+                log_event("INFO", "Music", "Playback finished successfully.")
             try:
                 if os.path.exists(temp_filename):
                     os.remove(temp_filename)
-                    print(f"Cleaned up temp file: {temp_filename}")
+                    log_event("INFO", "Music", f"Cleaned up temp file: {temp_filename}")
             except Exception as ex:
-                print(f"Cleanup error: {ex}")
+                log_event("ERROR", "Music", f"Cleanup error: {ex}")
 
         ffmpeg_source = discord.FFmpegPCMAudio(temp_filename)
         voice_client.play(ffmpeg_source, after=cleanup)
