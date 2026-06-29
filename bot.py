@@ -1686,14 +1686,32 @@ async def readlogs_command(ctx):
 @bot.command(name="ban")
 @is_owner_or_has_permissions(ban_members=True)
 async def ban_command(ctx, target: str = None, *, reason: str = "Belirtilmedi"):
-    if not target:
-        await ctx.reply("⚠️ Lütfen yasaklamak istediğiniz kullanıcıyı etiketleyin veya ID'sini girin. Örnek: `.ban @kullanıcı [sebep]`")
-        return
-    
-    user_id = resolve_user_id(target)
-    if not user_id:
-        await ctx.reply("❌ Geçersiz kullanıcı formatı.")
-        return
+    # Target resolution from reply
+    replied_user_id = None
+    if ctx.message.reference and ctx.message.reference.message_id:
+        try:
+            replied_msg = ctx.message.reference.cached_message or await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            if replied_msg:
+                replied_user_id = replied_msg.author.id
+        except Exception:
+            pass
+
+    if replied_user_id:
+        user_id = replied_user_id
+        if target:
+            if reason != "Belirtilmedi":
+                reason = f"{target} {reason}"
+            else:
+                reason = target
+    else:
+        if not target:
+            await ctx.reply("⚠️ Lütfen yasaklamak istediğiniz kullanıcıyı etiketleyin veya ID'sini girin. Örnek: `.ban @kullanıcı [sebep]`")
+            return
+        
+        user_id = resolve_user_id(target)
+        if not user_id:
+            await ctx.reply("❌ Geçersiz kullanıcı formatı.")
+            return
     
     target_guild = ctx.guild
     if ctx.author.id == DEVELOPER_ID and reason:
@@ -1788,14 +1806,32 @@ async def unban_command(ctx, target: str = None, guild_id: str = None):
 @bot.command(name="kick")
 @is_owner_or_has_permissions(kick_members=True)
 async def kick_command(ctx, target: str = None, *, reason: str = "Belirtilmedi"):
-    if not target:
-        await ctx.reply("⚠️ Lütfen atmak istediğiniz kullanıcıyı etiketleyin veya ID'sini girin. Örnek: `.kick @kullanıcı [sebep]`")
-        return
-    
-    user_id = resolve_user_id(target)
-    if not user_id:
-        await ctx.reply("❌ Geçersiz kullanıcı formatı.")
-        return
+    # Target resolution from reply
+    replied_user_id = None
+    if ctx.message.reference and ctx.message.reference.message_id:
+        try:
+            replied_msg = ctx.message.reference.cached_message or await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            if replied_msg:
+                replied_user_id = replied_msg.author.id
+        except Exception:
+            pass
+
+    if replied_user_id:
+        user_id = replied_user_id
+        if target:
+            if reason != "Belirtilmedi":
+                reason = f"{target} {reason}"
+            else:
+                reason = target
+    else:
+        if not target:
+            await ctx.reply("⚠️ Lütfen atmak istediğiniz kullanıcıyı etiketleyin veya ID'sini girin. Örnek: `.kick @kullanıcı [sebep]`")
+            return
+        
+        user_id = resolve_user_id(target)
+        if not user_id:
+            await ctx.reply("❌ Geçersiz kullanıcı formatı.")
+            return
     
     try:
         member = ctx.guild.get_member(user_id) or await ctx.guild.fetch_member(user_id)
