@@ -32,11 +32,11 @@ if sys.platform == 'win32':
         handle = kernel32.GetCurrentProcess()
         # 0x00000080 = HIGH_PRIORITY_CLASS
         if kernel32.SetPriorityClass(handle, 0x00000080):
-            print("[System] VDS Performans Modu Aktif: Bot işlem önceliği YÜKSEK (HIGH) olarak ayarlandı.")
+            print("[System] VDS Performans Modu Aktif: Bot islem onceligi YUKSEK (HIGH) olarak ayarlandi.")
         else:
-            print(f"[System] VDS Performans Modu Hatası: Öncelik ayarlanamadı. Hata Kodu: {kernel32.GetLastError()}")
+            print(f"[System] VDS Performans Modu Hatasi: Oncelik ayarlanamadi. Hata Kodu: {kernel32.GetLastError()}")
     except Exception as e:
-        print(f"[System] VDS Performans Modu Hatası: {e}")
+        print(f"[System] VDS Performans Modu Hatasi: {e}")
 
 # FFmpeg check & initialization
 try:

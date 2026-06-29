@@ -1,4 +1,5 @@
 @echo off
+set PYTHONIOENCODING=utf-8
 cd /d "%~dp0"
 echo Gerekli Python kutuphaneleri yukleniyor...
 where py >nul 2>&1

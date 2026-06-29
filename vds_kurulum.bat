@@ -1,4 +1,5 @@
 @echo off
+set PYTHONIOENCODING=utf-8
 title VDS Bot Hizlandirma ve Kurulum Yardimcisi
 cd /d "%~dp0"
 
