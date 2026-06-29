@@ -82,11 +82,15 @@ if %errorlevel% neq 0 (
 )
 
 echo Bot calistiriluyor...
-start "" run_python_bot.bat
+where py >nul 2>&1
+if %errorlevel% eq 0 (
+    py -u bot.py
+) else (
+    python -u bot.py
+)
 
 echo.
 echo ======================================================
-echo Islem tamamlandi! Bot arka planda hizlandirilmis
-echo olarak baslatildi. Discord'dan .sysinfo yazabilirsiniz.
+echo Islem tamamlandi! Bot durduruldu veya bir hata olustu.
 echo ======================================================
 pause
