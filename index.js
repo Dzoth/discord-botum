@@ -4851,6 +4851,24 @@ const apiServer = http.createServer((req, res) => {
           return sendJSON(200, { success: true });
         }
 
+        if (req.url === '/api/save-guild-status-config') {
+          const { guildId, guildTag, guildErkekRolId, guildKizRolId } = params;
+          if (!guildId) {
+            return sendJSON(400, { error: 'guildId is required' });
+          }
+          if (!kayitAyarlari[guildId]) {
+            kayitAyarlari[guildId] = {};
+          }
+          kayitAyarlari[guildId].guildTag = guildTag ? guildTag.trim() : '';
+          kayitAyarlari[guildId].guildErkekRolId = guildErkekRolId ? parseInt(guildErkekRolId) : null;
+          kayitAyarlari[guildId].guildKizRolId = guildKizRolId ? parseInt(guildKizRolId) : null;
+          
+          saveKayitAyarlari();
+          exportServerData();
+          logEvent("INFO", "GuildStatus", `Guild status reward role config updated via website for guild ${guildId}`);
+          return sendJSON(200, { success: true });
+        }
+
         if (req.url === '/api/toggle-link-filter') {
           const { enabled } = params;
           linkFilterActive = !!enabled;

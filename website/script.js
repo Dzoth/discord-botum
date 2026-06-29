@@ -845,7 +845,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         });
 
-        const roleSelects = document.querySelectorAll(".select-role, #limit-role-select, #automod-whitelist-role, #acc-quarantine-role, #er-role, .select-role-exempt");
+        const roleSelects = document.querySelectorAll(".select-role, #limit-role-select, #automod-whitelist-role, #acc-quarantine-role, #er-role, .select-role-exempt, #guild-status-male-role, #guild-status-female-role");
         roleSelects.forEach(select => {
             const currentValue = select.value;
             select.innerHTML = "";
@@ -924,6 +924,23 @@ document.addEventListener("DOMContentLoaded", () => {
                     quarantineGroup.style.display = "none";
                 }
             }
+        }
+
+        // 3.8. Load Guild Status Config into UI per server
+        const guildStatusTagInput = document.getElementById("guild-status-tag");
+        const guildStatusMaleSelect = document.getElementById("guild-status-male-role");
+        const guildStatusFemaleSelect = document.getElementById("guild-status-female-role");
+        
+        if (guildStatusTagInput && guildStatusMaleSelect && guildStatusFemaleSelect) {
+            const statusConfig = (window.guildsData && window.guildsData.kayitAyarlari && window.guildsData.kayitAyarlari[activeGuildId]) || {
+                guildTag: "",
+                guildErkekRolId: "",
+                guildKizRolId: ""
+            };
+            
+            guildStatusTagInput.value = statusConfig.guildTag || "";
+            guildStatusMaleSelect.value = statusConfig.guildErkekRolId || "";
+            guildStatusFemaleSelect.value = statusConfig.guildKizRolId || "";
         }
 
         // 4. Update the "Sunucularım" view list to match active state
@@ -1729,32 +1746,53 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // 7. Sunucu Etiketi Form
-    const servertagsForm = document.getElementById("servertags-form");
-    const btnDistributeTag = document.getElementById("btn-distribute-tag");
-    if (servertagsForm) {
-        servertagsForm.addEventListener("submit", (e) => {
+    // 7. Guild Status Form
+    const guildStatusForm = document.getElementById("guild-status-form");
+    if (guildStatusForm) {
+        guildStatusForm.addEventListener("submit", (e) => {
             e.preventDefault();
-            const tag = document.getElementById("server-tag-input").value;
-            showToast("Sunucu etiketi ayarları kaydedildi!", "success");
-            pushNewLog({
-                type: "success",
-                title: "Tag Ayarı Güncellendi",
-                mod: "ServerTag",
-                msg: `Sunucu tag formatı '${tag} {isim}' olarak güncellendi.`,
-                status: "Başarı"
-            });
-        });
-    }
-    if (btnDistributeTag) {
-        btnDistributeTag.addEventListener("click", () => {
-            showToast("Tag dağıtma işlemi arka planda başlatıldı!", "success");
-            pushNewLog({
-                type: "info",
-                title: "Tag Dağıtımı Başladı",
-                mod: "ServerTag",
-                msg: "Sunucudaki tüm üyelere tag dağıtma görevi tetiklendi.",
-                status: "Devam Ediyor..."
+            const guildId = activeGuildId;
+            const guildTag = document.getElementById("guild-status-tag").value.trim();
+            const guildErkekRolId = document.getElementById("guild-status-male-role").value;
+            const guildKizRolId = document.getElementById("guild-status-female-role").value;
+            
+            fetch(API_BASE + "/api/save-guild-status-config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    guildId,
+                    guildTag,
+                    guildErkekRolId,
+                    guildKizRolId
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast("Durum Rol Ödülü ayarları başarıyla kaydedildi!", "success");
+                    
+                    // Update local cache
+                    if (!window.guildsData.kayitAyarlari) window.guildsData.kayitAyarlari = {};
+                    window.guildsData.kayitAyarlari[guildId] = {
+                        guildTag,
+                        guildErkekRolId: guildErkekRolId ? parseInt(guildErkekRolId) : null,
+                        guildKizRolId: guildKizRolId ? parseInt(guildKizRolId) : null
+                    };
+                    
+                    pushNewLog({
+                        type: "success",
+                        title: "Durum Rol Ayarları Güncellendi",
+                        mod: "GuildStatus",
+                        msg: `Sunucu durum rol ayarları güncellendi. Tag: '${guildTag}'`,
+                        status: "Başarı"
+                    });
+                } else {
+                    showToast("Hata: " + (data.error || "Bilinmeyen hata"), "error");
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showToast("Sunucuyla bağlantı kurulamadı!", "error");
             });
         });
     }

@@ -965,6 +965,7 @@ async def check_and_update_guild_status_roles(member):
     if not member or not member.guild:
         return
         
+    load_kayit_ayarlari()
     guild = member.guild
     guild_id_str = str(guild.id)
     settings = kayitAyarlari.get(guild_id_str, {})

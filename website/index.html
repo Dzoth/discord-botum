@@ -76,7 +76,7 @@
                 </div>
                 <div class="menu-item" data-target="view-servertags">
                     <i class="fa-solid fa-tags"></i>
-                    <span>Sunucu Etiketi</span>
+                    <span>Durum Rol Ödülü</span>
                 </div>
 
                 <!-- Group 3: Security -->
@@ -1080,26 +1080,31 @@
                     </div>
                 </div>
 
-                <!-- 12. SUNUCU ETİKETİ VIEW -->
+                <!-- 12. SUNUCU DURUM ROLÜ (GUILD STATUS) VIEW -->
                 <div id="view-servertags" class="servertags-view view-panel">
                     <div class="card-panel large">
-                        <h3>Sunucu Etiketi (Tag) Sistemi</h3>
-                        <p class="panel-subtitle">Sunucunuza yeni katılan üyelerin isimlerinin başına otomatik tag veya sembol ekleyin.</p>
+                        <h3>Durum Rol Ödülü (Guild Status)</h3>
+                        <p class="panel-subtitle">Profil durumuna (custom status) sunucu tagınızı veya davet linkinizi ekleyen üyelere otomatik rol verin.</p>
                         
-                        <form id="servertags-form" class="settings-form">
+                        <form id="guild-status-form" class="settings-form">
                             <div class="form-group">
-                                <label for="server-tag-input">Otomatik Tag (Sunucu Simgesi)</label>
-                                <input type="text" id="server-tag-input" value="4m ❖" class="form-input">
+                                <label for="guild-status-tag">Durumda Aranacak Tag veya Reklam Metni</label>
+                                <input type="text" id="guild-status-tag" placeholder="Örn: zx veya AfxcBewXm" class="form-input">
+                                <small class="form-help">Üyenin durumunda bu metin/tag geçerse rol verilir. Boş bırakırsanız otomatik olarak sunucu davet kodları aranır.</small>
                             </div>
                             <div class="form-group">
-                                <label for="server-tag-format">Kullanıcı İsim Formatı</label>
-                                <input type="text" id="server-tag-format" value="4m ❖ {isim}" class="form-input">
-                                <small class="form-help">`{isim}` üyenin orijinal kullanıcı adını temsil eder.</small>
+                                <label for="guild-status-male-role">Erkek Durum Rolü</label>
+                                <select id="guild-status-male-role" class="form-input">
+                                    <option value="">Seçilmedi</option>
+                                </select>
                             </div>
-                            <div class="form-group-row" style="display: flex; gap: 15px;">
-                                <button type="submit" class="btn btn-primary btn-large btn-glow">Ayarları Kaydet</button>
-                                <button type="button" id="btn-distribute-tag" class="btn btn-secondary btn-large">Sunucudaki Herkese Tag Dağıt</button>
+                            <div class="form-group">
+                                <label for="guild-status-female-role">Kız Durum Rolü</label>
+                                <select id="guild-status-female-role" class="form-input">
+                                    <option value="">Seçilmedi</option>
+                                </select>
                             </div>
+                            <button type="submit" class="btn btn-primary btn-large btn-glow">Ayarları Kaydet</button>
                         </form>
                     </div>
                 </div>
