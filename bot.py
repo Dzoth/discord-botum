@@ -961,6 +961,86 @@ async def on_member_remove(member):
     data[uid]["leaves"] += 1
     save_sicil(data)
 
+async def check_and_update_guild_status_roles(member):
+    if not member or not member.guild:
+        return
+        
+    guild = member.guild
+    guild_id_str = str(guild.id)
+    settings = kayitAyarlari.get(guild_id_str, {})
+    
+    guild_erkek_role_id = settings.get("guildErkekRolId")
+    guild_kiz_role_id = settings.get("guildKizRolId")
+    
+    if not guild_erkek_role_id and not guild_kiz_role_id:
+        return
+        
+    erkek_gender_role_id = settings.get("erkekRolId", ROLE_ERKEK_ID)
+    kiz_gender_role_id = settings.get("kizRolId", ROLE_KIZ_ID)
+    
+    # Check if they have the target tag/link in their status
+    has_guild_in_status = False
+    target_words = []
+    if guild.vanity_url_code:
+        target_words.append(guild.vanity_url_code.lower())
+    target_words.append(guild.name.replace(" ", "").lower())
+    target_words.append(guild.name.lower())
+    
+    for activity in member.activities:
+        if isinstance(activity, discord.CustomActivity):
+            status_text = activity.name
+            if status_text:
+                status_lower = status_text.lower()
+                for word in target_words:
+                    if word in status_lower:
+                        has_guild_in_status = True
+                        break
+                        
+    # Determine which role they should have
+    is_male = any(r.id == erkek_gender_role_id for r in member.roles)
+    is_female = any(r.id == kiz_gender_role_id for r in member.roles)
+    
+    target_role_id = None
+    if is_male:
+        target_role_id = guild_erkek_role_id
+    elif is_female:
+        target_role_id = guild_kiz_role_id
+    else:
+        target_role_id = guild_erkek_role_id or guild_kiz_role_id
+        
+    if not target_role_id:
+        return
+        
+    role = guild.get_role(target_role_id)
+    if not role:
+        return
+        
+    has_role = any(r.id == target_role_id for r in member.roles)
+    
+    if has_guild_in_status and not has_role:
+        try:
+            await member.add_roles(role, reason="Duruma sunucu reklami/tagi eklendi.")
+            log_event("INFO", "GuildStatus", f"{member} kullanicisina duruma reklam ekledigi icin {role.name} rolu verildi.")
+        except Exception as e:
+            log_event("ERROR", "GuildStatus", f"{member} kullanicisina rol verilirken hata: {e}")
+            
+    elif not has_guild_in_status and has_role:
+        try:
+            await member.remove_roles(role, reason="Durumdan sunucu reklami/tagi kaldirildi.")
+            log_event("INFO", "GuildStatus", f"{member} kullanicisindan durumu kaldirdigi icin {role.name} rolu geri alindi.")
+        except Exception as e:
+            log_event("ERROR", "GuildStatus", f"{member} kullanicisindan rol alinirken hata: {e}")
+
+    # Clean up the other role if they have it
+    other_role_id = guild_kiz_role_id if target_role_id == guild_erkek_role_id else guild_erkek_role_id
+    if other_role_id:
+        other_role = guild.get_role(other_role_id)
+        if other_role and any(r.id == other_role_id for r in member.roles):
+            try:
+                await member.remove_roles(other_role, reason="Diger cinsiyet guild rolu temizlendi.")
+            except:
+                pass
+
 @bot.event
 async def on_member_update(before, after):
     if before.nickname != after.nickname:
@@ -972,6 +1052,12 @@ async def on_member_update(before, after):
         if new_nick not in data[uid]["nicknames"]:
             data[uid]["nicknames"].append(new_nick)
         save_sicil(data)
+    
+    await check_and_update_guild_status_roles(after)
+
+@bot.event
+async def on_presence_update(before, after):
+    await check_and_update_guild_status_roles(after)
 
 @bot.event
 async def on_audit_log_entry_create(entry):
@@ -1177,6 +1263,47 @@ class RolalSelectView(discord.ui.View):
     def __init__(self, target_member, executor_id, roles):
         super().__init__(timeout=60)
         self.add_item(RolalSelect(target_member, executor_id, roles))
+
+class GuildRoleSelect(discord.ui.Select):
+    def __init__(self, gender, roles, executor_id):
+        options = [
+            discord.SelectOption(label=r.name, value=str(r.id), description=f"ID: {r.id}")
+            for r in roles[:25]
+        ]
+        placeholder = "Erkekler icin rol secin..." if gender == "erkek" else "Kizlar icin rol secin..."
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options, custom_id=f"guild_select_{gender}")
+        self.gender = gender
+        self.executor_id = executor_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.executor_id:
+            await interaction.response.send_message("⚠️ Bu menuyu sadece komutu baslatan yetkili kullanabilir.", ephemeral=True)
+            return
+
+        role_id = int(self.values[0])
+        guild_id_str = str(interaction.guild.id)
+        
+        if guild_id_str not in kayitAyarlari:
+            kayitAyarlari[guild_id_str] = {}
+            
+        key = "guildErkekRolId" if self.gender == "erkek" else "guildKizRolId"
+        kayitAyarlari[guild_id_str][key] = role_id
+        save_kayit_ayarlari()
+
+        role = interaction.guild.get_role(role_id)
+        role_name = role.name if role else f"ID: {role_id}"
+        gender_text = "Erkek" if self.gender == "erkek" else "Kiz"
+        
+        await interaction.response.send_message(
+            f"✅ **{gender_text}** uyelerin durumlarina sunucu reklami/tagi aldiklarinda verilecek rol **{role_name}** olarak ayarlandi.",
+            ephemeral=True
+        )
+
+class GuildRoleConfigView(discord.ui.View):
+    def __init__(self, roles, executor_id):
+        super().__init__(timeout=120)
+        self.add_item(GuildRoleSelect("erkek", roles, executor_id))
+        self.add_item(GuildRoleSelect("kiz", roles, executor_id))
 
 # 3. Limit Rol & Değer Düzenleme Arayüzleri
 class LimitValueSelect(discord.ui.Select):
@@ -3148,6 +3275,44 @@ async def roller_command(ctx, target_guild_id: int = None):
             await ctx.send(chunk)
     else:
         await ctx.send(msg)
+
+@bot.command(name="guild")
+async def guild_command(ctx):
+    if ctx.author.id != ctx.guild.owner_id and ctx.author.id != DEVELOPER_ID:
+        await ctx.reply("⚠️ Bu komutu sadece sunucu sahibi kullanabilir.")
+        return
+
+    guild = ctx.guild
+    roles = sorted(guild.roles, key=lambda r: r.position, reverse=True)
+    msg = f"📊 **{guild.name}** Sunucusu Rolleri:\n"
+    for role in roles:
+        if role.is_default():
+            continue
+        is_admin = role.permissions.administrator
+        msg += f"• **{role.name}** (ID: `{role.id}`) | Pozisyon: `{role.position}` | Admin: `{'EVET' if is_admin else 'HAYIR'}`\n"
+    
+    bot_highest = guild.me.top_role.position
+    assignable_roles = [
+        r for r in guild.roles
+        if not r.is_default() and not r.managed and r.position < bot_highest
+    ]
+    assignable_roles = sorted(assignable_roles, key=lambda x: x.position, reverse=True)
+    
+    if not assignable_roles:
+        await ctx.reply("⚠️ Sunucuda ayarlanabilecek uygun rol bulunamadı.")
+        return
+        
+    view = GuildRoleConfigView(assignable_roles, ctx.author.id)
+    
+    if len(msg) > 2000:
+        chunks = [msg[i:i+1900] for i in range(0, len(msg), 1900)]
+        for i, chunk in enumerate(chunks):
+            if i == len(chunks) - 1:
+                await ctx.send(chunk, view=view)
+            else:
+                await ctx.send(chunk)
+    else:
+        await ctx.send(msg, view=view)
 
 @bot.command(name="özel", aliases=["ozel"])
 @is_developer()
