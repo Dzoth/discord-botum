@@ -981,10 +981,22 @@ async def check_and_update_guild_status_roles(member):
     # Check if they have the target tag/link in their status
     has_guild_in_status = False
     target_words = []
-    if guild.vanity_url_code:
-        target_words.append(guild.vanity_url_code.lower())
-    target_words.append(guild.name.replace(" ", "").lower())
-    target_words.append(guild.name.lower())
+    
+    guild_tag = settings.get("guildTag")
+    if guild_tag:
+        target_words.append(guild_tag.lower())
+    else:
+        # Fallbacks: Vanity code, invites, server name
+        if guild.vanity_url_code:
+            target_words.append(guild.vanity_url_code.lower())
+        try:
+            invites = await guild.invites()
+            for inv in invites:
+                target_words.append(inv.code.lower())
+        except:
+            pass
+        target_words.append(guild.name.replace(" ", "").lower())
+        target_words.append(guild.name.lower())
     
     for activity in member.activities:
         if isinstance(activity, discord.CustomActivity):
@@ -3277,14 +3289,30 @@ async def roller_command(ctx, target_guild_id: int = None):
         await ctx.send(msg)
 
 @bot.command(name="guild")
-async def guild_command(ctx):
+async def guild_command(ctx, *, custom_tag: str = None):
     if ctx.author.id != ctx.guild.owner_id and ctx.author.id != DEVELOPER_ID:
         await ctx.reply("⚠️ Bu komutu sadece sunucu sahibi kullanabilir.")
         return
 
     guild = ctx.guild
+    guild_id_str = str(guild.id)
+    
+    # Save custom tag if provided
+    if custom_tag:
+        if guild_id_str not in kayitAyarlari:
+            kayitAyarlari[guild_id_str] = {}
+        kayitAyarlari[guild_id_str]["guildTag"] = custom_tag.strip().lower()
+        save_kayit_ayarlari()
+        await ctx.send(f"✅ **{guild.name}** için durumda aranacak tag/reklam metni **\"{custom_tag}\"** olarak ayarlandı.")
+
     roles = sorted(guild.roles, key=lambda r: r.position, reverse=True)
     msg = f"📊 **{guild.name}** Sunucusu Rolleri:\n"
+    
+    # Show configured tag
+    config_tag = kayitAyarlari.get(guild_id_str, {}).get("guildTag")
+    if config_tag:
+        msg = f"🔍 **Durumda Aranacak Tag/Reklam Metni:** `{config_tag}`\n\n" + msg
+        
     for role in roles:
         if role.is_default():
             continue
