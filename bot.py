@@ -988,7 +988,7 @@ async def check_and_update_guild_status_roles(member):
     
     for activity in member.activities:
         if isinstance(activity, discord.CustomActivity):
-            status_text = activity.name
+            status_text = activity.state or activity.name
             if status_text:
                 status_lower = status_text.lower()
                 for word in target_words:
