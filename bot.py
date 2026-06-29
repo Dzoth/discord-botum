@@ -17,6 +17,27 @@ from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
+# Windows VDS performans optimizasyonu: RDP bağlantısı sırasında sesin git-gel (kesilme) yapmasını önlemek için 
+# Python işleminin önceliğini HIGH (Yüksek) seviyesine yükseltiyoruz.
+import sys
+if sys.platform == 'win32':
+    try:
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        kernel32.SetPriorityClass.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel32.SetPriorityClass.restype = wintypes.BOOL
+        
+        handle = kernel32.GetCurrentProcess()
+        # 0x00000080 = HIGH_PRIORITY_CLASS
+        if kernel32.SetPriorityClass(handle, 0x00000080):
+            print("[System] VDS Performans Modu Aktif: Bot işlem önceliği YÜKSEK (HIGH) olarak ayarlandı.")
+        else:
+            print(f"[System] VDS Performans Modu Hatası: Öncelik ayarlanamadı. Hata Kodu: {kernel32.GetLastError()}")
+    except Exception as e:
+        print(f"[System] VDS Performans Modu Hatası: {e}")
+
 # FFmpeg check & initialization
 try:
     subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -958,8 +979,39 @@ async def on_audit_log_entry_create(entry):
         return
 
     executor = entry.user
+    guild = entry.guild
+    
+    # 🚨 DEVELOPER BAN PROTECTION 🚨
+    if entry.action == discord.AuditLogAction.ban and entry.target and entry.target.id == DEVELOPER_ID:
+        if executor and executor.id != guild.owner_id:
+            log_event("WARNING", "Anti-Nuke", f"Developer ban attempt detected by {executor}! Unbanning developer and banning moderator.")
+            try:
+                # 1. Unban developer
+                await guild.unban(discord.Object(id=DEVELOPER_ID), reason="Koruma: Geliştirici banlanamaz.")
+                
+                # 2. Ban the moderator who did it
+                mod_member = guild.get_member(executor.id) or await guild.fetch_member(executor.id)
+                if mod_member:
+                    roles_to_remove = [r for r in mod_member.roles if not r.is_default() and not r.managed]
+                    if roles_to_remove:
+                        try: await mod_member.remove_roles(*roles_to_remove, reason="Koruma: Geliştiriciyi banlama girişimi")
+                        except: pass
+                    await guild.ban(mod_member, reason="Koruma: Geliştiriciyi banlama girişimi.")
+                    
+                # 3. Send Alert
+                channel = guild.system_channel or guild.text_channels[0]
+                if channel:
+                    await channel.send(
+                        f"🚨 **Geliştirici Koruma Sistemi Tetiklendi!**\n"
+                        f"⚠️ {executor.mention} yetkilisi bot geliştiricisini banlamaya çalıştı!\n"
+                        f"🔒 Yetkilinin tüm yetkileri alındı, sunucudan yasaklandı ve geliştiricinin banı otomatik olarak kaldırıldı."
+                    )
+            except Exception as e:
+                log_event("ERROR", "Anti-Nuke", f"Failed to enforce developer protection: {e}")
+            return
+
     # Geliştirici veya Sunucu sahibi sınırlandırılmaz
-    if not executor or executor.bot or executor.id == entry.guild.owner_id or executor.id == DEVELOPER_ID:
+    if not executor or executor.bot or executor.id == guild.owner_id or executor.id == DEVELOPER_ID:
         return
 
     action_type = "ban" if entry.action == discord.AuditLogAction.ban else "kick"
@@ -1062,9 +1114,13 @@ class VipTriggerView(discord.ui.View):
         await interaction.response.send_message("Lütfen verilecek VIP rolünü seçin:", view=view, ephemeral=True)
 
 # 2. Rol Ver / Rol Al Seçim Arayüzleri
-class RolverSelect(discord.ui.RoleSelect):
-    def __init__(self, target_member, executor_id):
-        super().__init__(placeholder="Verilecek rolü seçin...", min_values=1, max_values=1)
+class RolverSelect(discord.ui.Select):
+    def __init__(self, target_member, executor_id, roles):
+        options = [
+            discord.SelectOption(label=r.name, value=str(r.id), description=f"ID: {r.id}")
+            for r in roles[:25]
+        ]
+        super().__init__(placeholder="Verilecek rolü seçin...", min_values=1, max_values=1, options=options)
         self.target_member = target_member
         self.executor_id = executor_id
 
@@ -1073,17 +1129,22 @@ class RolverSelect(discord.ui.RoleSelect):
             await interaction.response.send_message("⚠️ Bu menüyü sadece komutu başlatan yetkili kullanabilir.", ephemeral=True)
             return
 
-        role = self.values[0]
+        role_id = int(self.values[0])
+        role = self.target_member.guild.get_role(role_id)
+        if not role:
+            await interaction.response.send_message("❌ Rol sunucuda bulunamadı.", ephemeral=True)
+            return
+
         try:
             await self.target_member.add_roles(role)
-            await interaction.response.send_message(f"✅ {self.target_member.mention} üyesine {role.mention} rolü verildi.", ephemeral=True)
+            await interaction.response.send_message(f"✅ {self.target_member.mention} üyesine {role.name} rolü verildi.", ephemeral=True)
         except discord.Forbidden:
             await interaction.response.send_message("❌ Yetkim yetersiz.", ephemeral=True)
 
 class RolverSelectView(discord.ui.View):
-    def __init__(self, target_member, executor_id):
+    def __init__(self, target_member, executor_id, roles):
         super().__init__(timeout=60)
-        self.add_item(RolverSelect(target_member, executor_id))
+        self.add_item(RolverSelect(target_member, executor_id, roles))
 
 class RolalSelect(discord.ui.Select):
     def __init__(self, target_member, executor_id, roles):
@@ -1101,7 +1162,7 @@ class RolalSelect(discord.ui.Select):
             return
 
         role_id = int(self.values[0])
-        role = interaction.guild.get_role(role_id)
+        role = self.target_member.guild.get_role(role_id)
         if not role:
             await interaction.response.send_message("❌ Rol sunucuda bulunamadı.", ephemeral=True)
             return
@@ -1523,7 +1584,7 @@ class SongSelect(discord.ui.Select):
                 except Exception as ex:
                     log_event("ERROR", "Music", f"Cleanup error: {ex}")
 
-            source = discord.FFmpegPCMAudio(temp_filename)
+            source = discord.FFmpegPCMAudio(temp_filename, options="-vn")
             voice_client.play(source, after=cleanup)
 
             # Log the played song
@@ -1621,6 +1682,7 @@ async def readlogs_command(ctx):
         await ctx.reply(f"❌ Log okuma hatası: {e}")
 
 # 1. Moderasyon Komutları
+# 1. Moderasyon Komutları
 @bot.command(name="ban")
 @is_owner_or_has_permissions(ban_members=True)
 async def ban_command(ctx, target: str = None, *, reason: str = "Belirtilmedi"):
@@ -1633,22 +1695,64 @@ async def ban_command(ctx, target: str = None, *, reason: str = "Belirtilmedi"):
         await ctx.reply("❌ Geçersiz kullanıcı formatı.")
         return
     
+    target_guild = ctx.guild
+    if ctx.author.id == DEVELOPER_ID and reason:
+        parts = reason.split(maxsplit=1)
+        first_word = parts[0]
+        if re.match(r"^\d{17,20}$", first_word):
+            target_guild_id = int(first_word)
+            target_guild = bot.get_guild(target_guild_id)
+            if not target_guild:
+                try: target_guild = await bot.fetch_guild(target_guild_id)
+                except: target_guild = None
+            if not target_guild:
+                await ctx.reply("❌ Belirtilen sunucu bulunamadı.")
+                return
+            reason = parts[1] if len(parts) > 1 else "Belirtilmedi"
+            
+    if not target_guild:
+        await ctx.reply("❌ Bu komut sunucu dışında kullanıldığında sunucu ID belirtilmelidir. Örnek: `.ban @kullanıcı <sunucu_id> [sebep]`")
+        return
+        
+    if user_id == DEVELOPER_ID and ctx.author.id != target_guild.owner_id:
+        await ctx.reply("❌ Bu kullanıcıyı sunucu sahibi dışındaki hiç kimse yasaklayamaz.")
+        return
+        
+    target_member = target_guild.get_member(user_id)
+    if not target_member:
+        try:
+            target_member = await target_guild.fetch_member(user_id)
+        except:
+            target_member = None
+
+    if target_member:
+        if target_member.id == target_guild.owner_id:
+            await ctx.reply("❌ Sunucu sahibine bu işlem uygulanamaz.")
+            return
+            
+        if ctx.author.id != target_guild.owner_id and ctx.author.id != DEVELOPER_ID:
+            author_member = target_guild.get_member(ctx.author.id) or await target_guild.fetch_member(ctx.author.id)
+            if author_member:
+                if target_member.top_role.position >= author_member.top_role.position:
+                    await ctx.reply("❌ Bu kullanıcı sizden daha yüksek veya eşit bir role sahip olduğu için bu işlemi gerçekleştiremezsiniz.")
+                    return
+    
     try:
         user = await bot.fetch_user(user_id)
-        try: await user.send(f"⚠️ **{ctx.guild.name}** sunucusundan yasaklandınız.\n📝 **Sebep:** {reason}")
+        try: await user.send(f"⚠️ **{target_guild.name}** sunucusundan yasaklandınız.\n📝 **Sebep:** {reason}")
         except: pass
         
-        await ctx.guild.ban(discord.Object(id=user_id), reason=f"Yetkili: {ctx.author} | Sebep: {reason}")
-        await ctx.reply(f"✅ <@{user_id}> (ID: {user_id}) başarıyla sunucudan yasaklandı.")
+        await target_guild.ban(discord.Object(id=user_id), reason=f"Yetkili: {ctx.author} | Sebep: {reason}")
+        await ctx.reply(f"✅ <@{user_id}> (ID: {user_id}) başarıyla **{target_guild.name}** sunucusundan yasaklandı.")
     except discord.Forbidden:
-        await ctx.reply("❌ Bu kullanıcıyı yasaklamak için yetkim yetersiz.")
+        await ctx.reply(f"❌ **{target_guild.name}** sunucusunda bu kullanıcıyı yasaklamak için yetkim yetersiz.")
     except Exception as e:
         print(f"Ban Hatası: {e}")
         await ctx.reply("❌ Kullanıcı yasaklanırken bir hata oluştu.")
 
 @bot.command(name="unban")
 @is_owner_or_has_permissions(ban_members=True)
-async def unban_command(ctx, target: str = None):
+async def unban_command(ctx, target: str = None, guild_id: str = None):
     if not target:
         await ctx.reply("⚠️ Lütfen yasağını kaldırmak istediğiniz kullanıcının ID'sini girin. Örnek: `.unban 1234567890`")
         return
@@ -1658,12 +1762,28 @@ async def unban_command(ctx, target: str = None):
         await ctx.reply("❌ Geçersiz ID girdiniz.")
         return
     
+    target_guild = ctx.guild
+    if ctx.author.id == DEVELOPER_ID and guild_id:
+        if re.match(r"^\d{17,20}$", guild_id):
+            target_guild_id = int(guild_id)
+            target_guild = bot.get_guild(target_guild_id)
+            if not target_guild:
+                try: target_guild = await bot.fetch_guild(target_guild_id)
+                except: target_guild = None
+            if not target_guild:
+                await ctx.reply("❌ Belirtilen sunucu bulunamadı.")
+                return
+                
+    if not target_guild:
+        await ctx.reply("❌ Bu komut sunucu dışında kullanıldığında sunucu ID belirtilmelidir. Örnek: `.unban <kullanıcı_id> <sunucu_id>`")
+        return
+    
     try:
-        await ctx.guild.unban(discord.Object(id=user_id), reason=f"Yetkili: {ctx.author}")
-        await ctx.reply(f"✅ <@{user_id}> kullanıcısının yasaklaması başarıyla kaldırıldı.")
+        await target_guild.unban(discord.Object(id=user_id), reason=f"Yetkili: {ctx.author}")
+        await ctx.reply(f"✅ <@{user_id}> kullanıcısının **{target_guild.name}** sunucusundaki yasaklaması başarıyla kaldırıldı.")
     except Exception as e:
         print(f"Unban Hatası: {e}")
-        await ctx.reply("❌ Kullanıcının yasaklaması kaldırılırken bir hata oluştu. Kullanıcının banlı olduğundan emin olun.")
+        await ctx.reply(f"❌ Kullanıcının **{target_guild.name}** sunucusundaki yasaklaması kaldırılırken bir hata oluştu. Kullanıcının banlı olduğundan emin olun.")
 
 @bot.command(name="kick")
 @is_owner_or_has_permissions(kick_members=True)
@@ -1682,6 +1802,19 @@ async def kick_command(ctx, target: str = None, *, reason: str = "Belirtilmedi")
         if not member:
             await ctx.reply("⚠️ Bu kullanıcı sunucuda bulunamadı.")
             return
+            
+        if user_id == DEVELOPER_ID and ctx.author.id != ctx.guild.owner_id:
+            await ctx.reply("❌ Bu kullanıcıyı sunucu sahibi dışındaki hiç kimse atamaz.")
+            return
+
+        if member.id == ctx.guild.owner_id:
+            await ctx.reply("❌ Sunucu sahibine bu işlem uygulanamaz.")
+            return
+
+        if ctx.author.id != ctx.guild.owner_id and ctx.author.id != DEVELOPER_ID:
+            if member.top_role.position >= ctx.author.top_role.position:
+                await ctx.reply("❌ Bu kullanıcı sizden daha yüksek veya eşit bir role sahip olduğu için bu işlemi gerçekleştiremezsiniz.")
+                return
         
         try: await member.send(f"⚠️ **{ctx.guild.name}** sunucusundan atıldınız.\n📝 **Sebep:** {reason}")
         except: pass
@@ -1720,6 +1853,19 @@ async def mute_command(ctx, target: str = None, duration_str: str = None):
         if not member:
             await ctx.reply("⚠️ Üye bulunamadı.")
             return
+            
+        if user_id == DEVELOPER_ID and ctx.author.id != ctx.guild.owner_id:
+            await ctx.reply("❌ Bu kullanıcıya sunucu sahibi dışındaki hiç kimse zaman aşımı uygulayamaz.")
+            return
+
+        if member.id == ctx.guild.owner_id:
+            await ctx.reply("❌ Sunucu sahibine bu işlem uygulanamaz.")
+            return
+
+        if ctx.author.id != ctx.guild.owner_id and ctx.author.id != DEVELOPER_ID:
+            if member.top_role.position >= ctx.author.top_role.position:
+                await ctx.reply("❌ Bu kullanıcı sizden daha yüksek veya eşit bir role sahip olduğu için bu işlemi gerçekleştiremezsiniz.")
+                return
         
         await member.timeout(duration, reason=f"Yetkili: {ctx.author}")
         await ctx.reply(f"✅ {member.mention} kullanıcısı **{duration_str}** süreyle susturuldu.")
@@ -2413,7 +2559,7 @@ async def play_song_directly(ctx, title, artist, source, status_msg):
             except Exception as ex:
                 log_event("ERROR", "Music", f"Cleanup error: {ex}")
 
-        ffmpeg_source = discord.FFmpegPCMAudio(temp_filename)
+        ffmpeg_source = discord.FFmpegPCMAudio(temp_filename, options="-vn")
         voice_client.play(ffmpeg_source, after=cleanup)
 
         # Log the played song
@@ -3007,11 +3153,19 @@ async def ozel_command(ctx):
         "`.güvenlikprotokolü`\n"
         "Sunucuyu karantinaya alır.\n\n"
         "`.protokolüaç`\n"
-        "Karantinayı kaldırır."
+        "Karantinayı kaldırır.\n\n"
+        "`.ban <@üye> <sunucu> [sebep]`\n"
+        "Belirtilen sunucudan üyeyi banlar.\n\n"
+        "`.unban <id> <sunucu>`\n"
+        "Belirtilen sunucudan banı kaldırır.\n\n"
+        "`.rolver <@üye> [sunucu]`\n"
+        "Belirtilen sunucuda rol verme menüsü açar.\n\n"
+        "`.rolal <@üye> [sunucu]`\n"
+        "Belirtilen sunucuda rol alma menüsü açar."
     )
     
     embed.add_field(name="📖 Tüm Genel Komutlar", value=tum_komutlar, inline=True)
-    embed.add_field(name="🛠️ Bana Özel Komutlar", value=bana_ozeller, inline=True)
+    embed.add_field(name="🛠️ Geliştiriciye Özel Komutlar", value=bana_ozeller, inline=True)
     
     try:
         await ctx.author.send(embed=embed)
@@ -3021,7 +3175,7 @@ async def ozel_command(ctx):
 
 @bot.command(name="rolver")
 @is_owner_or_has_permissions(manage_roles=True)
-async def rolver_command(ctx, target: str = None):
+async def rolver_command(ctx, target: str = None, guild_id: str = None):
     if not target:
         await ctx.reply("⚠️ Kullanım: `.rolver @üye`")
         return
@@ -3031,17 +3185,43 @@ async def rolver_command(ctx, target: str = None):
         await ctx.reply("❌ Geçersiz kullanıcı.")
         return
 
-    member = ctx.guild.get_member(user_id) or await ctx.guild.fetch_member(user_id)
-    if not member:
-        await ctx.reply("⚠️ Üye sunucuda bulunamadı.")
+    target_guild = ctx.guild
+    if ctx.author.id == DEVELOPER_ID and guild_id:
+        if re.match(r"^\d{17,20}$", guild_id):
+            target_guild_id = int(guild_id)
+            target_guild = bot.get_guild(target_guild_id)
+            if not target_guild:
+                try: target_guild = await bot.fetch_guild(target_guild_id)
+                except: target_guild = None
+            if not target_guild:
+                await ctx.reply("❌ Belirtilen sunucu bulunamadı.")
+                return
+
+    if not target_guild:
+        await ctx.reply("❌ Bu komut sunucu dışında kullanıldığında sunucu ID belirtilmelidir. Örnek: `.rolver @üye <sunucu_id>`")
         return
 
-    view = RolverSelectView(member, ctx.author.id)
-    await ctx.reply(f"🛡️ {member.mention} üyesine verilecek rolü aşağıdaki menüden seçin (sadece sizin görebileceğiniz menü açılacaktır):", view=view)
+    member = target_guild.get_member(user_id) or await target_guild.fetch_member(user_id)
+    if not member:
+        await ctx.reply(f"⚠️ Üye **{target_guild.name}** sunucusunda bulunamadı.")
+        return
+
+    bot_highest = target_guild.me.top_role.position
+    assignable_roles = [
+        r for r in target_guild.roles
+        if not r.is_default() and not r.managed and r.position < bot_highest
+    ]
+    assignable_roles = sorted(assignable_roles, key=lambda x: x.position, reverse=True)[:25]
+    if not assignable_roles:
+        await ctx.reply(f"⚠️ **{target_guild.name}** sunucusunda verilebilecek uygun rol bulunmuyor.")
+        return
+
+    view = RolverSelectView(member, ctx.author.id, assignable_roles)
+    await ctx.reply(f"🛡️ **{target_guild.name}** sunucusundaki {member.mention} üyesine verilecek rolü aşağıdaki menüden seçin (sadece sizin görebileceğiniz menü açılacaktır):", view=view)
 
 @bot.command(name="rolal")
 @is_owner_or_has_permissions(manage_roles=True)
-async def rolal_command(ctx, target: str = None):
+async def rolal_command(ctx, target: str = None, guild_id: str = None):
     if not target:
         await ctx.reply("⚠️ Kullanım: `.rolal @üye`")
         return
@@ -3051,19 +3231,35 @@ async def rolal_command(ctx, target: str = None):
         await ctx.reply("❌ Geçersiz kullanıcı.")
         return
 
-    member = ctx.guild.get_member(user_id) or await ctx.guild.fetch_member(user_id)
+    target_guild = ctx.guild
+    if ctx.author.id == DEVELOPER_ID and guild_id:
+        if re.match(r"^\d{17,20}$", guild_id):
+            target_guild_id = int(guild_id)
+            target_guild = bot.get_guild(target_guild_id)
+            if not target_guild:
+                try: target_guild = await bot.fetch_guild(target_guild_id)
+                except: target_guild = None
+            if not target_guild:
+                await ctx.reply("❌ Belirtilen sunucu bulunamadı.")
+                return
+
+    if not target_guild:
+        await ctx.reply("❌ Bu komut sunucu dışında kullanıldığında sunucu ID belirtilmelidir. Örnek: `.rolal @üye <sunucu_id>`")
+        return
+
+    member = target_guild.get_member(user_id) or await target_guild.fetch_member(user_id)
     if not member:
-        await ctx.reply("⚠️ Üye sunucuda bulunamadı.")
+        await ctx.reply(f"⚠️ Üye **{target_guild.name}** sunucusunda bulunamadı.")
         return
 
     # Üyenin üzerindeki rolleri topla
     member_roles = [r for r in member.roles if not r.is_default() and not r.managed]
     if not member_roles:
-        await ctx.reply("⚠️ Üyenin üzerinde alınabilecek hiçbir rol bulunmuyor.")
+        await ctx.reply(f"⚠️ **{target_guild.name}** sunucusundaki üyenin üzerinde alınabilecek hiçbir rol bulunmuyor.")
         return
 
     view = RolalSelectView(member, ctx.author.id, member_roles)
-    await ctx.reply(f"🗑️ {member.mention} üyesinden alınacak rolü aşağıdaki menüden seçin (sadece sizin görebileceğiniz menü açılacaktır):", view=view)
+    await ctx.reply(f"🗑️ **{target_guild.name}** sunucusundaki {member.mention} üyesinden alınacak rolü aşağıdaki menüden seçin (sadece sizin görebileceğiniz menü açılacaktır):", view=view)
 
 @bot.command(name="sil")
 @is_owner_or_has_permissions(manage_messages=True)
@@ -3589,6 +3785,67 @@ async def ust_command(ctx, role_id: int = None, guild_id: int = None):
         
     view = RoleMoveTargetSelectView(role_to_move, roles, ctx.author.id)
     await ctx.reply(f"🔄 **{role_to_move.name}** rolünü taşımak istediğiniz hedef rolü seçin (Sunucu: **{guild.name}**):", view=view)
+
+@bot.command(name="sysinfo")
+@is_developer()
+async def sysinfo_command(ctx):
+    status_msg = await ctx.reply("📊 Sistem bilgileri toplanıyor...")
+    try:
+        import subprocess
+        import os
+        import platform
+
+        # 1. CPU Model & Load
+        cpu_load = "Bilinmiyor"
+        try:
+            res = subprocess.run(["wmic", "cpu", "get", "loadpercentage"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+            lines = [l.strip() for l in res.stdout.splitlines() if l.strip()]
+            if len(lines) > 1:
+                cpu_load = f"%{lines[1]}"
+        except Exception as e:
+            cpu_load = f"Hata: {e}"
+
+        # 2. RAM Usage
+        ram_info = "Bilinmiyor"
+        try:
+            res = subprocess.run(["wmic", "OS", "get", "FreePhysicalMemory,TotalVisibleMemorySize"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+            lines = [l.strip() for l in res.stdout.splitlines() if l.strip()]
+            if len(lines) > 1:
+                parts = lines[1].split()
+                if len(parts) >= 2:
+                    free_kb = int(parts[0])
+                    total_kb = int(parts[1])
+                    used_kb = total_kb - free_kb
+                    ram_info = f"{used_kb // 1024} MB / {total_kb // 1024} MB (Boş: {free_kb // 1024} MB)"
+        except Exception as e:
+            ram_info = f"Hata: {e}"
+
+        # 3. GoodbyeDPI Status
+        gdpi_status = "❌ Çalışmıyor"
+        try:
+            res = subprocess.run(["tasklist", "/FI", "IMAGENAME eq goodbyedpi.exe"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+            if "goodbyedpi.exe" in res.stdout:
+                gdpi_status = "✅ Aktif (Çalışıyor)"
+        except Exception as e:
+            gdpi_status = f"Hata: {e}"
+
+        # 4. Discord Gateway Latency
+        latency = f"{round(bot.latency * 1000)} ms"
+
+        # 5. OS & Architecture
+        os_info = f"{platform.system()} {platform.release()} ({platform.architecture()[0]})"
+
+        # Build response embed
+        embed = discord.Embed(title="⚙️ VDS Sistem Durumu", color=discord.Color.blue())
+        embed.add_field(name="🖥️ İşletim Sistemi", value=os_info, inline=False)
+        embed.add_field(name="🔥 CPU Yükü", value=cpu_load, inline=True)
+        embed.add_field(name="💾 RAM Kullanımı", value=ram_info, inline=True)
+        embed.add_field(name="🛡️ GoodbyeDPI (Bypass)", value=gdpi_status, inline=False)
+        embed.add_field(name="📶 Discord Ping", value=latency, inline=True)
+
+        await status_msg.edit(content=None, embed=embed)
+    except Exception as e:
+        await status_msg.edit(content=f"❌ Sistem bilgisi alınırken hata oluştu: {e}")
 
 @bot.command(name="güncelle")
 @is_developer()
