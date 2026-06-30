@@ -1131,7 +1131,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         name: member.user.username,
         iconURL: member.user.displayAvatarURL({ dynamic: true })
       })
-      .setDescription(`<@${member.id}> ses kanalına katıldı \\`${newChannel.name}\\`.`)
+      .setDescription('<@' + member.id + '> ses kanalına katıldı `' + newChannel.name + '`.')
       .setFooter({ text: `ID: ${member.id}` })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-voice-join', embed);
@@ -1146,7 +1146,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         name: member.user.username,
         iconURL: member.user.displayAvatarURL({ dynamic: true })
       })
-      .setDescription(`<@${member.id}> ses kanalından ayrıldı \\`${oldChannel.name}\\`.`)
+      .setDescription('<@' + member.id + '> ses kanalından ayrıldı `' + oldChannel.name + '`.')
       .setFooter({ text: `ID: ${member.id}` })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-voice-leave', embed);
@@ -1161,7 +1161,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         name: member.user.username,
         iconURL: member.user.displayAvatarURL({ dynamic: true })
       })
-      .setDescription(`<@${member.id}> ses kanalını değiştirdi \\`${oldChannel.name}\\` -> \\`${newChannel.name}\\`.`)
+      .setDescription('<@' + member.id + '> ses kanalını değiştirdi `' + oldChannel.name + '` -> `' + newChannel.name + '`.')
       .setFooter({ text: `ID: ${member.id}` })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-voice-move', embed);
