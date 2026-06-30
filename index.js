@@ -1185,10 +1185,14 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
               const embed = new EmbedBuilder()
                   .setColor(0xED4245)
                   .setTitle('TempVoice Interface')
-                  .setDescription('Bu arayüzü kullanarak geçici ses kanalınızı istediğiniz şekilde yönetebilirsiniz.\n\nDaha fazla seçeneğe ulaşmak için **/voice** komutunu kullanabilirsiniz.\n\n' +
-                      '🚪 **ODA İSMİ** | 👥 **ODA LİMİTİ** | 🛡️ **GİZLİLİK** | ⏰ **BEKLEME ODASI** | 💬 **SOHBET**\n' +
-                      '👤➕ **GÜVENİLİR** | 👤➖ **GÜVENSİZ** | 📞 **DAVET** | 📞x **SESTEN AT** | 🌐 **BÖLGE**\n' +
-                      '👤⛔ **ENGELLE** | 👤✔️ **ENGELI KALDIR** | 👑 **SAHİPLEN** | 👑✔️ **ODAYI DEVRET** | 🗑️ **SİL**\n\n' +
+                  .setDescription('Bu arayüzü kullanarak geçici ses kanalınızı istediğiniz şekilde yönetebilirsiniz.\n\n' +
+                      'Daha fazla seçeneğe ulaşmak için **/voice** komutunu kullanabilirsiniz.\n\n' +
+                      '⚙️ **Oda Yönetimi**\n' +
+                      '• 🚪 `Oda İsmi` • 👥 `Oda Limiti` • 🛡️ `Gizlilik` • ⏰ `Bekleme Odası` • 💬 `Sohbet` • 🌐 `Bölge`\n\n' +
+                      '👤 **Kullanıcı İzinleri**\n' +
+                      '• 👤➕ `Güvenilir` • 👤➖ `Güvensiz` • 🚫 `Engelle` • ✔️ `Engeli Kaldır` • 📞x `Sesten At` • 📞 `Davet`\n\n' +
+                      '👑 **Oda Sahipliği**\n' +
+                      '• 👑 `Sahiplen` • 👑✔️ `Odayı Devret` • 🗑️ `Sil`\n\n' +
                       'Bu arayüzü kullanmak için aşağıdaki uygun butonlara tıklayın.')
                   .setTimestamp();
 
