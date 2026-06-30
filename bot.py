@@ -2220,6 +2220,31 @@ async def vip_command(ctx, target: str = None):
     view = VipTriggerView(member, ctx.author.id)
     await ctx.reply(f"🔑 {member.mention} kullanıcısına VIP rolü vermek için aşağıdaki butona tıklayın (sadece sizin görebileceğiniz gizli bir menü açılacaktır):", view=view)
 
+@bot.command(name="odakur")
+@is_owner_or_has_permissions(manage_channels=True)
+async def odakur_command(ctx):
+    try:
+        guild = ctx.guild
+        category = await guild.create_category(name="özelsesacıptakılın", reason="TempVoice Kurulumu")
+        text_channel = await guild.create_text_channel(
+            name="komutlar",
+            category=category,
+            reason="TempVoice Kurulumu"
+        )
+        voice_channel = await guild.create_voice_channel(
+            name="🔊 özelsesacıptakılın",
+            category=category,
+            reason="TempVoice Kurulumu"
+        )
+        await ctx.reply(f"✅ **TempVoice Sistemi Başarıyla Kuruldu!**\n\n"
+                        f"• Kategori: {category.name}\n"
+                        f"• Komut Kanalı: {text_channel.mention}\n"
+                        f"• Giriş Kanalı: {voice_channel.mention}\n\n"
+                        f"Üyeleriniz ses kanalına katılarak kendi özel odalarını oluşturmaya başlayabilirler.")
+    except Exception as e:
+        print(f"Error in odakur: {e}")
+        await ctx.reply("❌ Kanallar oluşturulurken bir hata oluştu. Gerekli yetkilerim olduğundan emin olun.")
+
 # 4. Bilgi ve Raporlama Komutları
 @bot.command(name="spo")
 async def spotify_status(ctx, member: discord.Member = None):
