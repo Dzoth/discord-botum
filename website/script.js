@@ -1,7 +1,7 @@
 // ==================== API HOST CONFIGURATION ====================
-const API_BASE = (window.location.protocol === 'file:' || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'))
-    ? 'https://discord-botum-1dbx.onrender.com'
-    : 'http://localhost:3000';
+const API_BASE = window.location.protocol === 'file:'
+    ? 'http://91.232.103.240:3000'
+    : window.location.origin;
 
 // ==================== MOCK ROLES & LIMIT DATA ====================
 const mockRoles = [
