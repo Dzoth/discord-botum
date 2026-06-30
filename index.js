@@ -1182,44 +1182,61 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
           }
 
           if (textLogChannel) {
-              // Self-healing: Check if the persistent control panel message exists in the channel history
-              const messages = await textLogChannel.messages.fetch({ limit: 50 }).catch(() => null);
-              let panelExists = false;
-              if (messages) {
-                  panelExists = messages.some(msg => msg.components.some(row => row.components.some(btn => btn.customId === 'tempvoice_open_panel')));
-              }
-              if (!panelExists) {
-                  const panelEmbed = new EmbedBuilder()
-                      .setColor(0xED4245)
-                      .setTitle('TempVoice Kontrol Paneli')
-                      .setDescription('Kendi özel ses odanızı yönetmek için aşağıdaki **Kontrol Panelini Aç** butonuna tıklayın.\n\n*Kontrol paneli sadece sizin görebileceğiniz şekilde açılacaktır.*')
-                      .setTimestamp();
-
-                  const panelRow = new ActionRowBuilder().addComponents(
-                      new ButtonBuilder()
-                          .setCustomId('tempvoice_open_panel')
-                          .setLabel('Kontrol Panelini Aç')
-                          .setEmoji('⚙️')
-                          .setStyle(ButtonStyle.Primary)
-                  );
-
-                  await textLogChannel.send({ embeds: [panelEmbed], components: [panelRow] }).catch(() => null);
-              }
-
-              const joinMsg = await textLogChannel.send({
-                  content: `🔊 <@${member.id}> özel odanız oluşturuldu! Kanalınızı yönetmek için yukarıdaki **[⚙️ Kontrol Panelini Aç]** butonuna tıklayabilirsiniz.`
+              // Ensure #komutlar is hidden from everyone but visible to the creator
+              await textLogChannel.permissionOverwrites.create(guild.roles.everyone.id, {
+                  ViewChannel: false
+              }).catch(() => null);
+              await textLogChannel.permissionOverwrites.create(member.id, {
+                  ViewChannel: true,
+                  SendMessages: false
               }).catch(() => null);
 
-              if (joinMsg) {
-                  setTimeout(() => {
-                      joinMsg.delete().catch(() => null);
-                  }, 10000);
-              }
+              const { AttachmentBuilder } = require('discord.js');
+              const path = require('path');
+              const attachment = new AttachmentBuilder(path.join(__dirname, 'tempvoice_interface.png'), { name: 'interface.png' });
+
+              const embed = new EmbedBuilder()
+                  .setColor(0xED4245)
+                  .setTitle('TempVoice Interface')
+                  .setDescription('Bu arayüzü kullanarak geçici ses kanalınızı istediğiniz şekilde yönetebilirsiniz.\n\nDaha fazla seçeneğe ulaşmak için **/voice** komutunu kullanabilirsiniz.\n\nBu arayüzü kullanmak için aşağıdaki uygun butonlara tıklayın.')
+                  .setImage('attachment://interface.png')
+                  .setTimestamp();
+
+              const row1 = new ActionRowBuilder().addComponents(
+                  new ButtonBuilder().setCustomId('tempvoice_name').setEmoji('🚪').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_limit').setEmoji('👥').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_privacy').setEmoji('🛡️').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_waiting').setEmoji('⏰').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_chat').setEmoji('💬').setStyle(ButtonStyle.Secondary)
+              );
+
+              const row2 = new ActionRowBuilder().addComponents(
+                  new ButtonBuilder().setCustomId('tempvoice_permit').setEmoji('👤').setLabel('+').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_unpermit').setEmoji('👤').setLabel('-').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_invite').setEmoji('📞').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_kick').setEmoji('📞').setLabel('x').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_region').setEmoji('🌐').setStyle(ButtonStyle.Secondary)
+              );
+
+              const row3 = new ActionRowBuilder().addComponents(
+                  new ButtonBuilder().setCustomId('tempvoice_block').setEmoji('🚫').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_unblock').setEmoji('✔️').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_claim').setEmoji('👑').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_transfer').setEmoji('👑').setLabel('✔️').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_delete').setEmoji('🗑️').setStyle(ButtonStyle.Danger)
+              );
+
+              const interfaceMessage = await textLogChannel.send({
+                  content: `<@${member.id}> odanız oluşturuldu.`,
+                  embeds: [embed],
+                  files: [attachment],
+                  components: [row1, row2, row3]
+              });
 
               const tempRooms = loadTempRooms();
               tempRooms.set(tempChannel.id, {
                   ownerId: member.id,
-                  messageId: null,
+                  messageId: interfaceMessage.id,
                   textChannelId: textLogChannel.id,
                   tempTextChannelId: null,
                   categoryId: category ? category.id : null
@@ -2016,67 +2033,6 @@ client.on('interactionCreate', async (interaction) => {
   // --- TempVoice Button Interactions ---
   if (interaction.isButton() && interaction.customId.startsWith('tempvoice_')) {
       const tempRooms = loadTempRooms();
-
-      if (interaction.customId === 'tempvoice_open_panel') {
-          let userRoomId = null;
-          for (const [channelId, data] of tempRooms.entries()) {
-              if (data.ownerId === interaction.user.id) {
-                  userRoomId = channelId;
-                  break;
-              }
-          }
-
-          if (!userRoomId) {
-              return interaction.reply({ content: "❌ Aktif bir özel ses odanız bulunmuyor. Bir odaya katılarak kendi odanızı açabilirsiniz.", ephemeral: true });
-          }
-
-          const voiceChannel = interaction.guild.channels.cache.get(userRoomId);
-          if (!voiceChannel) {
-              return interaction.reply({ content: "❌ Odanız bulunamadı.", ephemeral: true });
-          }
-
-          const { AttachmentBuilder } = require('discord.js');
-          const path = require('path');
-          const attachment = new AttachmentBuilder(path.join(__dirname, 'tempvoice_interface.png'), { name: 'interface.png' });
-
-          const embed = new EmbedBuilder()
-              .setColor(0xED4245)
-              .setTitle('TempVoice Interface')
-              .setDescription('Bu arayüzü kullanarak geçici ses kanalınızı istediğiniz şekilde yönetebilirsiniz.\n\nDaha fazla seçeneğe ulaşmak için **/voice** komutunu kullanabilirsiniz.\n\nBu arayüzü kullanmak için aşağıdaki uygun butonlara tıklayın.')
-              .setImage('attachment://interface.png')
-              .setTimestamp();
-
-          const row1 = new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setCustomId('tempvoice_name').setEmoji('🚪').setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('tempvoice_limit').setEmoji('👥').setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('tempvoice_privacy').setEmoji('🛡️').setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('tempvoice_waiting').setEmoji('⏰').setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('tempvoice_chat').setEmoji('💬').setStyle(ButtonStyle.Secondary)
-          );
-
-          const row2 = new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setCustomId('tempvoice_permit').setEmoji('👤').setLabel('+').setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('tempvoice_unpermit').setEmoji('👤').setLabel('-').setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('tempvoice_invite').setEmoji('📞').setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('tempvoice_kick').setEmoji('📞').setLabel('x').setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('tempvoice_region').setEmoji('🌐').setStyle(ButtonStyle.Secondary)
-          );
-
-          const row3 = new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setCustomId('tempvoice_block').setEmoji('🚫').setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('tempvoice_unblock').setEmoji('✔️').setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('tempvoice_claim').setEmoji('👑').setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('tempvoice_transfer').setEmoji('👑').setLabel('✔️').setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('tempvoice_delete').setEmoji('🗑️').setStyle(ButtonStyle.Danger)
-          );
-
-          return interaction.reply({
-              embeds: [embed],
-              files: [attachment],
-              components: [row1, row2, row3],
-              ephemeral: true
-          });
-      }
 
       let voiceChannel = null;
       let roomData = null;
