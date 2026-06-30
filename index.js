@@ -1194,37 +1194,25 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
               const embed = new EmbedBuilder()
                   .setColor(0xED4245)
                   .setTitle('TempVoice Interface')
-                  .setDescription('Bu arayüzü kullanarak geçici ses kanalınızı istediğiniz şekilde yönetebilirsiniz.\n\nDaha fazla seçeneğe ulaşmak için **/voice** komutunu kullanabilirsiniz.\n\nBu arayüzü kullanmak için aşağıdaki uygun butonlara tıklayın.')
+                  .setDescription('Bu arayüzü kullanarak geçici ses kanalınızı istediğiniz şekilde yönetebilirsiniz.\n\n' +
+                      '🚪 **ODA İSMİ** | Kanalınızın adını değiştirir veya sıfırlar.\n' +
+                      '👥 **ODA LİMİTİ** | Odanıza katılabilecek kişi sayısını belirler.\n' +
+                      '🛡️ **GİZLİLİK** | Kilit, görünürlük ve sohbet yetkilerini ayarlar.\n' +
+                      '👤 **GÜVENİLİR** | Odanın kilitli/görünmez durumunda girebilecek üyeleri seçer.\n\n' +
+                      'Bu arayüzü kullanmak için aşağıdaki uygun butonlara tıklayın.')
                   .setTimestamp();
 
-              const row1 = new ActionRowBuilder().addComponents(
+              const row = new ActionRowBuilder().addComponents(
                   new ButtonBuilder().setCustomId('tempvoice_name').setEmoji('🚪').setLabel('ODA İSMİ').setStyle(ButtonStyle.Secondary),
                   new ButtonBuilder().setCustomId('tempvoice_limit').setEmoji('👥').setLabel('ODA LİMİTİ').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_privacy').setEmoji('🛡️').setLabel('GİZLİLİK').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_waiting').setEmoji('⏰').setLabel('BEKLEME ODASI').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_chat').setEmoji('💬').setLabel('SOHBET').setStyle(ButtonStyle.Secondary)
-              );
-
-              const row2 = new ActionRowBuilder().addComponents(
-                  new ButtonBuilder().setCustomId('tempvoice_permit').setEmoji('👤').setLabel('GÜVENİLİR').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_unpermit').setEmoji('👤').setLabel('GÜVENSİZ').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_invite').setEmoji('📞').setLabel('DAVET').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_kick').setEmoji('📞').setLabel('SESTEN AT').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_region').setEmoji('🌐').setLabel('BÖLGE').setStyle(ButtonStyle.Secondary)
-              );
-
-              const row3 = new ActionRowBuilder().addComponents(
-                  new ButtonBuilder().setCustomId('tempvoice_block').setEmoji('🚫').setLabel('ENGELLE').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_unblock').setEmoji('✔️').setLabel('ENGELİ KALDIR').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_claim').setEmoji('👑').setLabel('SAHİPLEN').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_transfer').setEmoji('👑').setLabel('ODAYI DEVRET').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_delete').setEmoji('🗑️').setLabel('SİL').setStyle(ButtonStyle.Danger)
+                  new ButtonBuilder().setCustomId('tempvoice_privacy_menu').setEmoji('🛡️').setLabel('GİZLİLİK').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_permit_menu').setEmoji('👤').setLabel('GÜVENİLİR').setStyle(ButtonStyle.Secondary)
               );
 
               const interfaceMessage = await textLogChannel.send({
                   content: `<@${member.id}> odanız oluşturuldu.`,
                   embeds: [embed],
-                  components: [row1, row2, row3]
+                  components: [row]
               });
 
               const tempRooms = loadTempRooms();
@@ -2104,175 +2092,90 @@ client.on('interactionCreate', async (interaction) => {
 
       const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 
-      if (interaction.customId === 'tempvoice_delete') {
-          await voiceChannel.delete().catch(() => null);
-          if (roomData.tempTextChannelId) {
-              const tempTextChan = interaction.guild.channels.cache.get(roomData.tempTextChannelId);
-              if (tempTextChan) await tempTextChan.delete().catch(() => null);
-          }
-          await interaction.message.delete().catch(() => null);
-          tempRooms.delete(roomChannelId);
-          saveTempRooms(tempRooms);
-          return interaction.reply({ content: '🗑️ Oda başarıyla silindi.', ephemeral: true });
-      }
-
       if (interaction.customId === 'tempvoice_name') {
-          const modal = new ModalBuilder().setCustomId(`tempmodal_name:${roomChannelId}`).setTitle('Oda İsmi Değiştir');
+          const modal = new ModalBuilder().setCustomId(`tempmodal_name:${roomChannelId}`).setTitle('TempVoice');
           const nameInput = new TextInputBuilder()
               .setCustomId('new_name')
-              .setLabel('Yeni Oda İsmi')
+              .setLabel('Choose a name for your voice channel')
+              .setPlaceholder('Leave blank to reset the name')
               .setValue(voiceChannel.name)
               .setStyle(TextInputStyle.Short)
-              .setRequired(true);
+              .setRequired(false);
           modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
           return interaction.showModal(modal);
       }
 
       if (interaction.customId === 'tempvoice_limit') {
-          const modal = new ModalBuilder().setCustomId(`tempmodal_limit:${roomChannelId}`).setTitle('Oda Limiti Ayarla');
+          const modal = new ModalBuilder().setCustomId(`tempmodal_limit:${roomChannelId}`).setTitle('TempVoice');
           const limitInput = new TextInputBuilder()
               .setCustomId('new_limit')
-              .setLabel('Kişi Sayısı (0-99 arasında, 0 sınırsız)')
+              .setLabel('Choose a limit for your voice channel')
+              .setPlaceholder('Leave blank to reset limit')
               .setValue(voiceChannel.userLimit.toString())
               .setStyle(TextInputStyle.Short)
-              .setRequired(true);
+              .setRequired(false);
           modal.addComponents(new ActionRowBuilder().addComponents(limitInput));
           return interaction.showModal(modal);
       }
 
-      if (interaction.customId === 'tempvoice_privacy') {
-          const everyone = interaction.guild.roles.everyone;
-          const currentOverwrites = voiceChannel.permissionOverwrites.cache.get(everyone.id);
-          const isLocked = currentOverwrites && currentOverwrites.deny.has(PermissionFlagsBits.Connect);
+      if (interaction.customId === 'tempvoice_privacy_menu') {
+          const { StringSelectMenuBuilder } = require('discord.js');
+          const select = new StringSelectMenuBuilder()
+              .setCustomId(`tempvoice_select_privacy:${roomChannelId}`)
+              .setPlaceholder('Gizlilik ayarını seçin')
+              .addOptions([
+                  {
+                      label: 'Kilitle',
+                      value: 'lock',
+                      description: 'Sadece güvenilir kullanıcılar ses kanalınıza katılabilecek.',
+                      emoji: '🔒'
+                  },
+                  {
+                      label: 'Kilidi Aç',
+                      value: 'unlock',
+                      description: 'Herkes ses kanalınıza katılabilecek.',
+                      emoji: '🔓'
+                  },
+                  {
+                      label: 'Görünmez',
+                      value: 'invisible',
+                      description: 'Sadece güvenilir kullanıcılar ses kanalınızı görebilecek.',
+                      emoji: '🙈'
+                  },
+                  {
+                      label: 'Görünür',
+                      value: 'visible',
+                      description: 'Herkes ses kanalınızı görebilecek.',
+                      emoji: '👁'
+                  },
+                  {
+                      label: 'Sohbeti Kapat',
+                      value: 'chat_lock',
+                      description: 'Sadece güvenilir kullanıcılar sohbetinize yazı yazabilecek.',
+                      emoji: '💬'
+                  },
+                  {
+                      label: 'Sohbeti Aç',
+                      value: 'chat_unlock',
+                      description: 'Herkes sohbetinize yazı yazabilecek.',
+                      emoji: '💬'
+                  }
+              ]);
 
-          if (isLocked) {
-              await voiceChannel.permissionOverwrites.edit(everyone, { Connect: null });
-              return interaction.reply({ content: '🔓 Oda kilidi kaldırıldı (herkese açıldı).', ephemeral: true });
-          } else {
-              await voiceChannel.permissionOverwrites.edit(everyone, { Connect: false });
-              return interaction.reply({ content: '🔒 Oda kilitlendi (girişler kapatıldı).', ephemeral: true });
-          }
+          const row = new ActionRowBuilder().addComponents(select);
+          return interaction.reply({ content: '⚙️ Oda Gizlilik Ayarları:', components: [row], ephemeral: true });
       }
 
-      if (interaction.customId === 'tempvoice_waiting') {
-          const everyone = interaction.guild.roles.everyone;
-          await voiceChannel.permissionOverwrites.edit(everyone, { Connect: false });
-          return interaction.reply({ content: '⏰ Bekleme odası aktif edildi (oda kilitlendi, kullanıcıların sizi beklemesi gerekir).', ephemeral: true });
-      }
+      if (interaction.customId === 'tempvoice_permit_menu') {
+          const { UserSelectMenuBuilder } = require('discord.js');
+          const select = new UserSelectMenuBuilder()
+              .setCustomId(`tempvoice_select_users:${roomChannelId}`)
+              .setPlaceholder('Selected users will be trusted to join')
+              .setMinValues(0)
+              .setMaxValues(25);
 
-      if (interaction.customId === 'tempvoice_chat') {
-          if (roomData.tempTextChannelId) {
-              const tempTextChan = interaction.guild.channels.cache.get(roomData.tempTextChannelId);
-              if (tempTextChan) await tempTextChan.delete().catch(() => null);
-              roomData.tempTextChannelId = null;
-              tempRooms.set(roomChannelId, roomData);
-              saveTempRooms(tempRooms);
-              return interaction.reply({ content: '💬 Geçici sohbet kanalı kaldırıldı.', ephemeral: true });
-          } else {
-              const tempTextChan = await interaction.guild.channels.create({
-                  name: `💬-${voiceChannel.name}`,
-                  type: 0, // GUILD_TEXT
-                  parent: voiceChannel.parentId,
-                  permissionOverwrites: [
-                      {
-                          id: interaction.guild.roles.everyone.id,
-                          deny: [PermissionFlagsBits.ViewChannel]
-                      },
-                      {
-                          id: interaction.user.id,
-                          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
-                      }
-                  ]
-              });
-              roomData.tempTextChannelId = tempTextChan.id;
-              tempRooms.set(roomChannelId, roomData);
-              saveTempRooms(tempRooms);
-              return interaction.reply({ content: `💬 Geçici sohbet kanalı oluşturuldu: <#${tempTextChan.id}>`, ephemeral: true });
-          }
-      }
-
-      if (interaction.customId === 'tempvoice_permit') {
-          const modal = new ModalBuilder().setCustomId(`tempmodal_permit:${roomChannelId}`).setTitle('Kullanıcıya İzin Ver');
-          const idInput = new TextInputBuilder()
-              .setCustomId('user_id')
-              .setLabel('Kullanıcı ID')
-              .setPlaceholder("Giriş izni verilecek kişinin ID'si")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true);
-          modal.addComponents(new ActionRowBuilder().addComponents(idInput));
-          return interaction.showModal(modal);
-      }
-
-      if (interaction.customId === 'tempvoice_unpermit') {
-          const modal = new ModalBuilder().setCustomId(`tempmodal_unpermit:${roomChannelId}`).setTitle('Kullanıcı İznini Kaldır');
-          const idInput = new TextInputBuilder()
-              .setCustomId('user_id')
-              .setLabel('Kullanıcı ID')
-              .setPlaceholder("İzni kaldırılacak kişinin ID'si")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true);
-          modal.addComponents(new ActionRowBuilder().addComponents(idInput));
-          return interaction.showModal(modal);
-      }
-
-      if (interaction.customId === 'tempvoice_invite') {
-          const invite = await voiceChannel.createInvite({ maxAge: 300, maxUses: 5 });
-          return interaction.reply({ content: `🔗 Davet linkiniz oluşturuldu (5 kullanımlık, 5 dakika geçerli): ${invite.url}`, ephemeral: true });
-      }
-
-      if (interaction.customId === 'tempvoice_kick') {
-          const modal = new ModalBuilder().setCustomId(`tempmodal_kick:${roomChannelId}`).setTitle('Sesten Kullanıcı At');
-          const idInput = new TextInputBuilder()
-              .setCustomId('user_id')
-              .setLabel('Kullanıcı ID')
-              .setPlaceholder("Sesten atılacak kişinin ID'si")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true);
-          modal.addComponents(new ActionRowBuilder().addComponents(idInput));
-          return interaction.showModal(modal);
-      }
-
-      if (interaction.customId === 'tempvoice_region') {
-          const currentRegion = voiceChannel.rtcRegion;
-          const nextRegion = currentRegion === 'rotterdam' ? 'us-central' : 'rotterdam';
-          await voiceChannel.setRTCRegion(nextRegion);
-          return interaction.reply({ content: `🌐 Ses bölgesi \`${nextRegion}\` olarak değiştirildi.`, ephemeral: true });
-      }
-
-      if (interaction.customId === 'tempvoice_block') {
-          const modal = new ModalBuilder().setCustomId(`tempmodal_block:${roomChannelId}`).setTitle('Kullanıcı Engelle');
-          const idInput = new TextInputBuilder()
-              .setCustomId('user_id')
-              .setLabel('Kullanıcı ID')
-              .setPlaceholder("Odaya girişi engellenecek kişinin ID'si")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true);
-          modal.addComponents(new ActionRowBuilder().addComponents(idInput));
-          return interaction.showModal(modal);
-      }
-
-      if (interaction.customId === 'tempvoice_unblock') {
-          const modal = new ModalBuilder().setCustomId(`tempmodal_unblock:${roomChannelId}`).setTitle('Engeli Kaldır');
-          const idInput = new TextInputBuilder()
-              .setCustomId('user_id')
-              .setLabel('Kullanıcı ID')
-              .setPlaceholder("Engeli kaldırılacak kişinin ID'si")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true);
-          modal.addComponents(new ActionRowBuilder().addComponents(idInput));
-          return interaction.showModal(modal);
-      }
-
-      if (interaction.customId === 'tempvoice_transfer') {
-          const modal = new ModalBuilder().setCustomId(`tempmodal_transfer:${roomChannelId}`).setTitle('Odayı Devret');
-          const idInput = new TextInputBuilder()
-              .setCustomId('user_id')
-              .setLabel('Kullanıcı ID')
-              .setPlaceholder("Sahiplik devredilecek kişinin ID'si")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true);
-          modal.addComponents(new ActionRowBuilder().addComponents(idInput));
-          return interaction.showModal(modal);
+          const row = new ActionRowBuilder().addComponents(select);
+          return interaction.reply({ components: [row], ephemeral: true });
       }
   }
 
@@ -2288,114 +2191,25 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       if (action === 'tempmodal_name') {
-          const newName = interaction.fields.getTextInputValue('new_name');
+          let newName = interaction.fields.getTextInputValue('new_name');
+          if (!newName || newName.trim() === '') {
+              newName = `${interaction.user.username}'s Channel`;
+          }
           await voiceChannel.setName(newName);
           return interaction.reply({ content: `✅ Oda ismi \`${newName}\` olarak güncellendi.`, ephemeral: true });
       }
 
       if (action === 'tempmodal_limit') {
           const newLimitVal = interaction.fields.getTextInputValue('new_limit');
-          const limit = parseInt(newLimitVal);
-          if (isNaN(limit) || limit < 0 || limit > 99) {
-              return interaction.reply({ content: "❌ Lütfen 0 ile 99 arasında geçerli bir sayı girin.", ephemeral: true });
+          let limit = 0;
+          if (newLimitVal && newLimitVal.trim() !== '') {
+              limit = parseInt(newLimitVal);
+              if (isNaN(limit) || limit < 0 || limit > 99) {
+                  return interaction.reply({ content: "❌ Lütfen 0 ile 99 arasında geçerli bir sayı girin.", ephemeral: true });
+              }
           }
           await voiceChannel.setUserLimit(limit);
           return interaction.reply({ content: `✅ Oda limiti \`${limit === 0 ? 'Sınırsız' : limit}\` olarak güncellendi.`, ephemeral: true });
-      }
-
-      if (action === 'tempmodal_permit') {
-          const targetId = interaction.fields.getTextInputValue('user_id');
-          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-          if (!targetMember) {
-              return interaction.reply({ content: "❌ Belirttiğiniz ID'li kullanıcı sunucuda bulunamadı.", ephemeral: true });
-          }
-          await voiceChannel.permissionOverwrites.edit(targetMember, { Connect: true, ViewChannel: true });
-          return interaction.reply({ content: `✅ \${targetMember} kullanıcısına odaya giriş izni verildi.`, ephemeral: true });
-      }
-
-      if (action === 'tempmodal_unpermit') {
-          const targetId = interaction.fields.getTextInputValue('user_id');
-          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-          if (!targetMember) {
-              return interaction.reply({ content: "❌ Belirttiğiniz ID'li kullanıcı bulunamadı.", ephemeral: true });
-          }
-          await voiceChannel.permissionOverwrites.delete(targetMember);
-          return interaction.reply({ content: `✅ \${targetMember} kullanıcısının özel izni kaldırıldı.`, ephemeral: true });
-      }
-
-      if (action === 'tempmodal_kick') {
-          const targetId = interaction.fields.getTextInputValue('user_id');
-          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-          if (!targetMember || !targetMember.voice.channel || targetMember.voice.channel.id !== voiceChannel.id) {
-              return interaction.reply({ content: "❌ Belirtilen kullanıcı sizin ses odanızda bulunmuyor.", ephemeral: true });
-          }
-          await targetMember.voice.disconnect();
-          return interaction.reply({ content: `✅ \${targetMember} ses kanalından atıldı.`, ephemeral: true });
-      }
-
-      if (action === 'tempmodal_block') {
-          const targetId = interaction.fields.getTextInputValue('user_id');
-          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-          if (!targetMember) {
-              return interaction.reply({ content: "❌ Belirtilen kullanıcı bulunamadı.", ephemeral: true });
-          }
-          await voiceChannel.permissionOverwrites.edit(targetMember, { Connect: false });
-          if (targetMember.voice.channel && targetMember.voice.channel.id === voiceChannel.id) {
-              await targetMember.voice.disconnect();
-          }
-          return interaction.reply({ content: `🚫 \${targetMember} odaya girişten engellendi.`, ephemeral: true });
-      }
-
-      if (action === 'tempmodal_unblock') {
-          const targetId = interaction.fields.getTextInputValue('user_id');
-          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-          if (!targetMember) {
-              return interaction.reply({ content: "❌ Belirtilen kullanıcı bulunamadı.", ephemeral: true });
-          }
-          await voiceChannel.permissionOverwrites.delete(targetMember);
-          return interaction.reply({ content: `✅ \${targetMember} kullanıcısının engeli kaldırıldı.`, ephemeral: true });
-      }
-
-      if (action === 'tempmodal_transfer') {
-          const targetId = interaction.fields.getTextInputValue('user_id');
-          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-          if (!targetMember || !targetMember.voice.channel || targetMember.voice.channel.id !== voiceChannel.id) {
-              return interaction.reply({ content: "❌ Devredeceğiniz kullanıcı şu an sizin ses odanızda bulunmalı.", ephemeral: true });
-          }
-
-          const tempRooms = loadTempRooms();
-          const roomData = tempRooms.get(roomChannelId);
-          if (roomData) {
-              roomData.ownerId = targetMember.id;
-              tempRooms.set(roomChannelId, roomData);
-              saveTempRooms(tempRooms);
-
-              const textLogChannel = interaction.guild.channels.cache.get(roomData.textChannelId) || interaction.guild.channels.cache.find(c => c.name === 'komutlar' && c.type === 0);
-              if (textLogChannel) {
-                  await textLogChannel.permissionOverwrites.delete(interaction.user.id).catch(() => null);
-                  await textLogChannel.permissionOverwrites.create(targetMember.id, {
-                      ViewChannel: true,
-                      SendMessages: false
-                  }).catch(() => null);
-              }
-
-              await voiceChannel.permissionOverwrites.edit(targetMember.id, {
-                  ManageChannels: true,
-                  MoveMembers: true,
-                  MuteMembers: true,
-                  DeafenMembers: true,
-                  Connect: true,
-                  ViewChannel: true
-              });
-              await voiceChannel.permissionOverwrites.edit(interaction.user.id, {
-                  ManageChannels: null,
-                  MoveMembers: null,
-                  MuteMembers: null,
-                  DeafenMembers: null
-              });
-
-              return interaction.reply({ content: `👑 Oda sahipliği başarıyla \${targetMember} kullanıcısına devredildi.`, ephemeral: false });
-          }
       }
   }
 
@@ -2435,6 +2249,117 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isStringSelectMenu()) {
+    if (interaction.customId.startsWith('tempvoice_select_privacy:')) {
+        const roomChannelId = interaction.customId.split(':')[1];
+        const tempRooms = loadTempRooms();
+        const roomData = tempRooms.get(roomChannelId);
+        if (!roomData) {
+            return interaction.reply({ content: "❌ Bu geçici oda artık aktif değil.", ephemeral: true });
+        }
+        
+        if (roomData.ownerId !== interaction.user.id) {
+            return interaction.reply({ content: "❌ Bu işlemi sadece oda sahibi gerçekleştirebilir.", ephemeral: true });
+        }
+
+        const voiceChannel = interaction.guild.channels.cache.get(roomChannelId);
+        if (!voiceChannel) {
+            return interaction.reply({ content: "❌ İlgili ses kanalı bulunamadı.", ephemeral: true });
+        }
+
+        const action = interaction.values[0];
+        
+        if (action === 'lock') {
+            await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone.id, { Connect: false });
+            return interaction.reply({ content: "🔒 Ses kanalı kilitlendi. Sadece güvenilir kullanıcılar katılabilecek.", ephemeral: true });
+        }
+        
+        if (action === 'unlock') {
+            await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone.id, { Connect: null });
+            return interaction.reply({ content: "🔓 Ses kanalının kilidi açıldı. Herkes katılabilecek.", ephemeral: true });
+        }
+        
+        if (action === 'invisible') {
+            await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone.id, { ViewChannel: false });
+            return interaction.reply({ content: "👁️‍🗨️ Ses kanalı görünmez yapıldı. Sadece güvenilir kullanıcılar görebilecek.", ephemeral: true });
+        }
+        
+        if (action === 'visible') {
+            await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone.id, { ViewChannel: null });
+            return interaction.reply({ content: "👁 Ses kanalı görünür yapıldı. Herkes görebilecek.", ephemeral: true });
+        }
+        
+        if (action === 'chat_lock' || action === 'chat_unlock') {
+            let tempTextChannel = null;
+            if (roomData.tempTextChannelId) {
+                tempTextChannel = interaction.guild.channels.cache.get(roomData.tempTextChannelId);
+            }
+            
+            if (action === 'chat_lock') {
+                if (tempTextChannel) {
+                    await tempTextChannel.permissionOverwrites.edit(interaction.guild.roles.everyone.id, { SendMessages: false });
+                    return interaction.reply({ content: "💬 Sohbet kanalı kilitlendi. Sadece güvenilir kullanıcılar yazabilecek.", ephemeral: true });
+                } else {
+                    const category = voiceChannel.parent;
+                    tempTextChannel = await interaction.guild.channels.create({
+                        name: `${interaction.user.username}-chat`,
+                        type: 0,
+                        parent: category ? category.id : null,
+                        permissionOverwrites: [
+                            {
+                                id: interaction.guild.roles.everyone.id,
+                                deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
+                            },
+                            {
+                                id: interaction.user.id,
+                                allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
+                            },
+                            {
+                                id: client.user.id,
+                                allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
+                            }
+                        ]
+                    });
+                    roomData.tempTextChannelId = tempTextChannel.id;
+                    tempRooms.set(roomChannelId, roomData);
+                    saveTempRooms(tempRooms);
+                    return interaction.reply({ content: "💬 Geçici sohbet kanalı oluşturuldu ve kilitlendi (sadece güvenilirler yazabilir).", ephemeral: true });
+                }
+            }
+            
+            if (action === 'chat_unlock') {
+                if (tempTextChannel) {
+                    await tempTextChannel.permissionOverwrites.edit(interaction.guild.roles.everyone.id, { SendMessages: null, ViewChannel: null });
+                    return interaction.reply({ content: "💬 Sohbet kanalı açıldı. Herkes yazabilecek.", ephemeral: true });
+                } else {
+                    const category = voiceChannel.parent;
+                    tempTextChannel = await interaction.guild.channels.create({
+                        name: `${interaction.user.username}-chat`,
+                        type: 0,
+                        parent: category ? category.id : null,
+                        permissionOverwrites: [
+                            {
+                                id: interaction.guild.roles.everyone.id,
+                                allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
+                            },
+                            {
+                                id: interaction.user.id,
+                                allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
+                            },
+                            {
+                                id: client.user.id,
+                                allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
+                            }
+                        ]
+                    });
+                    roomData.tempTextChannelId = tempTextChannel.id;
+                    tempRooms.set(roomChannelId, roomData);
+                    saveTempRooms(tempRooms);
+                    return interaction.reply({ content: "💬 Geçici sohbet kanalı oluşturuldu ve herkese açıldı.", ephemeral: true });
+                }
+            }
+        }
+    }
+
     if (interaction.customId.startsWith('select_delete_type:')) {
       if (!isBotDeveloper(interaction.user.id)) {
         return interaction.reply({ content: "❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.", ephemeral: true });
@@ -2720,6 +2645,60 @@ client.on('interactionCreate', async (interaction) => {
         console.error(err);
         return interaction.editReply({ content: `❌ Rol oluşturulurken hata: ${err.message}` });
       }
+    }
+  }
+
+  if (interaction.isUserSelectMenu()) {
+    if (interaction.customId.startsWith('tempvoice_select_users:')) {
+        const roomChannelId = interaction.customId.split(':')[1];
+        const tempRooms = loadTempRooms();
+        const roomData = tempRooms.get(roomChannelId);
+        if (!roomData) {
+            return interaction.reply({ content: "❌ Bu geçici oda artık aktif değil.", ephemeral: true });
+        }
+        
+        if (roomData.ownerId !== interaction.user.id) {
+            return interaction.reply({ content: "❌ Bu işlemi sadece oda sahibi gerçekleştirebilir.", ephemeral: true });
+        }
+
+        const voiceChannel = interaction.guild.channels.cache.get(roomChannelId);
+        if (!voiceChannel) {
+            return interaction.reply({ content: "❌ İlgili ses kanalı bulunamadı.", ephemeral: true });
+        }
+
+        const selectedUsers = interaction.values;
+
+        for (const [overwriteId, overwrite] of voiceChannel.permissionOverwrites.cache.entries()) {
+            if ((overwrite.type === 1 || overwrite.type === 'member') && overwriteId !== roomData.ownerId && overwriteId !== client.user.id) {
+                await voiceChannel.permissionOverwrites.delete(overwriteId).catch(() => null);
+            }
+        }
+
+        const mentioned = [];
+        for (const userId of selectedUsers) {
+            if (userId === roomData.ownerId) continue;
+            await voiceChannel.permissionOverwrites.create(userId, {
+                ViewChannel: true,
+                Connect: true
+            }).catch(() => null);
+            
+            if (roomData.tempTextChannelId) {
+                const tempTextChannel = interaction.guild.channels.cache.get(roomData.tempTextChannelId);
+                if (tempTextChannel) {
+                    await tempTextChannel.permissionOverwrites.create(userId, {
+                        ViewChannel: true,
+                        SendMessages: true
+                    }).catch(() => null);
+                }
+            }
+            mentioned.push(`<@${userId}>`);
+        }
+
+        if (mentioned.length > 0) {
+            return interaction.reply({ content: `✅ Seçilen kullanıcılar güvenilir olarak ayarlandı ve giriş izni verildi: ${mentioned.join(', ')}`, ephemeral: true });
+        } else {
+            return interaction.reply({ content: `✅ Güvenilir kullanıcılar listesi sıfırlandı.`, ephemeral: true });
+        }
     }
   }
 
