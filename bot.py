@@ -723,6 +723,7 @@ load_kufurler()
 @bot.event
 async def on_ready():
     log_event("INFO", "System", f"Bot ready as {bot.user}. Guilds: {len(bot.guilds)}")
+    await bot.change_presence(status=discord.Status.dnd)
 
 @bot.event
 async def on_message(message):
