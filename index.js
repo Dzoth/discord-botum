@@ -4571,7 +4571,12 @@ const apiServer = http.createServer((req, res) => {
       else if (ext === '.ico') contentType = 'image/x-icon';
       else if (ext === '.mp3') contentType = 'audio/mpeg';
 
-      res.writeHead(200, { 'Content-Type': contentType });
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
       fs.createReadStream(fullPath).pipe(res);
       return;
     }
