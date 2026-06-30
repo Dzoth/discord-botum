@@ -1236,7 +1236,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   }
 
   // --- TempVoice Join-to-Create Logic ---
-  if (newChannel && (newChannel.name === 'özelsesacıptakılın' || newChannel.name === '🔊 özelsesacıptakılın' || newChannel.name.toLowerCase() === 'tempvoice')) {
+  if (newChannel && (newChannel.name === 'Özel Ses' || newChannel.name === '🔊 Özel Ses' || newChannel.name === 'özelsesacıptakılın' || newChannel.name === '🔊 özelsesacıptakılın' || newChannel.name.toLowerCase() === 'tempvoice')) {
       try {
           const category = newChannel.parent;
           const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');

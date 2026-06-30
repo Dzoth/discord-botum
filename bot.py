@@ -2225,14 +2225,14 @@ async def vip_command(ctx, target: str = None):
 async def odakur_command(ctx):
     try:
         guild = ctx.guild
-        category = await guild.create_category(name="özelsesacıptakılın", reason="TempVoice Kurulumu")
+        category = await guild.create_category(name="Özel Ses", reason="TempVoice Kurulumu")
         text_channel = await guild.create_text_channel(
             name="komutlar",
             category=category,
             reason="TempVoice Kurulumu"
         )
         voice_channel = await guild.create_voice_channel(
-            name="🔊 özelsesacıptakılın",
+            name="🔊 Özel Ses",
             category=category,
             reason="TempVoice Kurulumu"
         )
