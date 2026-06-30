@@ -2087,6 +2087,10 @@ async def unmute_command(ctx, target: str = None):
 @is_owner_or_has_permissions(manage_channels=True)
 async def lock_command(ctx):
     try:
+        overwrite = ctx.channel.overwrites_for(ctx.guild.default_role)
+        if overwrite.send_messages is False:
+            await ctx.reply("🔒 **Bu kanal zaten kilitli!**")
+            return
         await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False, reason=f"Kanal Kilitlendi: {ctx.author}")
         await ctx.reply("🔒 **Kanal Kilitlendi!** Bu metin kanalına artık hiç kimse mesaj gönderemez.")
     except Exception as e:
@@ -2097,6 +2101,10 @@ async def lock_command(ctx):
 @is_owner_or_has_permissions(manage_channels=True)
 async def unlock_command(ctx):
     try:
+        overwrite = ctx.channel.overwrites_for(ctx.guild.default_role)
+        if overwrite.send_messages is not False:
+            await ctx.reply("🔓 **Bu kanalın kilidi zaten açık!**")
+            return
         await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=None, reason=f"Kanal Açıldı: {ctx.author}")
         await ctx.reply("🔓 **Kanal Kilidi Kaldırıldı!** Metin kanalı mesaj gönderimine tekrar açıldı.")
     except Exception as e:
@@ -2134,6 +2142,10 @@ async def e_command(ctx, target: str = None):
         role = ctx.guild.get_role(role_id)
         if not role:
             await ctx.reply(f"❌ Erkek rolü (ID: {role_id}) sunucuda bulunamadı.")
+            return
+        
+        if role in member.roles:
+            await ctx.reply(f"⚠️ {member.mention} kullanıcısında zaten {role.mention} rolü bulunuyor!")
             return
         
         await member.add_roles(role, reason=f"Kayıt: {ctx.author}")
@@ -2174,6 +2186,10 @@ async def k_command(ctx, target: str = None):
         role = ctx.guild.get_role(role_id)
         if not role:
             await ctx.reply(f"❌ Kız rolü (ID: {role_id}) sunucuda bulunamadı.")
+            return
+        
+        if role in member.roles:
+            await ctx.reply(f"⚠️ {member.mention} kullanıcısında zaten {role.mention} rolü bulunuyor!")
             return
         
         await member.add_roles(role, reason=f"Kayıt: {ctx.author}")

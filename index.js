@@ -938,19 +938,18 @@ client.on('guildMemberAdd', async (member) => {
   }
 
   // Denetim Kaydı: Üye Katıldı
-  const createdAt = member.user.createdAt;
   const accountAgeDays = Math.floor((Date.now() - member.user.createdTimestamp) / 86400000);
   const embed = new EmbedBuilder()
     .setColor(0x57F287)
-    .setTitle('👋 Üye Katıldı')
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .setAuthor({
+      name: member.user.username,
+      iconURL: member.user.displayAvatarURL({ dynamic: true })
+    })
+    .setDescription(`<@${member.id}> sunucuya katıldı`)
     .addFields(
-      { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
-      { name: 'ID', value: member.id, inline: true },
-      { name: 'Hesap Yaşı', value: `${accountAgeDays} gün`, inline: true },
-      { name: 'Hesap Oluşturulma', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:F>`, inline: false }
+      { name: 'Hesap Yaşı', value: `${accountAgeDays} gün`, inline: true }
     )
-    .setFooter({ text: `Sunucu: ${member.guild.name}` })
+    .setFooter({ text: `ID: ${member.id}` })
     .setTimestamp();
   await sendAuditLog(member.guild, 'opt-member-join', embed);
 });
@@ -987,14 +986,15 @@ client.on('guildMemberRemove', async (member) => {
   // Denetim Kaydı: Üye Ayrıldı
   const embed = new EmbedBuilder()
     .setColor(0xED4245)
-    .setTitle('🚪 Üye Ayrıldı')
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .setAuthor({
+      name: member.user.username,
+      iconURL: member.user.displayAvatarURL({ dynamic: true })
+    })
+    .setDescription(`<@${member.id}> sunucudan ayrıldı`)
     .addFields(
-      { name: 'Kullanıcı', value: `${member.user.tag}`, inline: true },
-      { name: 'ID', value: member.id, inline: true },
       { name: 'Sunucuya Katılma', value: member.joinedAt ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>` : 'Bilinmiyor', inline: true }
     )
-    .setFooter({ text: `Sunucu: ${member.guild.name}` })
+    .setFooter({ text: `ID: ${member.id}` })
     .setTimestamp();
   await sendAuditLog(member.guild, 'opt-member-leave', embed);
 });
@@ -1017,13 +1017,16 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
   if (oldMember.user.username !== newMember.user.username || oldMember.nickname !== newMember.nickname) {
     const embed = new EmbedBuilder()
       .setColor(0xFEE75C)
-      .setTitle('✏️ İsim Güncellendi')
-      .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
+      .setAuthor({
+        name: newMember.user.username,
+        iconURL: newMember.user.displayAvatarURL({ dynamic: true })
+      })
+      .setDescription(`<@${newMember.id}> ismini güncelledi`)
       .addFields(
-        { name: 'Kullanıcı', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: false },
         { name: 'Eski İsim', value: oldMember.nickname || oldMember.user.username, inline: true },
         { name: 'Yeni İsim', value: newMember.nickname || newMember.user.username, inline: true }
       )
+      .setFooter({ text: `ID: ${newMember.id}` })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-username-update', embed);
   }
@@ -1031,18 +1034,37 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
   // Rol değişimi
   const addedRoles = newMember.roles.cache.filter(r => !oldMember.roles.cache.has(r.id));
   const removedRoles = oldMember.roles.cache.filter(r => !newMember.roles.cache.has(r.id));
-  if (addedRoles.size > 0 || removedRoles.size > 0) {
-    const embed = new EmbedBuilder()
-      .setColor(0x5865F2)
-      .setTitle('🏷️ Roller Güncellendi')
-      .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
-      .addFields(
-        { name: 'Kullanıcı', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: false },
-        { name: '➕ Eklenen Roller', value: addedRoles.size > 0 ? addedRoles.map(r => `<@&${r.id}>`).join(', ') : 'Yok', inline: true },
-        { name: '➖ Kaldırılan Roller', value: removedRoles.size > 0 ? removedRoles.map(r => `<@&${r.id}>`).join(', ') : 'Yok', inline: true }
-      )
-      .setTimestamp();
-    await sendAuditLog(guild, 'opt-member-roles-update', embed);
+  
+  if (addedRoles.size > 0) {
+    for (const [roleId, role] of addedRoles) {
+      const embed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setAuthor({
+          name: newMember.user.username,
+          iconURL: newMember.user.displayAvatarURL({ dynamic: true })
+        })
+        .setDescription(`<@${newMember.id}> bir rol eklendi`)
+        .addFields({ name: 'Yeni Rol', value: `${role.name}`, inline: false })
+        .setFooter({ text: `ID: ${newMember.id}` })
+        .setTimestamp();
+      await sendAuditLog(guild, 'opt-member-roles-update', embed);
+    }
+  }
+  
+  if (removedRoles.size > 0) {
+    for (const [roleId, role] of removedRoles) {
+      const embed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setAuthor({
+          name: newMember.user.username,
+          iconURL: newMember.user.displayAvatarURL({ dynamic: true })
+        })
+        .setDescription(`<@${newMember.id}> bir rol alındı`)
+        .addFields({ name: 'Alınan Rol', value: `${role.name}`, inline: false })
+        .setFooter({ text: `ID: ${newMember.id}` })
+        .setTimestamp();
+      await sendAuditLog(guild, 'opt-member-roles-update', embed);
+    }
   }
 
   // Susturma değişimi
@@ -1051,11 +1073,15 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
   if (!wasMuted && isMuted) {
     const embed = new EmbedBuilder()
       .setColor(0xFFA500)
-      .setTitle('🔇 Üye Susturuldu')
+      .setAuthor({
+        name: newMember.user.username,
+        iconURL: newMember.user.displayAvatarURL({ dynamic: true })
+      })
+      .setDescription(`<@${newMember.id}> susturuldu`)
       .addFields(
-        { name: 'Kullanıcı', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: true },
         { name: 'Süre Bitiş', value: `<t:${Math.floor(newMember.communicationDisabledUntilTimestamp / 1000)}:R>`, inline: true }
       )
+      .setFooter({ text: `ID: ${newMember.id}` })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-member-mute', embed);
   }
@@ -1066,19 +1092,23 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
   if (!wasDeafened && isDeafened) {
     const embed = new EmbedBuilder()
       .setColor(0xFF6B35)
-      .setTitle('🔇 Üye Sağırlaştırıldı')
-      .addFields(
-        { name: 'Kullanıcı', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: true }
-      )
+      .setAuthor({
+        name: newMember.user.username,
+        iconURL: newMember.user.displayAvatarURL({ dynamic: true })
+      })
+      .setDescription(`<@${newMember.id}> sağırlaştırıldı`)
+      .setFooter({ text: `ID: ${newMember.id}` })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-member-deafen', embed);
   } else if (wasDeafened && !isDeafened) {
     const embed = new EmbedBuilder()
       .setColor(0x57F287)
-      .setTitle('🔊 Sağırlaştırma Kaldırıldı')
-      .addFields(
-        { name: 'Kullanıcı', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: true }
-      )
+      .setAuthor({
+        name: newMember.user.username,
+        iconURL: newMember.user.displayAvatarURL({ dynamic: true })
+      })
+      .setDescription(`<@${newMember.id}> sağırlaştırılması kaldırıldı`)
+      .setFooter({ text: `ID: ${newMember.id}` })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-member-deafen', embed);
   }
@@ -1097,11 +1127,12 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   if (!oldChannel && newChannel) {
     const embed = new EmbedBuilder()
       .setColor(0x57F287)
-      .setTitle('🔊 Ses Kanalına Girdi')
-      .addFields(
-        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
-        { name: 'Kanal', value: `**${newChannel.name}**`, inline: true }
-      )
+      .setAuthor({
+        name: member.user.username,
+        iconURL: member.user.displayAvatarURL({ dynamic: true })
+      })
+      .setDescription(`<@${member.id}> ses kanalına katıldı \\`${newChannel.name}\\`.`)
+      .setFooter({ text: `ID: ${member.id}` })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-voice-join', embed);
     return;
@@ -1111,11 +1142,12 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   if (oldChannel && !newChannel) {
     const embed = new EmbedBuilder()
       .setColor(0xED4245)
-      .setTitle('🔇 Ses Kanalından Ayrıldı')
-      .addFields(
-        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
-        { name: 'Kanal', value: `**${oldChannel.name}**`, inline: true }
-      )
+      .setAuthor({
+        name: member.user.username,
+        iconURL: member.user.displayAvatarURL({ dynamic: true })
+      })
+      .setDescription(`<@${member.id}> ses kanalından ayrıldı \\`${oldChannel.name}\\`.`)
+      .setFooter({ text: `ID: ${member.id}` })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-voice-leave', embed);
     return;
@@ -1125,12 +1157,12 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   if (oldChannel && newChannel && oldChannel.id !== newChannel.id) {
     const embed = new EmbedBuilder()
       .setColor(0xFEE75C)
-      .setTitle('🔀 Ses Kanalı Değiştirdi')
-      .addFields(
-        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: false },
-        { name: 'Eski Kanal', value: `**${oldChannel.name}**`, inline: true },
-        { name: 'Yeni Kanal', value: `**${newChannel.name}**`, inline: true }
-      )
+      .setAuthor({
+        name: member.user.username,
+        iconURL: member.user.displayAvatarURL({ dynamic: true })
+      })
+      .setDescription(`<@${member.id}> ses kanalını değiştirdi \\`${oldChannel.name}\\` -> \\`${newChannel.name}\\`.`)
+      .setFooter({ text: `ID: ${member.id}` })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-voice-move', embed);
     return;

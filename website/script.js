@@ -1962,6 +1962,75 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
+    // Toggle user profile dropdown
+    const userMenuTrigger = document.getElementById("user-menu-trigger");
+    const userDropdownMenu = document.getElementById("user-dropdown-menu");
+    const userMenuArrow = document.getElementById("user-menu-arrow");
+    if (userMenuTrigger && userDropdownMenu) {
+        userMenuTrigger.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const isShowing = userDropdownMenu.classList.toggle("show");
+            if (userMenuArrow) {
+                if (isShowing) {
+                    userMenuArrow.classList.replace("fa-chevron-down", "fa-chevron-up");
+                } else {
+                    userMenuArrow.classList.replace("fa-chevron-up", "fa-chevron-down");
+                }
+            }
+            // Close other dropdowns
+            const guildDropdownMenu = document.getElementById("guild-dropdown-menu");
+            if (guildDropdownMenu) guildDropdownMenu.classList.remove("show");
+        });
+
+        document.addEventListener("click", () => {
+            userDropdownMenu.classList.remove("show");
+            if (userMenuArrow) {
+                userMenuArrow.classList.replace("fa-chevron-up", "fa-chevron-down");
+            }
+        });
+    }
+
+    // Navigate from user menu dropdown
+    const userDropdownItems = document.querySelectorAll(".user-dropdown-menu .dropdown-item");
+    userDropdownItems.forEach(item => {
+        item.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const targetId = item.getAttribute("data-target");
+            if (targetId) {
+                // Find matching menu item in sidebar
+                const sidebarItem = document.querySelector(`.sidebar-menu .menu-item[data-target="${targetId}"]`);
+                if (sidebarItem) {
+                    sidebarItem.click();
+                } else {
+                    // Switch view manually
+                    const targetView = document.getElementById(targetId);
+                    const viewPanels = document.querySelectorAll(".views-container .view-panel");
+                    const menuItems = document.querySelectorAll(".sidebar-menu .menu-item");
+                    menuItems.forEach(i => i.classList.remove("active"));
+                    viewPanels.forEach(v => v.classList.remove("active"));
+                    if (targetView) {
+                        targetView.classList.add("active");
+                    }
+                }
+            }
+            userDropdownMenu.classList.remove("show");
+            if (userMenuArrow) {
+                userMenuArrow.classList.replace("fa-chevron-up", "fa-chevron-down");
+            }
+        });
+    });
+
+    // Mock Logout handler
+    const logoutBtn = document.getElementById("logout-btn");
+    if (logoutBtn) {
+        logoutBtn.addEventListener("click", () => {
+            showToast("Oturum kapatılıyor...", "info");
+            setTimeout(() => {
+                window.location.href = "index.html";
+            }, 1000);
+        });
+    }
+
     } catch (e) {
         console.log("STACK_TRACE:" + e.stack);
         console.error("CRITICAL JS ERROR:", e);

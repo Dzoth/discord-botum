@@ -134,10 +134,45 @@
                 </div>
                 
                 <div class="header-actions">
-                    <div class="user-profile-menu">
+                    <div class="user-profile-menu" id="user-menu-trigger">
                         <img src="images/antigravity_logo.jpg" alt="User Avatar" class="user-menu-avatar" id="header-user-avatar">
-                        <span class="user-menu-name" id="header-user-name">zxarch</span>
-                        <i class="fa-solid fa-chevron-down dropdown-arrow-icon"></i>
+                        <span class="user-menu-name" id="header-user-name">zxarch <i class="fa-solid fa-crown" style="color: #faa81a; margin-left: 4px;" title="Premium Üye"></i></span>
+                        <i class="fa-solid fa-chevron-down dropdown-arrow-icon" id="user-menu-arrow"></i>
+                        
+                        <!-- User Dropdown Menu -->
+                        <div class="user-dropdown-menu" id="user-dropdown-menu">
+                            <div class="dropdown-user-header">
+                                <img src="images/antigravity_logo.jpg" alt="User Avatar" class="dropdown-user-avatar" id="dropdown-user-avatar">
+                                <div class="dropdown-user-info">
+                                    <div class="dropdown-user-name" id="dropdown-user-name">zxarch</div>
+                                    <div class="dropdown-user-status"><i class="fa-solid fa-crown" style="color: #faa81a;"></i> Premium</div>
+                                </div>
+                            </div>
+                            <div class="dropdown-divider"></div>
+                            <div class="dropdown-item" data-target="view-my-servers">
+                                <i class="fa-solid fa-server"></i> Sunucularım
+                            </div>
+                            <div class="dropdown-item" data-target="view-premium">
+                                <i class="fa-solid fa-crown" style="color: #faa81a;"></i> Premium
+                            </div>
+                            <div class="dropdown-item" data-target="view-commands">
+                                <i class="fa-solid fa-terminal"></i> Komutlar
+                            </div>
+                            <div class="dropdown-item" data-target="view-advertise">
+                                <i class="fa-solid fa-rectangle-ad"></i> Reklam ver
+                            </div>
+                            <div class="dropdown-header-label">ÖDEME</div>
+                            <div class="dropdown-item" data-target="view-subscriptions">
+                                <i class="fa-solid fa-credit-card"></i> Abonelikler
+                            </div>
+                            <div class="dropdown-divider"></div>
+                            <a href="https://discord.gg/erensi" target="_blank" class="dropdown-item-link">
+                                <i class="fa-solid fa-circle-question"></i> Destek sunucusu
+                            </a>
+                            <div class="dropdown-item logout-item" id="logout-btn">
+                                <i class="fa-solid fa-right-from-bracket"></i> Çıkış yap
+                            </div>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -1227,7 +1262,99 @@
                     </div>
                 </div>
 
-                <!-- 16. DİĞER VIEW (ÇOK YAKINDA MODÜLÜ / FALLBACK) -->
+                <!-- 16. KOMUTLAR VIEW (PREMIUM) -->
+                <div id="view-commands" class="commands-view view-panel">
+                    <div class="view-header" style="margin-bottom: 20px;">
+                        <h3><i class="fa-solid fa-terminal" style="color: var(--accent-gold);"></i> Bot Komutları</h3>
+                        <p class="panel-subtitle">Botun sunucunuzda kullanabileceği tüm komutları ve açıklamalarını inceleyin.</p>
+                    </div>
+                    <div class="card" style="padding: 20px; overflow-x: auto;">
+                        <table class="premium-table" style="width: 100%; border-collapse: collapse; text-align: left; min-width: 500px;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-white);">
+                                    <th style="padding: 12px 10px;">Komut</th>
+                                    <th style="padding: 12px 10px;">Açıklama</th>
+                                    <th style="padding: 12px 10px;">Kullanım Örneği</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                    <td style="padding: 12px 10px; font-weight: 700; color: var(--accent-gold);">.lock</td>
+                                    <td style="padding: 12px 10px; color: var(--text-muted);">Bulunulan metin kanalını mesaj gönderimine kilitler.</td>
+                                    <td style="padding: 12px 10px; font-family: monospace; color: #7289da;">.lock</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                    <td style="padding: 12px 10px; font-weight: 700; color: var(--accent-gold);">.unlock</td>
+                                    <td style="padding: 12px 10px; color: var(--text-muted);">Kilitlenmiş olan kanalı mesaj gönderimine tekrar açar.</td>
+                                    <td style="padding: 12px 10px; font-family: monospace; color: #7289da;">.unlock</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                    <td style="padding: 12px 10px; font-weight: 700; color: var(--accent-gold);">.e [kullanıcı]</td>
+                                    <td style="padding: 12px 10px; color: var(--text-muted);">Belirtilen kullanıcıyı sunucuya Erkek olarak kaydeder.</td>
+                                    <td style="padding: 12px 10px; font-family: monospace; color: #7289da;">.e @zxarch</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                    <td style="padding: 12px 10px; font-weight: 700; color: var(--accent-gold);">.k [kullanıcı]</td>
+                                    <td style="padding: 12px 10px; color: var(--text-muted);">Belirtilen kullanıcıyı sunucuya Kız olarak kaydeder.</td>
+                                    <td style="padding: 12px 10px; font-family: monospace; color: #7289da;">.k @ayşe</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                    <td style="padding: 12px 10px; font-weight: 700; color: var(--accent-gold);">.guild</td>
+                                    <td style="padding: 12px 10px; color: var(--text-muted);">Sunucu tag/durum rol ve kayıt ayarlarını düzenler.</td>
+                                    <td style="padding: 12px 10px; font-family: monospace; color: #7289da;">.guild</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                    <td style="padding: 12px 10px; font-weight: 700; color: var(--accent-gold);">.readlogs</td>
+                                    <td style="padding: 12px 10px; color: var(--text-muted);">Botun tuttuğu son 10 olay günlüğünü (log) listeler.</td>
+                                    <td style="padding: 12px 10px; font-family: monospace; color: #7289da;">.readlogs</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 17. REKLAM VER VIEW (PREMIUM) -->
+                <div id="view-advertise" class="advertise-view view-panel">
+                    <div class="view-header" style="margin-bottom: 20px;">
+                        <h3><i class="fa-solid fa-rectangle-ad" style="color: var(--accent-gold);"></i> Reklam Ver</h3>
+                        <p class="panel-subtitle">Antigravity web paneli veya bot komutlarında reklamınızı yayınlayarak binlerce kişiye ulaşın.</p>
+                    </div>
+                    <div class="premium-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                        <div class="card" style="padding: 20px;">
+                            <h4 style="margin-bottom: 10px; color: var(--text-white);"><i class="fa-solid fa-desktop text-gold"></i> Panel Reklamı</h4>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Web kontrol paneli üzerindeki sağ alt reklam banner alanında banner görseliniz yayınlanır.</p>
+                            <span class="price" style="font-size: 1.5rem; font-weight: 800; color: var(--accent-gold); display: block; margin-bottom: 15px;">500 ₺ <span style="font-size: 0.8rem; color: var(--text-muted);">/ Ay</span></span>
+                            <a href="https://discord.gg/erensi" target="_blank" class="btn btn-primary btn-glow" style="width: 100%; text-align: center; text-decoration: none; display: block; box-sizing: border-box;">Satın Al / Görüş</a>
+                        </div>
+                        <div class="card" style="padding: 20px;">
+                            <h4 style="margin-bottom: 10px; color: var(--text-white);"><i class="fa-solid fa-message text-gold"></i> Bot Durum Reklamı</h4>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Botun Discord üzerindeki oynuyor/durum alanında markanız veya sunucunuz listelenir.</p>
+                            <span class="price" style="font-size: 1.5rem; font-weight: 800; color: var(--accent-gold); display: block; margin-bottom: 15px;">750 ₺ <span style="font-size: 0.8rem; color: var(--text-muted);">/ Ay</span></span>
+                            <a href="https://discord.gg/erensi" target="_blank" class="btn btn-primary btn-glow" style="width: 100%; text-align: center; text-decoration: none; display: block; box-sizing: border-box;">Satın Al / Görüş</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 18. ABONELİKLER VIEW (PREMIUM) -->
+                <div id="view-subscriptions" class="subscriptions-view view-panel">
+                    <div class="view-header" style="margin-bottom: 20px;">
+                        <h3><i class="fa-solid fa-credit-card" style="color: var(--accent-gold);"></i> Aboneliklerim</h3>
+                        <p class="panel-subtitle">Aktif aboneliklerinizi ve faturalandırma detaylarınızı yönetin.</p>
+                    </div>
+                    <div class="card" style="padding: 25px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid var(--accent-gold); flex-wrap: wrap; gap: 15px;">
+                        <div>
+                            <span style="background: rgba(250,168,26,0.15); color: var(--accent-gold); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; display: inline-block; margin-bottom: 10px;"><i class="fa-solid fa-crown"></i> AKTİF PLAN</span>
+                            <h4 style="color: var(--text-white); font-size: 1.2rem; margin-bottom: 5px;">Antigravity Premium Üyelik</h4>
+                            <p style="color: var(--text-muted); font-size: 0.85rem;">Süresiz, sınırsız erişim paketi sahibi: **zxarch**</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <span style="font-size: 1.5rem; font-weight: 800; color: var(--text-white); display: block;">Ömür Boyu</span>
+                            <span style="color: var(--text-muted); font-size: 0.8rem; display: block; margin-top: 5px;">Yenileme gerekmez</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 19. DİĞER VIEW (ÇOK YAKINDA MODÜLÜ / FALLBACK) -->
                 <div id="view-fallback" class="fallback-view view-panel">
                     <div class="card-panel large text-center flex-center">
                         <div class="fallback-icon"><i class="fa-solid fa-hourglass-half"></i></div>
