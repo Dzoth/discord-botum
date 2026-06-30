@@ -1191,18 +1191,15 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
                   SendMessages: false
               }).catch(() => null);
 
+              const { AttachmentBuilder } = require('discord.js');
+              const path = require('path');
+              const attachment = new AttachmentBuilder(path.join(__dirname, 'tempvoice_interface.png'), { name: 'interface.png' });
+
               const embed = new EmbedBuilder()
                   .setColor(0xED4245)
                   .setTitle('TempVoice Interface')
-                  .setDescription('Bu arayüzü kullanarak geçici ses kanalınızı istediğiniz şekilde yönetebilirsiniz.\n\n' +
-                      'Daha fazla seçeneğe ulaşmak için **/voice** komutunu kullanabilirsiniz.\n\n' +
-                      '⚙️ **Oda Yönetimi**\n' +
-                      '• 🚪 `Oda İsmi` • 👥 `Oda Limiti` • 🛡️ `Gizlilik` • ⏰ `Bekleme Odası` • 💬 `Sohbet` • 🌐 `Bölge`\n\n' +
-                      '👤 **Kullanıcı İzinleri**\n' +
-                      '• 👤➕ `Güvenilir` • 👤➖ `Güvensiz` • 🚫 `Engelle` • ✔️ `Engeli Kaldır` • 📞x `Sesten At` • 📞 `Davet`\n\n' +
-                      '👑 **Oda Sahipliği**\n' +
-                      '• 👑 `Sahiplen` • 👑✔️ `Odayı Devret` • 🗑️ `Sil`\n\n' +
-                      'Bu arayüzü kullanmak için aşağıdaki uygun butonlara tıklayın.')
+                  .setDescription('Bu arayüzü kullanarak geçici ses kanalınızı istediğiniz şekilde yönetebilirsiniz.\n\nDaha fazla seçeneğe ulaşmak için **/voice** komutunu kullanabilirsiniz.\n\nBu arayüzü kullanmak için aşağıdaki uygun butonlara tıklayın.')
+                  .setImage('attachment://interface.png')
                   .setTimestamp();
 
               const row1 = new ActionRowBuilder().addComponents(
@@ -1232,6 +1229,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
               const interfaceMessage = await textLogChannel.send({
                   content: `<@${member.id}> odanız oluşturuldu.`,
                   embeds: [embed],
+                  files: [attachment],
                   components: [row1, row2, row3]
               });
 
