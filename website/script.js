@@ -28,6 +28,7 @@ let activeLogs = [...sampleLogs];
 
 // ==================== CORE INITIALIZATION ====================
 document.addEventListener("DOMContentLoaded", () => {
+    try {
     let isUpdatingUI = false;
     
     // 1. DYNAMIC NAVIGATION
@@ -1957,5 +1958,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 myServersTab.click();
             }
         });
+    }
+    } catch (e) {
+        console.error("CRITICAL JS ERROR:", e);
+        alert("JS Hata: " + e.message + "\n" + e.stack);
     }
 });
