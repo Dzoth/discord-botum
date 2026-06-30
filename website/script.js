@@ -1,6 +1,6 @@
 // ==================== API HOST CONFIGURATION ====================
 const API_BASE = window.location.protocol === 'file:'
-    ? 'http://91.232.103.240:3000'
+    ? 'http://91.232.103.240:3001'
     : window.location.origin;
 
 // ==================== GLOBAL VARIABLES ====================
