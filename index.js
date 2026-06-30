@@ -1123,7 +1123,52 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   const oldChannel = oldState.channel;
   const newChannel = newState.channel;
 
-  // Ses kanalına girdi
+  // 1. Sunucu sessize alma / sağırlaştırma değişimi (serverMute / serverDeaf)
+  const muteChanged = oldState.serverMute !== newState.serverMute;
+  const deafChanged = oldState.serverDeaf !== newState.serverDeaf;
+
+  if (muteChanged || deafChanged) {
+      let executor = member.user;
+      try {
+          const fetchedLogs = await guild.fetchAuditLogs({ limit: 1 });
+          const logEntry = fetchedLogs.entries.first();
+          if (logEntry && logEntry.action === 24 && logEntry.target && logEntry.target.id === member.id && (Date.now() - logEntry.createdTimestamp < 8000)) {
+              executor = logEntry.executor;
+          }
+      } catch (e) {
+          console.error("Error fetching audit logs:", e);
+      }
+
+      const embed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setAuthor({
+              name: executor.username,
+              iconURL: executor.displayAvatarURL({ dynamic: true })
+          })
+          .setDescription('<@' + member.id + "> 'ın ses durumu güncellendi.")
+          .setFooter({ text: guild.name })
+          .setTimestamp();
+
+      if (muteChanged) {
+          embed.addFields({
+              name: '🎙️ Sunucu Susturması',
+              value: newState.serverMute ? 'True' : 'False',
+              inline: false
+          });
+      }
+      if (deafChanged) {
+          embed.addFields({
+              name: '🎧 Sunucu Sağırlaştırması',
+              value: newState.serverDeaf ? 'True' : 'False',
+              inline: false
+          });
+      }
+
+      await sendAuditLog(guild, newState.serverMute || newState.serverDeaf ? 'opt-mod-mute' : 'opt-mod-unmute', embed);
+      return;
+  }
+
+  // 2. Ses kanalına girdi
   if (!oldChannel && newChannel) {
     const embed = new EmbedBuilder()
       .setColor(0x57F287)
@@ -1131,14 +1176,14 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         name: member.user.username,
         iconURL: member.user.displayAvatarURL({ dynamic: true })
       })
-      .setDescription('<@' + member.id + '> ses kanalına katıldı `' + newChannel.name + '`.')
-      .setFooter({ text: `ID: ${member.id}` })
+      .setDescription('<@' + member.id + '> ses kanalına katıldı `' + newChannel.name + '` .')
+      .setFooter({ text: guild.name })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-voice-join', embed);
     return;
   }
 
-  // Ses kanalından çıktı
+  // 3. Ses kanalından çıktı
   if (oldChannel && !newChannel) {
     const embed = new EmbedBuilder()
       .setColor(0xED4245)
@@ -1146,14 +1191,14 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         name: member.user.username,
         iconURL: member.user.displayAvatarURL({ dynamic: true })
       })
-      .setDescription('<@' + member.id + '> ses kanalından ayrıldı `' + oldChannel.name + '`.')
-      .setFooter({ text: `ID: ${member.id}` })
+      .setDescription('<@' + member.id + '> ses kanalından ayrıldı `' + oldChannel.name + '` .')
+      .setFooter({ text: guild.name })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-voice-leave', embed);
     return;
   }
 
-  // Farklı ses kanalına geçti
+  // 4. Farklı ses kanalına geçti
   if (oldChannel && newChannel && oldChannel.id !== newChannel.id) {
     const embed = new EmbedBuilder()
       .setColor(0xFEE75C)
@@ -1161,57 +1206,11 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         name: member.user.username,
         iconURL: member.user.displayAvatarURL({ dynamic: true })
       })
-      .setDescription('<@' + member.id + '> ses kanalını değiştirdi `' + oldChannel.name + '` -> `' + newChannel.name + '`.')
-      .setFooter({ text: `ID: ${member.id}` })
+      .setDescription('<@' + member.id + '> ses kanalları arasında geçiş yaptı `' + oldChannel.name + '` => `' + newChannel.name + '` .')
+      .setFooter({ text: guild.name })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-voice-move', embed);
     return;
-  }
-
-  // Sunucu sessize alma (serverMute)
-  if (!oldState.serverMute && newState.serverMute) {
-    const embed = new EmbedBuilder()
-      .setColor(0xFFA500)
-      .setTitle('🔇 Mod: Ses Susturuldu')
-      .addFields(
-        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
-        { name: 'Kanal', value: newChannel ? `**${newChannel.name}**` : 'Bilinmiyor', inline: true }
-      )
-      .setTimestamp();
-    await sendAuditLog(guild, 'opt-mod-mute', embed);
-  } else if (oldState.serverMute && !newState.serverMute) {
-    const embed = new EmbedBuilder()
-      .setColor(0x57F287)
-      .setTitle('🔊 Mod: Ses Susturma Kaldırıldı')
-      .addFields(
-        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
-        { name: 'Kanal', value: newChannel ? `**${newChannel.name}**` : 'Bilinmiyor', inline: true }
-      )
-      .setTimestamp();
-    await sendAuditLog(guild, 'opt-mod-unmute', embed);
-  }
-
-  // Sunucu sağırlaştırma (serverDeaf)
-  if (!oldState.serverDeaf && newState.serverDeaf) {
-    const embed = new EmbedBuilder()
-      .setColor(0xFF6B35)
-      .setTitle('🔇 Mod: Sağırlaştırıldı')
-      .addFields(
-        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
-        { name: 'Kanal', value: newChannel ? `**${newChannel.name}**` : 'Bilinmiyor', inline: true }
-      )
-      .setTimestamp();
-    await sendAuditLog(guild, 'opt-mod-deafen', embed);
-  } else if (oldState.serverDeaf && !newState.serverDeaf) {
-    const embed = new EmbedBuilder()
-      .setColor(0x57F287)
-      .setTitle('🔊 Mod: Sağırlaştırma Kaldırıldı')
-      .addFields(
-        { name: 'Kullanıcı', value: `<@${member.id}> (${member.user.tag})`, inline: true },
-        { name: 'Kanal', value: newChannel ? `**${newChannel.name}**` : 'Bilinmiyor', inline: true }
-      )
-      .setTimestamp();
-    await sendAuditLog(guild, 'opt-mod-deafen', embed);
   }
 });
 
@@ -1336,13 +1335,29 @@ client.on('emojiDelete', async (emoji) => {
 client.on('channelCreate', async (channel) => {
   exportServerData();
   if (!channel.guild) return;
+  
+  let executorId = '';
+  try {
+      const fetchedLogs = await channel.guild.fetchAuditLogs({ limit: 1 });
+      const logEntry = fetchedLogs.entries.first();
+      if (logEntry && logEntry.action === 10 && logEntry.target && logEntry.target.id === channel.id) {
+          executorId = logEntry.executor.id;
+      }
+  } catch (e) {
+      console.error("Error fetching audit logs for channelCreate:", e);
+  }
+
   const embed = new EmbedBuilder()
     .setColor(0x57F287)
-    .setTitle('📢 Kanal Oluşturuldu')
+    .setAuthor({
+      name: channel.guild.name,
+      iconURL: channel.guild.iconURL({ dynamic: true })
+    })
+    .setDescription('🏠 **Kanal Oluşturuldu: `' + channel.name + '`**')
     .addFields(
-      { name: 'Kanal', value: `<#${channel.id}> (${channel.name})`, inline: true },
-      { name: 'Tür', value: channel.type.toString(), inline: true }
+      { name: 'Sorumlu Yetkili:', value: executorId ? `<@${executorId}>` : 'Bilinmiyor', inline: false }
     )
+    .setFooter({ text: channel.parent ? channel.parent.name : channel.guild.name })
     .setTimestamp();
   await sendAuditLog(channel.guild, 'opt-channel-create', embed);
 });
@@ -1367,13 +1382,29 @@ client.on('channelUpdate', async (oldChannel, newChannel) => {
 client.on('channelDelete', async (channel) => {
   exportServerData();
   if (!channel.guild) return;
+  
+  let executorId = '';
+  try {
+      const fetchedLogs = await channel.guild.fetchAuditLogs({ limit: 1 });
+      const logEntry = fetchedLogs.entries.first();
+      if (logEntry && logEntry.action === 12 && logEntry.targetId === channel.id) {
+          executorId = logEntry.executor.id;
+      }
+  } catch (e) {
+      console.error("Error fetching audit logs for channelDelete:", e);
+  }
+
   const embed = new EmbedBuilder()
     .setColor(0xED4245)
-    .setTitle('🗑️ Kanal Silindi')
+    .setAuthor({
+      name: channel.guild.name,
+      iconURL: channel.guild.iconURL({ dynamic: true })
+    })
+    .setDescription('🗑️ **Kanal Silindi: `' + channel.name + '`**')
     .addFields(
-      { name: 'İsim', value: channel.name, inline: true },
-      { name: 'ID', value: channel.id, inline: true }
+      { name: 'Sorumlu Yetkili:', value: executorId ? `<@${executorId}>` : 'Bilinmiyor', inline: false }
     )
+    .setFooter({ text: channel.parent ? channel.parent.name : channel.guild.name })
     .setTimestamp();
   await sendAuditLog(channel.guild, 'opt-channel-delete', embed);
 });
