@@ -3,6 +3,10 @@ const API_BASE = window.location.protocol === 'file:'
     ? 'http://91.232.103.240:3000'
     : window.location.origin;
 
+// ==================== GLOBAL VARIABLES ====================
+let allGuilds = [];
+let activeGuildId = localStorage.getItem("antigravity_active_guild_id") || "";
+
 // ==================== MOCK ROLES & LIMIT DATA ====================
 const mockRoles = [
     { id: "1516983424", name: "🛡️ Yönetici", banLimit: 2, kickLimit: 3 },
@@ -727,8 +731,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ]
     };
 
-    let allGuilds = [];
-    let activeGuildId = localStorage.getItem("antigravity_active_guild_id") || "";
+    // Globals moved to top
 
     function selectActiveGuild(guildId) {
         activeGuildId = guildId;
@@ -1960,6 +1963,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
     } catch (e) {
+        console.log("STACK_TRACE:" + e.stack);
         console.error("CRITICAL JS ERROR:", e);
         alert("JS Hata: " + e.message + "\n" + e.stack);
     }
