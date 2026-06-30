@@ -1182,6 +1182,15 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
           }
 
           if (textLogChannel) {
+              // Ensure #komutlar is hidden from everyone but visible to the creator
+              await textLogChannel.permissionOverwrites.create(guild.roles.everyone.id, {
+                  ViewChannel: false
+              }).catch(() => null);
+              await textLogChannel.permissionOverwrites.create(member.id, {
+                  ViewChannel: true,
+                  SendMessages: false
+              }).catch(() => null);
+
               const embed = new EmbedBuilder()
                   .setColor(0xED4245)
                   .setTitle('TempVoice Interface')
@@ -1252,6 +1261,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
                   if (textChannel) {
                       const msg = await textChannel.messages.fetch(roomData.messageId).catch(() => null);
                       if (msg) await msg.delete().catch(() => null);
+                      await textChannel.permissionOverwrites.delete(roomData.ownerId).catch(() => null);
                   }
                   if (roomData.tempTextChannelId) {
                       const tempTextChan = guild.channels.cache.get(roomData.tempTextChannelId);
@@ -2058,9 +2068,19 @@ client.on('interactionCreate', async (interaction) => {
               return interaction.reply({ content: "❌ Odayı sahiplenmek için kanalın içinde bulunmalısınız.", ephemeral: true });
           }
 
+          const oldOwnerId = roomData.ownerId;
           roomData.ownerId = interaction.user.id;
           tempRooms.set(roomChannelId, roomData);
           saveTempRooms(tempRooms);
+
+          const textLogChannel = interaction.guild.channels.cache.get(roomData.textChannelId) || interaction.guild.channels.cache.find(c => c.name === 'komutlar' && c.type === 0);
+          if (textLogChannel) {
+              await textLogChannel.permissionOverwrites.delete(oldOwnerId).catch(() => null);
+              await textLogChannel.permissionOverwrites.create(interaction.user.id, {
+                  ViewChannel: true,
+                  SendMessages: false
+              }).catch(() => null);
+          }
 
           await voiceChannel.permissionOverwrites.edit(interaction.user.id, {
               ManageChannels: true,
@@ -2345,6 +2365,15 @@ client.on('interactionCreate', async (interaction) => {
               roomData.ownerId = targetMember.id;
               tempRooms.set(roomChannelId, roomData);
               saveTempRooms(tempRooms);
+
+              const textLogChannel = interaction.guild.channels.cache.get(roomData.textChannelId) || interaction.guild.channels.cache.find(c => c.name === 'komutlar' && c.type === 0);
+              if (textLogChannel) {
+                  await textLogChannel.permissionOverwrites.delete(interaction.user.id).catch(() => null);
+                  await textLogChannel.permissionOverwrites.create(targetMember.id, {
+                      ViewChannel: true,
+                      SendMessages: false
+                  }).catch(() => null);
+              }
 
               await voiceChannel.permissionOverwrites.edit(targetMember.id, {
                   ManageChannels: true,

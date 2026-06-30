@@ -2226,10 +2226,15 @@ async def odakur_command(ctx):
     try:
         guild = ctx.guild
         category = await guild.create_category(name="Özel Ses", reason="TempVoice Kurulumu")
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+        }
         text_channel = await guild.create_text_channel(
             name="komutlar",
             category=category,
-            reason="TempVoice Kurulumu"
+            reason="TempVoice Kurulumu",
+            overwrites=overwrites
         )
         voice_channel = await guild.create_voice_channel(
             name="🔊 Özel Ses",
