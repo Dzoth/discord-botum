@@ -780,6 +780,29 @@ const client = new Client({
   }
 });
 
+const TEMP_ROOMS_FILE = path.join(__dirname, 'temp_rooms.json');
+
+function loadTempRooms() {
+    try {
+        if (fs.existsSync(TEMP_ROOMS_FILE)) {
+            const data = fs.readFileSync(TEMP_ROOMS_FILE, 'utf-8');
+            return new Map(JSON.parse(data));
+        }
+    } catch (e) {
+        console.error("Error loading temp rooms:", e);
+    }
+    return new Map();
+}
+
+function saveTempRooms(rooms) {
+    try {
+        const data = JSON.stringify(Array.from(rooms.entries()));
+        fs.writeFileSync(TEMP_ROOMS_FILE, data, 'utf-8');
+    } catch (e) {
+        console.error("Error saving temp rooms:", e);
+    }
+}
+
 client.once('ready', async () => {
   console.log(`Bot başarıyla giriş yaptı: ${client.user.tag}`);
   logEvent('INFO', 'System', `Bot ready as ${client.user.tag}. Guilds: ${client.guilds.cache.size}`);
@@ -1210,7 +1233,115 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
       .setFooter({ text: guild.name })
       .setTimestamp();
     await sendAuditLog(guild, 'opt-voice-move', embed);
-    return;
+  }
+
+  // --- TempVoice Join-to-Create Logic ---
+  if (newChannel && (newChannel.name === 'özelsesacıptakılın' || newChannel.name === '🔊 özelsesacıptakılın' || newChannel.name.toLowerCase() === 'tempvoice')) {
+      try {
+          const category = newChannel.parent;
+          const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+          const tempChannel = await guild.channels.create({
+              name: `${member.user.username}'in Odası`,
+              type: 2, // GUILD_VOICE
+              parent: category ? category.id : null,
+              permissionOverwrites: [
+                  {
+                      id: member.id,
+                      allow: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.MuteMembers, PermissionFlagsBits.DeafenMembers, PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel]
+                  }
+              ]
+          });
+
+          await member.voice.setChannel(tempChannel);
+
+          let textLogChannel = guild.channels.cache.find(c => c.name === 'komutlar' && c.type === 0);
+          if (!textLogChannel && category) {
+              textLogChannel = category.children.cache.find(c => c.name === 'komutlar' && c.type === 0);
+          }
+          if (!textLogChannel) {
+              textLogChannel = guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.SendMessages));
+          }
+
+          if (textLogChannel) {
+              const embed = new EmbedBuilder()
+                  .setColor(0xED4245)
+                  .setTitle('TempVoice Interface')
+                  .setDescription('Bu arayüzü kullanarak geçici ses kanalınızı istediğiniz şekilde yönetebilirsiniz.\n\nDaha fazla seçeneğe ulaşmak için **/voice** komutunu kullanabilirsiniz.\n\n' +
+                      '🚪 **ODA İSMİ** | 👥 **ODA LİMİTİ** | 🛡️ **GİZLİLİK** | ⏰ **BEKLEME ODASI** | 💬 **SOHBET**\n' +
+                      '👤➕ **GÜVENİLİR** | 👤➖ **GÜVENSİZ** | 📞 **DAVET** | 📞x **SESTEN AT** | 🌐 **BÖLGE**\n' +
+                      '👤⛔ **ENGELLE** | 👤✔️ **ENGELI KALDIR** | 👑 **SAHİPLEN** | 👑✔️ **ODAYI DEVRET** | 🗑️ **SİL**\n\n' +
+                      'Bu arayüzü kullanmak için aşağıdaki uygun butonlara tıklayın.')
+                  .setTimestamp();
+
+              const row1 = new ActionRowBuilder().addComponents(
+                  new ButtonBuilder().setCustomId('tempvoice_name').setEmoji('🚪').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_limit').setEmoji('👥').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_privacy').setEmoji('🛡️').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_waiting').setEmoji('⏰').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_chat').setEmoji('💬').setStyle(ButtonStyle.Secondary)
+              );
+
+              const row2 = new ActionRowBuilder().addComponents(
+                  new ButtonBuilder().setCustomId('tempvoice_permit').setEmoji('👤').setLabel('+').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_unpermit').setEmoji('👤').setLabel('-').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_invite').setEmoji('📞').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_kick').setEmoji('📞').setLabel('x').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_region').setEmoji('🌐').setStyle(ButtonStyle.Secondary)
+              );
+
+              const row3 = new ActionRowBuilder().addComponents(
+                  new ButtonBuilder().setCustomId('tempvoice_block').setEmoji('🚫').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_unblock').setEmoji('✔️').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_claim').setEmoji('👑').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_transfer').setEmoji('👑').setLabel('✔️').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_delete').setEmoji('🗑️').setStyle(ButtonStyle.Danger)
+              );
+
+              const interfaceMessage = await textLogChannel.send({
+                  content: `<@${member.id}> odanız oluşturuldu.`,
+                  embeds: [embed],
+                  components: [row1, row2, row3]
+              });
+
+              const tempRooms = loadTempRooms();
+              tempRooms.set(tempChannel.id, {
+                  ownerId: member.id,
+                  messageId: interfaceMessage.id,
+                  textChannelId: textLogChannel.id,
+                  tempTextChannelId: null,
+                  categoryId: category ? category.id : null
+              });
+              saveTempRooms(tempRooms);
+          }
+      } catch (err) {
+          console.error("Error creating temp voice channel:", err);
+      }
+  }
+
+  // --- TempVoice Empty Channel Cleanup ---
+  if (oldChannel) {
+      const tempRooms = loadTempRooms();
+      if (tempRooms.has(oldChannel.id)) {
+          if (oldChannel.members.size === 0) {
+              try {
+                  const roomData = tempRooms.get(oldChannel.id);
+                  const textChannel = guild.channels.cache.get(roomData.textChannelId);
+                  if (textChannel) {
+                      const msg = await textChannel.messages.fetch(roomData.messageId).catch(() => null);
+                      if (msg) await msg.delete().catch(() => null);
+                  }
+                  if (roomData.tempTextChannelId) {
+                      const tempTextChan = guild.channels.cache.get(roomData.tempTextChannelId);
+                      if (tempTextChan) await tempTextChan.delete().catch(() => null);
+                  }
+                  await oldChannel.delete().catch(() => null);
+                  tempRooms.delete(oldChannel.id);
+                  saveTempRooms(tempRooms);
+              } catch (err) {
+                  console.error("Error cleaning up temp channel:", err);
+              }
+          }
+      }
   }
 });
 
@@ -1878,10 +2009,354 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 
+  // --- TempVoice Button Interactions ---
+  if (interaction.isButton() && interaction.customId.startsWith('tempvoice_')) {
+      const tempRooms = loadTempRooms();
+      let voiceChannel = null;
+      let roomData = null;
+      let roomChannelId = null;
+
+      for (const [chanId, data] of tempRooms.entries()) {
+          if (data.messageId === interaction.message.id) {
+              roomChannelId = chanId;
+              roomData = data;
+              break;
+          }
+      }
+
+      if (!roomChannelId) {
+          return interaction.reply({ content: "❌ Bu geçici oda artık aktif değil.", ephemeral: true });
+      }
+
+      voiceChannel = interaction.guild.channels.cache.get(roomChannelId);
+      if (!voiceChannel) {
+          return interaction.reply({ content: "❌ İlgili ses kanalı bulunamadı.", ephemeral: true });
+      }
+
+      const isOwner = roomData.ownerId === interaction.user.id;
+
+      if (interaction.customId === 'tempvoice_claim') {
+          const ownerInChannel = voiceChannel.members.has(roomData.ownerId);
+          if (ownerInChannel) {
+              return interaction.reply({ content: "❌ Oda sahibi şu anda kanalda aktif durumda.", ephemeral: true });
+          }
+          const claimerInChannel = voiceChannel.members.has(interaction.user.id);
+          if (!claimerInChannel) {
+              return interaction.reply({ content: "❌ Odayı sahiplenmek için kanalın içinde bulunmalısınız.", ephemeral: true });
+          }
+
+          roomData.ownerId = interaction.user.id;
+          tempRooms.set(roomChannelId, roomData);
+          saveTempRooms(tempRooms);
+
+          await voiceChannel.permissionOverwrites.edit(interaction.user.id, {
+              ManageChannels: true,
+              MoveMembers: true,
+              MuteMembers: true,
+              DeafenMembers: true,
+              Connect: true,
+              ViewChannel: true
+          });
+
+          return interaction.reply({ content: `👑 Odanın yeni sahibi başarıyla <@${interaction.user.id}> olarak güncellendi!`, ephemeral: false });
+      }
+
+      if (!isOwner) {
+          return interaction.reply({ content: "❌ Bu işlemi sadece oda sahibi gerçekleştirebilir.", ephemeral: true });
+      }
+
+      const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+
+      if (interaction.customId === 'tempvoice_delete') {
+          await voiceChannel.delete().catch(() => null);
+          if (roomData.tempTextChannelId) {
+              const tempTextChan = interaction.guild.channels.cache.get(roomData.tempTextChannelId);
+              if (tempTextChan) await tempTextChan.delete().catch(() => null);
+          }
+          await interaction.message.delete().catch(() => null);
+          tempRooms.delete(roomChannelId);
+          saveTempRooms(tempRooms);
+          return interaction.reply({ content: '🗑️ Oda başarıyla silindi.', ephemeral: true });
+      }
+
+      if (interaction.customId === 'tempvoice_name') {
+          const modal = new ModalBuilder().setCustomId(`tempmodal_name:${roomChannelId}`).setTitle('Oda İsmi Değiştir');
+          const nameInput = new TextInputBuilder()
+              .setCustomId('new_name')
+              .setLabel('Yeni Oda İsmi')
+              .setValue(voiceChannel.name)
+              .setStyle(TextInputStyle.Short)
+              .setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
+          return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'tempvoice_limit') {
+          const modal = new ModalBuilder().setCustomId(`tempmodal_limit:${roomChannelId}`).setTitle('Oda Limiti Ayarla');
+          const limitInput = new TextInputBuilder()
+              .setCustomId('new_limit')
+              .setLabel('Kişi Sayısı (0-99 arasında, 0 sınırsız)')
+              .setValue(voiceChannel.userLimit.toString())
+              .setStyle(TextInputStyle.Short)
+              .setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(limitInput));
+          return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'tempvoice_privacy') {
+          const everyone = interaction.guild.roles.everyone;
+          const currentOverwrites = voiceChannel.permissionOverwrites.cache.get(everyone.id);
+          const isLocked = currentOverwrites && currentOverwrites.deny.has(PermissionFlagsBits.Connect);
+
+          if (isLocked) {
+              await voiceChannel.permissionOverwrites.edit(everyone, { Connect: null });
+              return interaction.reply({ content: '🔓 Oda kilidi kaldırıldı (herkese açıldı).', ephemeral: true });
+          } else {
+              await voiceChannel.permissionOverwrites.edit(everyone, { Connect: false });
+              return interaction.reply({ content: '🔒 Oda kilitlendi (girişler kapatıldı).', ephemeral: true });
+          }
+      }
+
+      if (interaction.customId === 'tempvoice_waiting') {
+          const everyone = interaction.guild.roles.everyone;
+          await voiceChannel.permissionOverwrites.edit(everyone, { Connect: false });
+          return interaction.reply({ content: '⏰ Bekleme odası aktif edildi (oda kilitlendi, kullanıcıların sizi beklemesi gerekir).', ephemeral: true });
+      }
+
+      if (interaction.customId === 'tempvoice_chat') {
+          if (roomData.tempTextChannelId) {
+              const tempTextChan = interaction.guild.channels.cache.get(roomData.tempTextChannelId);
+              if (tempTextChan) await tempTextChan.delete().catch(() => null);
+              roomData.tempTextChannelId = null;
+              tempRooms.set(roomChannelId, roomData);
+              saveTempRooms(tempRooms);
+              return interaction.reply({ content: '💬 Geçici sohbet kanalı kaldırıldı.', ephemeral: true });
+          } else {
+              const tempTextChan = await interaction.guild.channels.create({
+                  name: `💬-${voiceChannel.name}`,
+                  type: 0, // GUILD_TEXT
+                  parent: voiceChannel.parentId,
+                  permissionOverwrites: [
+                      {
+                          id: interaction.guild.roles.everyone.id,
+                          deny: [PermissionFlagsBits.ViewChannel]
+                      },
+                      {
+                          id: interaction.user.id,
+                          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
+                      }
+                  ]
+              });
+              roomData.tempTextChannelId = tempTextChan.id;
+              tempRooms.set(roomChannelId, roomData);
+              saveTempRooms(tempRooms);
+              return interaction.reply({ content: `💬 Geçici sohbet kanalı oluşturuldu: <#${tempTextChan.id}>`, ephemeral: true });
+          }
+      }
+
+      if (interaction.customId === 'tempvoice_permit') {
+          const modal = new ModalBuilder().setCustomId(`tempmodal_permit:${roomChannelId}`).setTitle('Kullanıcıya İzin Ver');
+          const idInput = new TextInputBuilder()
+              .setCustomId('user_id')
+              .setLabel('Kullanıcı ID')
+              .setPlaceholder("Giriş izni verilecek kişinin ID'si")
+              .setStyle(TextInputStyle.Short)
+              .setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+          return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'tempvoice_unpermit') {
+          const modal = new ModalBuilder().setCustomId(`tempmodal_unpermit:${roomChannelId}`).setTitle('Kullanıcı İznini Kaldır');
+          const idInput = new TextInputBuilder()
+              .setCustomId('user_id')
+              .setLabel('Kullanıcı ID')
+              .setPlaceholder("İzni kaldırılacak kişinin ID'si")
+              .setStyle(TextInputStyle.Short)
+              .setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+          return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'tempvoice_invite') {
+          const invite = await voiceChannel.createInvite({ maxAge: 300, maxUses: 5 });
+          return interaction.reply({ content: `🔗 Davet linkiniz oluşturuldu (5 kullanımlık, 5 dakika geçerli): ${invite.url}`, ephemeral: true });
+      }
+
+      if (interaction.customId === 'tempvoice_kick') {
+          const modal = new ModalBuilder().setCustomId(`tempmodal_kick:${roomChannelId}`).setTitle('Sesten Kullanıcı At');
+          const idInput = new TextInputBuilder()
+              .setCustomId('user_id')
+              .setLabel('Kullanıcı ID')
+              .setPlaceholder("Sesten atılacak kişinin ID'si")
+              .setStyle(TextInputStyle.Short)
+              .setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+          return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'tempvoice_region') {
+          const currentRegion = voiceChannel.rtcRegion;
+          const nextRegion = currentRegion === 'rotterdam' ? 'us-central' : 'rotterdam';
+          await voiceChannel.setRTCRegion(nextRegion);
+          return interaction.reply({ content: `🌐 Ses bölgesi \`${nextRegion}\` olarak değiştirildi.`, ephemeral: true });
+      }
+
+      if (interaction.customId === 'tempvoice_block') {
+          const modal = new ModalBuilder().setCustomId(`tempmodal_block:${roomChannelId}`).setTitle('Kullanıcı Engelle');
+          const idInput = new TextInputBuilder()
+              .setCustomId('user_id')
+              .setLabel('Kullanıcı ID')
+              .setPlaceholder("Odaya girişi engellenecek kişinin ID'si")
+              .setStyle(TextInputStyle.Short)
+              .setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+          return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'tempvoice_unblock') {
+          const modal = new ModalBuilder().setCustomId(`tempmodal_unblock:${roomChannelId}`).setTitle('Engeli Kaldır');
+          const idInput = new TextInputBuilder()
+              .setCustomId('user_id')
+              .setLabel('Kullanıcı ID')
+              .setPlaceholder("Engeli kaldırılacak kişinin ID'si")
+              .setStyle(TextInputStyle.Short)
+              .setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+          return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'tempvoice_transfer') {
+          const modal = new ModalBuilder().setCustomId(`tempmodal_transfer:${roomChannelId}`).setTitle('Odayı Devret');
+          const idInput = new TextInputBuilder()
+              .setCustomId('user_id')
+              .setLabel('Kullanıcı ID')
+              .setPlaceholder("Sahiplik devredilecek kişinin ID'si")
+              .setStyle(TextInputStyle.Short)
+              .setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+          return interaction.showModal(modal);
+      }
+  }
+
+  // --- TempVoice Modal Submissions ---
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('tempmodal_')) {
+      const parts = interaction.customId.split(':');
+      const action = parts[0];
+      const roomChannelId = parts[1];
+
+      const voiceChannel = interaction.guild.channels.cache.get(roomChannelId);
+      if (!voiceChannel) {
+          return interaction.reply({ content: "❌ İlgili ses kanalı bulunamadı.", ephemeral: true });
+      }
+
+      if (action === 'tempmodal_name') {
+          const newName = interaction.fields.getTextInputValue('new_name');
+          await voiceChannel.setName(newName);
+          return interaction.reply({ content: `✅ Oda ismi \`${newName}\` olarak güncellendi.`, ephemeral: true });
+      }
+
+      if (action === 'tempmodal_limit') {
+          const newLimitVal = interaction.fields.getTextInputValue('new_limit');
+          const limit = parseInt(newLimitVal);
+          if (isNaN(limit) || limit < 0 || limit > 99) {
+              return interaction.reply({ content: "❌ Lütfen 0 ile 99 arasında geçerli bir sayı girin.", ephemeral: true });
+          }
+          await voiceChannel.setUserLimit(limit);
+          return interaction.reply({ content: `✅ Oda limiti \`${limit === 0 ? 'Sınırsız' : limit}\` olarak güncellendi.`, ephemeral: true });
+      }
+
+      if (action === 'tempmodal_permit') {
+          const targetId = interaction.fields.getTextInputValue('user_id');
+          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+          if (!targetMember) {
+              return interaction.reply({ content: "❌ Belirttiğiniz ID'li kullanıcı sunucuda bulunamadı.", ephemeral: true });
+          }
+          await voiceChannel.permissionOverwrites.edit(targetMember, { Connect: true, ViewChannel: true });
+          return interaction.reply({ content: `✅ \${targetMember} kullanıcısına odaya giriş izni verildi.`, ephemeral: true });
+      }
+
+      if (action === 'tempmodal_unpermit') {
+          const targetId = interaction.fields.getTextInputValue('user_id');
+          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+          if (!targetMember) {
+              return interaction.reply({ content: "❌ Belirttiğiniz ID'li kullanıcı bulunamadı.", ephemeral: true });
+          }
+          await voiceChannel.permissionOverwrites.delete(targetMember);
+          return interaction.reply({ content: `✅ \${targetMember} kullanıcısının özel izni kaldırıldı.`, ephemeral: true });
+      }
+
+      if (action === 'tempmodal_kick') {
+          const targetId = interaction.fields.getTextInputValue('user_id');
+          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+          if (!targetMember || !targetMember.voice.channel || targetMember.voice.channel.id !== voiceChannel.id) {
+              return interaction.reply({ content: "❌ Belirtilen kullanıcı sizin ses odanızda bulunmuyor.", ephemeral: true });
+          }
+          await targetMember.voice.disconnect();
+          return interaction.reply({ content: `✅ \${targetMember} ses kanalından atıldı.`, ephemeral: true });
+      }
+
+      if (action === 'tempmodal_block') {
+          const targetId = interaction.fields.getTextInputValue('user_id');
+          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+          if (!targetMember) {
+              return interaction.reply({ content: "❌ Belirtilen kullanıcı bulunamadı.", ephemeral: true });
+          }
+          await voiceChannel.permissionOverwrites.edit(targetMember, { Connect: false });
+          if (targetMember.voice.channel && targetMember.voice.channel.id === voiceChannel.id) {
+              await targetMember.voice.disconnect();
+          }
+          return interaction.reply({ content: `🚫 \${targetMember} odaya girişten engellendi.`, ephemeral: true });
+      }
+
+      if (action === 'tempmodal_unblock') {
+          const targetId = interaction.fields.getTextInputValue('user_id');
+          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+          if (!targetMember) {
+              return interaction.reply({ content: "❌ Belirtilen kullanıcı bulunamadı.", ephemeral: true });
+          }
+          await voiceChannel.permissionOverwrites.delete(targetMember);
+          return interaction.reply({ content: `✅ \${targetMember} kullanıcısının engeli kaldırıldı.`, ephemeral: true });
+      }
+
+      if (action === 'tempmodal_transfer') {
+          const targetId = interaction.fields.getTextInputValue('user_id');
+          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+          if (!targetMember || !targetMember.voice.channel || targetMember.voice.channel.id !== voiceChannel.id) {
+              return interaction.reply({ content: "❌ Devredeceğiniz kullanıcı şu an sizin ses odanızda bulunmalı.", ephemeral: true });
+          }
+
+          const tempRooms = loadTempRooms();
+          const roomData = tempRooms.get(roomChannelId);
+          if (roomData) {
+              roomData.ownerId = targetMember.id;
+              tempRooms.set(roomChannelId, roomData);
+              saveTempRooms(tempRooms);
+
+              await voiceChannel.permissionOverwrites.edit(targetMember.id, {
+                  ManageChannels: true,
+                  MoveMembers: true,
+                  MuteMembers: true,
+                  DeafenMembers: true,
+                  Connect: true,
+                  ViewChannel: true
+              });
+              await voiceChannel.permissionOverwrites.edit(interaction.user.id, {
+                  ManageChannels: null,
+                  MoveMembers: null,
+                  MuteMembers: null,
+                  DeafenMembers: null
+              });
+
+              return interaction.reply({ content: `👑 Oda sahipliği başarıyla \${targetMember} kullanıcısına devredildi.`, ephemeral: false });
+          }
+      }
+  }
+
   if (interaction.isButton()) {
     if (interaction.customId.startsWith('trigger_create_role:')) {
       if (!isBotDeveloper(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Bu butonu sadece bot yapımcısı kullanabilir.', ephemeral: true });
+        return interaction.reply({ content: "❌ Bu butonu sadece bot yapımcısı kullanabilir.", ephemeral: true });
       }
 
       const targetGuildId = interaction.customId.split(':')[1];
@@ -1916,7 +2391,7 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isStringSelectMenu()) {
     if (interaction.customId.startsWith('select_delete_type:')) {
       if (!isBotDeveloper(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.', ephemeral: true });
+        return interaction.reply({ content: "❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.", ephemeral: true });
       }
 
       const targetGuildId = interaction.customId.split(':')[1];
@@ -2019,7 +2494,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.customId.startsWith('delete_action_role:')) {
       if (!isBotDeveloper(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.', ephemeral: true });
+        return interaction.reply({ content: "❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.", ephemeral: true });
       }
       const targetGuildId = interaction.customId.split(':')[1];
       const selectedIds = interaction.values;
@@ -2061,7 +2536,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.customId.startsWith('delete_action_category:')) {
       if (!isBotDeveloper(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.', ephemeral: true });
+        return interaction.reply({ content: "❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.", ephemeral: true });
       }
       const targetGuildId = interaction.customId.split(':')[1];
       const selectedIds = interaction.values;
@@ -2103,7 +2578,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.customId.startsWith('delete_action_channel:')) {
       if (!isBotDeveloper(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.', ephemeral: true });
+        return interaction.reply({ content: "❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.", ephemeral: true });
       }
       const targetGuildId = interaction.customId.split(':')[1];
       const selectedIds = interaction.values;
@@ -2147,7 +2622,7 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('create_role_modal:')) {
       if (!isBotDeveloper(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Bu işlemi sadece bot yapımcısı tamamlayabilir.', ephemeral: true });
+        return interaction.reply({ content: "❌ Bu işlemi sadece bot yapımcısı tamamlayabilir.", ephemeral: true });
       }
 
       const targetGuildId = interaction.customId.split(':')[1];
@@ -2205,7 +2680,7 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isRoleSelectMenu()) {
     if (interaction.customId === 'kayit_setup_male_role') {
       if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !isBotDeveloper(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Bu işlemi sadece yöneticiler gerçekleştirebilir.', ephemeral: true });
+        return interaction.reply({ content: "❌ Bu işlemi sadece yöneticiler gerçekleştirebilir.", ephemeral: true });
       }
 
       const maleRoleId = interaction.values[0];
@@ -2225,7 +2700,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.customId.startsWith('kayit_setup_female_role:')) {
       if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !isBotDeveloper(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Bu işlemi sadece yöneticiler gerçekleştirebilir.', ephemeral: true });
+        return interaction.reply({ content: "❌ Bu işlemi sadece yöneticiler gerçekleştirebilir.", ephemeral: true });
       }
 
       const maleRoleId = interaction.customId.split(':')[1];
@@ -2249,7 +2724,7 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isChannelSelectMenu()) {
     if (interaction.customId.startsWith('kayit_setup_channel:')) {
       if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !isBotDeveloper(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Bu işlemi sadece yöneticiler gerçekleştirebilir.', ephemeral: true });
+        return interaction.reply({ content: "❌ Bu işlemi sadece yöneticiler gerçekleştirebilir.", ephemeral: true });
       }
 
       const parts = interaction.customId.split(':');
@@ -3486,7 +3961,7 @@ defineCommand(['üst', 'ust'], 'dev', async (message, args, isDev) => {
       if (interaction.isStringSelectMenu() && interaction.customId === 'move_role_target_select') {
         selectedTargetRoleId = interaction.values[0];
         const targetRole = guild.roles.cache.get(selectedTargetRoleId);
-        if (!targetRole) return interaction.reply({ content: '❌ Hedef rol bulunamadı.', ephemeral: true });
+        if (!targetRole) return interaction.reply({ content: "❌ Hedef rol bulunamadı.", ephemeral: true });
 
         const buttonRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('move_above').setLabel('Üstüne Çek').setStyle(ButtonStyle.Success),
@@ -3500,16 +3975,16 @@ defineCommand(['üst', 'ust'], 'dev', async (message, args, isDev) => {
       }
 
       if (interaction.isButton()) {
-        if (!selectedTargetRoleId) return interaction.reply({ content: '❌ Lütfen önce hedef rolü seçin.', ephemeral: true });
+        if (!selectedTargetRoleId) return interaction.reply({ content: "❌ Lütfen önce hedef rolü seçin.", ephemeral: true });
 
         const targetRole = guild.roles.cache.get(selectedTargetRoleId);
-        if (!targetRole) return interaction.reply({ content: '❌ Hedef rol bulunamadı.', ephemeral: true });
+        if (!targetRole) return interaction.reply({ content: "❌ Hedef rol bulunamadı.", ephemeral: true });
 
         const action = interaction.customId === 'move_above' ? 'above' : 'below';
         const freshRoleToMove = guild.roles.cache.get(roleToMove.id);
         const freshTargetRole = guild.roles.cache.get(targetRole.id);
 
-        if (!freshRoleToMove || !freshTargetRole) return interaction.reply({ content: '❌ Roller artık mevcut değil.', ephemeral: true });
+        if (!freshRoleToMove || !freshTargetRole) return interaction.reply({ content: "❌ Roller artık mevcut değil.", ephemeral: true });
 
         try {
           let newPosition = freshTargetRole.position;
@@ -3590,18 +4065,18 @@ defineCommand(['rolver'], 'mod', async (message, args, isDev) => {
         Object.defineProperty(interaction.member, 'permissions', { value: { has: () => true }, writable: true, configurable: true });
       }
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
-        return interaction.reply({ content: '❌ Yetki yetersiz!', ephemeral: true });
+        return interaction.reply({ content: "❌ Yetki yetersiz!", ephemeral: true });
       }
 
       const roleId = interaction.values[0];
       const role = guild.roles.cache.get(roleId);
-      if (!role) return interaction.reply({ content: '❌ Rol bulunamadı.', ephemeral: true });
+      if (!role) return interaction.reply({ content: "❌ Rol bulunamadı.", ephemeral: true });
 
       try {
         await member.roles.add(role);
         await interaction.update({ content: `✅ <@${userId}> kullanıcısına **${guild.name}** sunucusunda **${role.name}** rolü başarıyla verildi.`, components: [] });
       } catch (err) {
-        await interaction.reply({ content: '❌ Rol verilirken hata oluştu.', ephemeral: true });
+        await interaction.reply({ content: "❌ Rol verilirken hata oluştu.", ephemeral: true });
       }
     });
 
@@ -3661,18 +4136,18 @@ defineCommand(['rolal'], 'mod', async (message, args, isDev) => {
         Object.defineProperty(interaction.member, 'permissions', { value: { has: () => true }, writable: true, configurable: true });
       }
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
-        return interaction.reply({ content: '❌ Yetki yetersiz!', ephemeral: true });
+        return interaction.reply({ content: "❌ Yetki yetersiz!", ephemeral: true });
       }
 
       const roleId = interaction.values[0];
       const role = guild.roles.cache.get(roleId);
-      if (!role) return interaction.reply({ content: '❌ Rol bulunamadı.', ephemeral: true });
+      if (!role) return interaction.reply({ content: "❌ Rol bulunamadı.", ephemeral: true });
 
       try {
         await member.roles.remove(role);
         await interaction.update({ content: `✅ <@${userId}> kullanıcısından **${guild.name}** sunucusunda **${role.name}** rolü başarıyla alındı.`, components: [] });
       } catch (err) {
-        await interaction.reply({ content: '❌ Rol alınırken hata oluştu.', ephemeral: true });
+        await interaction.reply({ content: "❌ Rol alınırken hata oluştu.", ephemeral: true });
       }
     });
 
@@ -3754,7 +4229,7 @@ defineCommand(['limit'], 'owner', async (message, args, isDev) => {
       } else if (interaction.customId.startsWith('limit_val_')) {
         const roleId = interaction.customId.split('_')[2];
         const role = message.guild.roles.cache.get(roleId);
-        if (!role) return interaction.reply({ content: '❌ Rol bulunamadı.', ephemeral: true });
+        if (!role) return interaction.reply({ content: "❌ Rol bulunamadı.", ephemeral: true });
 
         const val = interaction.values[0];
         if (val === 'back') {
