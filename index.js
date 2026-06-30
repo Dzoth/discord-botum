@@ -1191,45 +1191,39 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
                   SendMessages: false
               }).catch(() => null);
 
-              const { AttachmentBuilder } = require('discord.js');
-              const path = require('path');
-              const attachment = new AttachmentBuilder(path.join(__dirname, 'tempvoice_interface.png'), { name: 'interface.png' });
-
               const embed = new EmbedBuilder()
                   .setColor(0xED4245)
                   .setTitle('TempVoice Interface')
                   .setDescription('Bu arayüzü kullanarak geçici ses kanalınızı istediğiniz şekilde yönetebilirsiniz.\n\nDaha fazla seçeneğe ulaşmak için **/voice** komutunu kullanabilirsiniz.\n\nBu arayüzü kullanmak için aşağıdaki uygun butonlara tıklayın.')
-                  .setImage('attachment://interface.png')
                   .setTimestamp();
 
               const row1 = new ActionRowBuilder().addComponents(
-                  new ButtonBuilder().setCustomId('tempvoice_name').setEmoji('🚪').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_limit').setEmoji('👥').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_privacy').setEmoji('🛡️').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_waiting').setEmoji('⏰').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_chat').setEmoji('💬').setStyle(ButtonStyle.Secondary)
+                  new ButtonBuilder().setCustomId('tempvoice_name').setEmoji('🚪').setLabel('ODA İSMİ').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_limit').setEmoji('👥').setLabel('ODA LİMİTİ').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_privacy').setEmoji('🛡️').setLabel('GİZLİLİK').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_waiting').setEmoji('⏰').setLabel('BEKLEME ODASI').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_chat').setEmoji('💬').setLabel('SOHBET').setStyle(ButtonStyle.Secondary)
               );
 
               const row2 = new ActionRowBuilder().addComponents(
-                  new ButtonBuilder().setCustomId('tempvoice_permit').setEmoji('👤').setLabel('+').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_unpermit').setEmoji('👤').setLabel('-').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_invite').setEmoji('📞').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_kick').setEmoji('📞').setLabel('x').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_region').setEmoji('🌐').setStyle(ButtonStyle.Secondary)
+                  new ButtonBuilder().setCustomId('tempvoice_permit').setEmoji('👤').setLabel('GÜVENİLİR').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_unpermit').setEmoji('👤').setLabel('GÜVENSİZ').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_invite').setEmoji('📞').setLabel('DAVET').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_kick').setEmoji('📞').setLabel('SESTEN AT').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_region').setEmoji('🌐').setLabel('BÖLGE').setStyle(ButtonStyle.Secondary)
               );
 
               const row3 = new ActionRowBuilder().addComponents(
-                  new ButtonBuilder().setCustomId('tempvoice_block').setEmoji('🚫').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_unblock').setEmoji('✔️').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_claim').setEmoji('👑').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_transfer').setEmoji('👑').setLabel('✔️').setStyle(ButtonStyle.Secondary),
-                  new ButtonBuilder().setCustomId('tempvoice_delete').setEmoji('🗑️').setStyle(ButtonStyle.Danger)
+                  new ButtonBuilder().setCustomId('tempvoice_block').setEmoji('🚫').setLabel('ENGELLE').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_unblock').setEmoji('✔️').setLabel('ENGELİ KALDIR').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_claim').setEmoji('👑').setLabel('SAHİPLEN').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_transfer').setEmoji('👑').setLabel('ODAYI DEVRET').setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder().setCustomId('tempvoice_delete').setEmoji('🗑️').setLabel('SİL').setStyle(ButtonStyle.Danger)
               );
 
               const interfaceMessage = await textLogChannel.send({
                   content: `<@${member.id}> odanız oluşturuldu.`,
                   embeds: [embed],
-                  files: [attachment],
                   components: [row1, row2, row3]
               });
 
