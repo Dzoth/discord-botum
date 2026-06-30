@@ -1241,12 +1241,20 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
           const category = newChannel.parent;
           const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
           const tempChannel = await guild.channels.create({
-              name: `${member.user.username}'in Odası`,
+              name: `${member.user.username}'s Channel`,
               type: 2, // GUILD_VOICE
               parent: category ? category.id : null,
               permissionOverwrites: [
                   {
+                      id: guild.roles.everyone.id,
+                      deny: [PermissionFlagsBits.Connect]
+                  },
+                  {
                       id: member.id,
+                      allow: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.MuteMembers, PermissionFlagsBits.DeafenMembers, PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel]
+                  },
+                  {
+                      id: guild.members.me.id,
                       allow: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.MuteMembers, PermissionFlagsBits.DeafenMembers, PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel]
                   }
               ]
