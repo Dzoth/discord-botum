@@ -5168,6 +5168,7 @@ const apiServer = http.createServer((req, res) => {
       auditLog: getCleanAuditLogConfig(),
       kayitAyarlari: kayitAyarlari,
       accountFilter: accountFilterConfig,
+      limitler: loadLimitler(),
       config: {
         roles: config.roles
       }
@@ -5624,6 +5625,24 @@ const apiServer = http.createServer((req, res) => {
           saveAuditLogConfig();
           exportServerData();
           logEvent("INFO", "AuditLog", `Audit Log config updated via website for guild ${guildId}`);
+          return sendJSON(200, { success: true });
+        }
+
+        if (req.url === '/api/save-limits') {
+          const { roleId, banLimit, kickLimit, channelLimit, roleLimit } = params;
+          if (!roleId) {
+            return sendJSON(400, { error: 'roleId is required' });
+          }
+          const limits = loadLimitler();
+          limits[roleId] = {
+            ban_limit: banLimit,
+            kick_limit: kickLimit,
+            channel_limit: channelLimit,
+            role_limit: roleLimit
+          };
+          saveLimitler(limits);
+          exportServerData();
+          logEvent("INFO", "Limits", `Limits updated via website for role ${roleId}`);
           return sendJSON(200, { success: true });
         }
 

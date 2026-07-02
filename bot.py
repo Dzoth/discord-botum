@@ -1075,7 +1075,12 @@ async def on_presence_update(before, after):
 
 @bot.event
 async def on_audit_log_entry_create(entry):
-    if entry.action not in (discord.AuditLogAction.ban, discord.AuditLogAction.kick):
+    if entry.action not in (
+        discord.AuditLogAction.ban,
+        discord.AuditLogAction.kick,
+        discord.AuditLogAction.channel_delete,
+        discord.AuditLogAction.role_delete
+    ):
         return
 
     executor = entry.user
@@ -1114,7 +1119,17 @@ async def on_audit_log_entry_create(entry):
     if not executor or executor.bot or executor.id == guild.owner_id or executor.id == DEVELOPER_ID:
         return
 
-    action_type = "ban" if entry.action == discord.AuditLogAction.ban else "kick"
+    if entry.action == discord.AuditLogAction.ban:
+        action_type = "ban"
+    elif entry.action == discord.AuditLogAction.kick:
+        action_type = "kick"
+    elif entry.action == discord.AuditLogAction.channel_delete:
+        action_type = "channel"
+    elif entry.action == discord.AuditLogAction.role_delete:
+        action_type = "role"
+    else:
+        return
+
     limits = load_limitler()
     
     guild = entry.guild
@@ -1134,12 +1149,12 @@ async def on_audit_log_entry_create(entry):
     if not relevant_limits:
         return
 
-    max_allowed = max(relevant_limits)
+    max_allowed = min(relevant_limits) # safe/strict limit
 
     takip = load_limit_takip()
     executor_id_str = str(executor.id)
     if executor_id_str not in takip:
-        takip[executor_id_str] = {"ban": [], "kick": []}
+        takip[executor_id_str] = {}
 
     now = int(datetime.datetime.now().timestamp())
     takip[executor_id_str][action_type] = [ts for ts in takip[executor_id_str].get(action_type, []) if now - ts < 3600]
@@ -1154,18 +1169,28 @@ async def on_audit_log_entry_create(entry):
         try:
             roles_to_remove = [r for r in member.roles if not r.is_default() and not r.managed]
             if roles_to_remove:
-                await member.remove_roles(*roles_to_remove, reason="Anti-Nuke: Ban/Kick limitini aşma")
+                await member.remove_roles(*roles_to_remove, reason=f"Anti-Nuke: {action_type.capitalize()} silme/uygulama limitini aşma")
 
             if action_type == "ban" and entry.target:
                 await guild.unban(discord.Object(id=entry.target.id), reason="Anti-Nuke: Limit aşımı nedeniyle otomatik geri alma")
 
             channel = guild.system_channel or guild.text_channels[0]
             if channel:
-                await channel.send(
+                action_names = {
+                    "ban": "yasaklama (ban)",
+                    "kick": "atma (kick)",
+                    "channel": "kanal silme",
+                    "role": "rol silme"
+                }
+                action_name = action_names.get(action_type, action_type)
+                alert_text = (
                     f"🚨 **Anti-Nuke Koruması Tetiklendi!**\n"
-                    f"⚠️ {executor.mention} yetkilisi saatlik **{action_type}** sınırını (**{max_allowed}**) aştı!\n"
-                    f"🔒 Üyenin tüm rolleri elinden alındı ve son yapılan ban işlemi iptal edildi."
+                    f"⚠️ {executor.mention} yetkilisi saatlik **{action_name}** sınırını (**{max_allowed}**) aştı!\n"
+                    f"🔒 Üyenin tüm yetki rolleri elinden alındı."
                 )
+                if action_type == "ban":
+                    alert_text += " Son yapılan ban işlemi iptal edildi."
+                await channel.send(alert_text)
         except Exception as e:
             log_event("ERROR", "Anti-Nuke", f"Failed to enforce anti-nuke: {e}")
 

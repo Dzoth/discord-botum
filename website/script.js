@@ -80,21 +80,23 @@ document.addEventListener("DOMContentLoaded", () => {
     const roleSelect = document.getElementById("limit-role-select");
     const banLimitSelect = document.getElementById("limit-ban-value");
     const kickLimitSelect = document.getElementById("limit-kick-value");
+    const channelLimitSelect = document.getElementById("limit-channel-value");
+    const roleLimitSelect = document.getElementById("limit-role-value");
 
     if (roleSelect) {
-        mockRoles.forEach(role => {
-            const opt = document.createElement("option");
-            opt.value = role.id;
-            opt.textContent = role.name;
-            roleSelect.appendChild(opt);
-        });
-
-        // Load values on role select change
+        // Load values on role select change using live data
         roleSelect.addEventListener("change", () => {
-            const selectedRole = mockRoles.find(r => r.id === roleSelect.value);
-            if (selectedRole) {
-                banLimitSelect.value = selectedRole.banLimit === 0 ? "none" : selectedRole.banLimit.toString();
-                kickLimitSelect.value = selectedRole.kickLimit === 0 ? "none" : selectedRole.kickLimit.toString();
+            const roleId = roleSelect.value;
+            const limits = (window.guildsData && window.guildsData.limitler) || {};
+            const roleLimits = limits[roleId] || { ban_limit: null, kick_limit: null, channel_limit: null, role_limit: null };
+
+            banLimitSelect.value = (roleLimits.ban_limit === null || roleLimits.ban_limit === undefined) ? "none" : roleLimits.ban_limit.toString();
+            kickLimitSelect.value = (roleLimits.kick_limit === null || roleLimits.kick_limit === undefined) ? "none" : roleLimits.kick_limit.toString();
+            if (channelLimitSelect) {
+                channelLimitSelect.value = (roleLimits.channel_limit === null || roleLimits.channel_limit === undefined) ? "none" : roleLimits.channel_limit.toString();
+            }
+            if (roleLimitSelect) {
+                roleLimitSelect.value = (roleLimits.role_limit === null || roleLimits.role_limit === undefined) ? "none" : roleLimits.role_limit.toString();
             }
         });
     }
@@ -103,27 +105,56 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnSaveLimits = document.getElementById("btn-save-limits");
     if (btnSaveLimits) {
         btnSaveLimits.addEventListener("click", () => {
-            const selectedRole = mockRoles.find(r => r.id === roleSelect.value);
-            if (selectedRole) {
-                const newBan = banLimitSelect.value === "none" ? 0 : parseInt(banLimitSelect.value);
-                const newKick = kickLimitSelect.value === "none" ? 0 : parseInt(kickLimitSelect.value);
-                
-                selectedRole.banLimit = newBan;
-                selectedRole.kickLimit = newKick;
+            const roleId = roleSelect.value;
+            if (!roleId) return;
 
-                showToast(`"${selectedRole.name}" rolü limitleri başarıyla kaydedildi!`, "success");
+            const newBan = banLimitSelect.value === "none" ? null : parseInt(banLimitSelect.value);
+            const newKick = kickLimitSelect.value === "none" ? null : parseInt(kickLimitSelect.value);
+            const newChannel = (channelLimitSelect && channelLimitSelect.value !== "none") ? parseInt(channelLimitSelect.value) : null;
+            const newRole = (roleLimitSelect && roleLimitSelect.value !== "none") ? parseInt(roleLimitSelect.value) : null;
 
-                // Trigger a log event
-                const newLog = {
-                    type: "success",
-                    title: "Limit Güncellendi",
-                    mod: "Limit",
-                    msg: `Yönetici panelinden "${selectedRole.name}" rolü limitleri güncellendi. Ban: ${newBan || 'Limitsiz'}, Kick: ${newKick || 'Limitsiz'}`,
-                    status: "limitler.json güncellendi."
-                };
-                
-                pushNewLog(newLog);
-            }
+            const selectedRoleName = roleSelect.options[roleSelect.selectedIndex]?.text || roleId;
+
+            fetch(API_BASE + "/api/save-limits", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    roleId,
+                    banLimit: newBan,
+                    kickLimit: newKick,
+                    channelLimit: newChannel,
+                    roleLimit: newRole
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(`"${selectedRoleName}" rolü limitleri başarıyla kaydedildi!`, "success");
+                    
+                    if (!window.guildsData) window.guildsData = {};
+                    if (!window.guildsData.limitler) window.guildsData.limitler = {};
+                    window.guildsData.limitler[roleId] = {
+                        ban_limit: newBan,
+                        kick_limit: newKick,
+                        channel_limit: newChannel,
+                        role_limit: newRole
+                    };
+
+                    const newLog = {
+                        type: "success",
+                        title: "Limit Güncellendi",
+                        mod: "Limit",
+                        msg: `Yönetici panelinden "${selectedRoleName}" rolü limitleri güncellendi. Ban: ${newBan ?? 'Limitsiz'}, Kick: ${newKick ?? 'Limitsiz'}, Kanal: ${newChannel ?? 'Limitsiz'}, Rol: ${newRole ?? 'Limitsiz'}`,
+                        status: "limitler.json güncellendi."
+                    };
+                    pushNewLog(newLog);
+                } else {
+                    showToast(`Hata: ${data.error || 'Kaydedilemedi'}`, "error");
+                }
+            })
+            .catch(err => {
+                showToast(`Bağlantı hatası: ${err.message}`, "error");
+            });
         });
     }
 
@@ -1058,6 +1089,11 @@ document.addEventListener("DOMContentLoaded", () => {
             renderSavedEmbeds(guildEmbeds);
         } else {
             renderSavedEmbeds([]);
+        }
+        
+        // Trigger initial limits load
+        if (roleSelect) {
+            roleSelect.dispatchEvent(new Event("change"));
         }
         } finally {
             isUpdatingUI = false;
