@@ -5,7 +5,7 @@ const API_BASE = window.location.protocol === 'file:'
 
 // ==================== GLOBAL VARIABLES ====================
 let allGuilds = [];
-let activeGuildId = localStorage.getItem("antigravity_active_guild_id") || "";
+let activeGuildId = localStorage.getItem("bot_active_guild_id") || "";
 
 // ==================== MOCK ROLES & LIMIT DATA ====================
 const mockRoles = [
@@ -17,7 +17,7 @@ const mockRoles = [
 
 const sampleLogs = [
     { type: "system", title: "Sistem Başlatıldı", mod: "System", msg: "Bot konfigürasyonu doğrulandı. Discord API bağlantısı kuruluyor.", status: "Bağlantı başarılı." },
-    { type: "system", title: "Giriş Başarılı", mod: "System", msg: "Bot başarıyla giriş yaptı: Antigravity#1503", status: "Bot aktif." },
+    { type: "system", title: "Giriş Başarılı", mod: "System", msg: "Bot başarıyla giriş yaptı.", status: "Bot aktif." },
     { type: "info", title: "Komut Kullanıldı", mod: "Command", msg: "OwnerGuy (ID: 440287582379) komutu çalıştırdı: .limit", status: "Yetki onaylandı." },
     { type: "success", title: "Limit Güncellendi", mod: "Limit", msg: "Yönetici rolü için saatlik ban limiti: 2 olarak güncellendi.", status: "limitler.json güncellendi." },
     { type: "info", title: "Komut Kullanıldı", mod: "Command", msg: "User123 (ID: 3958673829) komutu çalıştırdı: .yardim", status: "Komut listesi gönderildi." },
@@ -837,7 +837,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function selectActiveGuild(guildId) {
         activeGuildId = guildId;
-        localStorage.setItem("antigravity_active_guild_id", guildId);
+        localStorage.setItem("bot_active_guild_id", guildId);
         updateDashboardGuilds();
     }
 
@@ -851,7 +851,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!activeGuild) {
             activeGuild = allGuilds[0];
             activeGuildId = activeGuild.id;
-            localStorage.setItem("antigravity_active_guild_id", activeGuildId);
+            localStorage.setItem("bot_active_guild_id", activeGuildId);
         }
 
         // 0. Update Dashboard Stats and Welcome Banner with real data
@@ -1086,7 +1086,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // Add other mock servers (not in bot list) so user can invite it to them!
             const mockInviteServers = [
                 { initials: "OT", name: "Oyuncu Topluluğu" },
-                { initials: "AT", name: "Antigravity Topluluğu" }
+                { initials: "DT", name: "Destek Topluluğu" }
             ];
 
             mockInviteServers.forEach(srv => {
