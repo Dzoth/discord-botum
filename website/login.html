@@ -13,17 +13,19 @@
         :root {
             --bg-main: #0d0e14;
             --bg-card: rgba(32, 34, 44, 0.7);
+            --bg-input: rgba(17, 18, 26, 0.8);
             --border-color: rgba(88, 101, 242, 0.15);
+            --border-input: rgba(255,255,255,0.08);
             --text-white: #ffffff;
             --text-muted: #8e9297;
             --primary: #5865f2;
             --primary-hover: #4752c4;
             --primary-glow: rgba(88, 101, 242, 0.4);
+            --accent-red: #ed4245;
+            --accent-green: #3ba55d;
             --font-family: 'Plus Jakarta Sans', 'Outfit', sans-serif;
         }
-
         * { margin: 0; padding: 0; box-sizing: border-box; }
-
         body {
             background-color: var(--bg-main);
             color: var(--text-white);
@@ -35,295 +37,264 @@
             overflow: hidden;
             position: relative;
         }
-
-        /* Animated background */
-        .bg-animation {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            z-index: 0;
-            overflow: hidden;
-        }
-
-        .bg-orb {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(80px);
-            opacity: 0.3;
-            animation: float 8s ease-in-out infinite;
-        }
-
-        .bg-orb:nth-child(1) {
-            width: 400px; height: 400px;
-            background: #5865f2;
-            top: -100px; left: -100px;
-            animation-delay: 0s;
-        }
-
-        .bg-orb:nth-child(2) {
-            width: 350px; height: 350px;
-            background: #7289da;
-            bottom: -80px; right: -80px;
-            animation-delay: -3s;
-            animation-duration: 10s;
-        }
-
-        .bg-orb:nth-child(3) {
-            width: 250px; height: 250px;
-            background: #f1c40f;
-            top: 50%; left: 60%;
-            opacity: 0.12;
-            animation-delay: -5s;
-            animation-duration: 12s;
-        }
-
+        .bg-animation { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; overflow: hidden; }
+        .bg-orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.3; animation: float 8s ease-in-out infinite; }
+        .bg-orb:nth-child(1) { width: 400px; height: 400px; background: #5865f2; top: -100px; left: -100px; }
+        .bg-orb:nth-child(2) { width: 350px; height: 350px; background: #7289da; bottom: -80px; right: -80px; animation-delay: -3s; animation-duration: 10s; }
+        .bg-orb:nth-child(3) { width: 250px; height: 250px; background: #f1c40f; top: 50%; left: 60%; opacity: 0.12; animation-delay: -5s; animation-duration: 12s; }
         @keyframes float {
             0%, 100% { transform: translate(0, 0) scale(1); }
             25% { transform: translate(30px, -20px) scale(1.05); }
             50% { transform: translate(-20px, 30px) scale(0.95); }
             75% { transform: translate(15px, 15px) scale(1.02); }
         }
-
-        /* Login container */
-        .login-container {
-            position: relative;
-            z-index: 1;
-            text-align: center;
-            animation: fadeUp 0.8s ease-out;
-        }
-
-        @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
+        .login-container { position: relative; z-index: 1; animation: fadeUp 0.8s ease-out; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
         .login-card {
             background: var(--bg-card);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--border-color);
             border-radius: 24px;
-            padding: 50px 45px;
+            padding: 45px 40px;
             max-width: 420px;
             width: 90vw;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 80px rgba(88, 101, 242, 0.08);
         }
+        .login-logo { width: 70px; height: 70px; border-radius: 50%; margin: 0 auto 18px; display: block; border: 3px solid rgba(88, 101, 242, 0.3); box-shadow: 0 0 30px rgba(88, 101, 242, 0.2); animation: pulse-glow 3s ease-in-out infinite; }
+        @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 20px rgba(88,101,242,0.2); } 50% { box-shadow: 0 0 40px rgba(88,101,242,0.4); } }
+        .login-title { font-family: 'Outfit', sans-serif; font-size: 1.6rem; font-weight: 800; margin-bottom: 6px; text-align: center; background: linear-gradient(135deg, #fff, #c0c4ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .login-subtitle { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 28px; line-height: 1.5; text-align: center; }
 
-        .login-logo {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            margin-bottom: 20px;
-            border: 3px solid rgba(88, 101, 242, 0.3);
-            box-shadow: 0 0 30px rgba(88, 101, 242, 0.2);
-            animation: pulse-glow 3s ease-in-out infinite;
-        }
+        .tabs { display: flex; gap: 0; margin-bottom: 25px; background: var(--bg-input); border-radius: 12px; padding: 4px; }
+        .tab { flex: 1; padding: 10px; text-align: center; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.9rem; color: var(--text-muted); transition: all 0.3s; font-family: var(--font-family); border: none; background: none; }
+        .tab.active { background: var(--primary); color: white; box-shadow: 0 2px 10px var(--primary-glow); }
+        .tab:hover:not(.active) { color: var(--text-white); }
 
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 20px rgba(88, 101, 242, 0.2); }
-            50% { box-shadow: 0 0 40px rgba(88, 101, 242, 0.4); }
-        }
+        .form-panel { display: none; }
+        .form-panel.active { display: block; }
 
-        .login-title {
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.8rem;
-            font-weight: 800;
-            margin-bottom: 8px;
-            background: linear-gradient(135deg, #fff, #c0c4ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .login-subtitle {
-            color: var(--text-muted);
-            font-size: 0.9rem;
-            margin-bottom: 35px;
-            line-height: 1.5;
-        }
-
-        .login-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-input-wrap { position: relative; }
+        .form-input-wrap i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.9rem; }
+        .form-input {
             width: 100%;
-            padding: 16px 28px;
+            padding: 13px 14px 13px 42px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-input);
+            border-radius: 12px;
+            color: var(--text-white);
+            font-size: 0.95rem;
+            font-family: var(--font-family);
+            transition: border-color 0.3s;
+            outline: none;
+        }
+        .form-input:focus { border-color: var(--primary); }
+        .form-input::placeholder { color: rgba(142, 146, 151, 0.5); }
+
+        .submit-btn {
+            width: 100%;
+            padding: 14px;
             background: var(--primary);
             color: white;
             border: none;
-            border-radius: 14px;
-            font-size: 1.05rem;
+            border-radius: 12px;
+            font-size: 1rem;
             font-weight: 700;
             font-family: var(--font-family);
             cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
+            transition: all 0.3s;
             box-shadow: 0 4px 20px var(--primary-glow);
-            position: relative;
-            overflow: hidden;
+            margin-top: 8px;
         }
+        .submit-btn:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 8px 30px var(--primary-glow); }
+        .submit-btn:active { transform: translateY(0); }
+        .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
-        .login-btn::before {
-            content: '';
-            position: absolute;
-            top: 0; left: -100%;
-            width: 100%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-            transition: left 0.5s ease;
-        }
+        .msg { padding: 10px 14px; border-radius: 10px; font-size: 0.83rem; margin-bottom: 16px; display: none; animation: shake 0.4s ease; }
+        .msg.error { display: block; background: rgba(237,66,69,0.1); border: 1px solid rgba(237,66,69,0.3); color: #ed4245; }
+        .msg.success { display: block; background: rgba(59,165,93,0.1); border: 1px solid rgba(59,165,93,0.3); color: #3ba55d; }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
 
-        .login-btn:hover {
-            background: var(--primary-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 30px var(--primary-glow);
-        }
-
-        .login-btn:hover::before {
-            left: 100%;
-        }
-
-        .login-btn:active {
-            transform: translateY(0);
-        }
-
-        .login-btn i {
-            font-size: 1.3rem;
-        }
-
-        .login-features {
-            margin-top: 30px;
-            display: flex;
-            justify-content: center;
-            gap: 25px;
-        }
-
-        .login-feature {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .login-feature i {
-            color: var(--primary);
-            font-size: 1.1rem;
-            opacity: 0.7;
-        }
-
-        .login-feature span {
-            color: var(--text-muted);
-            font-size: 0.72rem;
-            font-weight: 500;
-        }
-
-        .login-footer {
-            margin-top: 25px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .login-footer a {
-            color: var(--text-muted);
-            font-size: 0.8rem;
-            text-decoration: none;
-            transition: color 0.2s;
-        }
-
-        .login-footer a:hover {
-            color: var(--primary);
-        }
-
-        /* Error message */
-        .login-error {
-            background: rgba(237, 66, 69, 0.1);
-            border: 1px solid rgba(237, 66, 69, 0.3);
-            border-radius: 10px;
-            padding: 12px 16px;
-            margin-bottom: 20px;
-            color: #ed4245;
-            font-size: 0.85rem;
-            display: none;
-        }
-
-        .login-error.show {
-            display: block;
-            animation: shake 0.4s ease;
-        }
-
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            75% { transform: translateX(5px); }
-        }
+        .login-footer { margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.05); text-align: center; }
+        .login-footer a { color: var(--text-muted); font-size: 0.8rem; text-decoration: none; transition: color 0.2s; }
+        .login-footer a:hover { color: var(--primary); }
     </style>
 </head>
 <body>
-    <div class="bg-animation">
-        <div class="bg-orb"></div>
-        <div class="bg-orb"></div>
-        <div class="bg-orb"></div>
-    </div>
+    <div class="bg-animation"><div class="bg-orb"></div><div class="bg-orb"></div><div class="bg-orb"></div></div>
 
     <div class="login-container">
         <div class="login-card">
             <img src="images/antigravity_logo.jpg" alt="Logo" class="login-logo">
             <h1 class="login-title">Kontrol Paneli</h1>
-            <p class="login-subtitle">Yönetim paneline erişmek için<br>Discord hesabınızla giriş yapın.</p>
+            <p class="login-subtitle">Yönetim paneline erişmek için<br>giriş yapın veya kayıt olun.</p>
 
-            <div class="login-error" id="login-error"></div>
+            <div class="tabs">
+                <button class="tab active" id="tab-login" onclick="switchTab('login')">Giriş Yap</button>
+                <button class="tab" id="tab-register" onclick="switchTab('register')">Kayıt Ol</button>
+            </div>
 
-            <a href="/api/auth/login" class="login-btn" id="login-btn">
-                <i class="fa-brands fa-discord"></i>
-                Discord ile Giriş Yap
-            </a>
+            <div id="msg-box" class="msg"></div>
 
-            <div class="login-features">
-                <div class="login-feature">
-                    <i class="fa-solid fa-shield-halved"></i>
-                    <span>Güvenli</span>
-                </div>
-                <div class="login-feature">
-                    <i class="fa-solid fa-bolt"></i>
-                    <span>Hızlı</span>
-                </div>
-                <div class="login-feature">
-                    <i class="fa-solid fa-lock"></i>
-                    <span>Şifreli</span>
-                </div>
+            <!-- LOGIN FORM -->
+            <div class="form-panel active" id="panel-login">
+                <form id="login-form" onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label class="form-label">E-posta</label>
+                        <div class="form-input-wrap">
+                            <i class="fa-solid fa-envelope"></i>
+                            <input type="email" class="form-input" id="login-email" placeholder="ornek@mail.com" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Şifre</label>
+                        <div class="form-input-wrap">
+                            <i class="fa-solid fa-lock"></i>
+                            <input type="password" class="form-input" id="login-password" placeholder="••••••••" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="submit-btn" id="login-btn">
+                        <i class="fa-solid fa-right-to-bracket"></i> Giriş Yap
+                    </button>
+                </form>
+            </div>
+
+            <!-- REGISTER FORM -->
+            <div class="form-panel" id="panel-register">
+                <form id="register-form" onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label class="form-label">Kullanıcı Adı</label>
+                        <div class="form-input-wrap">
+                            <i class="fa-solid fa-user"></i>
+                            <input type="text" class="form-input" id="reg-username" placeholder="Kullanıcı adınız" required minlength="3" maxlength="32">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">E-posta</label>
+                        <div class="form-input-wrap">
+                            <i class="fa-solid fa-envelope"></i>
+                            <input type="email" class="form-input" id="reg-email" placeholder="ornek@mail.com" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Şifre</label>
+                        <div class="form-input-wrap">
+                            <i class="fa-solid fa-lock"></i>
+                            <input type="password" class="form-input" id="reg-password" placeholder="En az 6 karakter" required minlength="6">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Şifre Tekrar</label>
+                        <div class="form-input-wrap">
+                            <i class="fa-solid fa-lock"></i>
+                            <input type="password" class="form-input" id="reg-password2" placeholder="Şifrenizi tekrar girin" required minlength="6">
+                        </div>
+                    </div>
+                    <button type="submit" class="submit-btn" id="register-btn">
+                        <i class="fa-solid fa-user-plus"></i> Kayıt Ol
+                    </button>
+                </form>
             </div>
 
             <div class="login-footer">
-                <a href="https://discord.gg/erensi" target="_blank">
-                    <i class="fa-solid fa-circle-question"></i> Yardıma mı ihtiyacın var?
-                </a>
+                <a href="https://discord.gg/erensi" target="_blank"><i class="fa-solid fa-circle-question"></i> Yardıma mı ihtiyacın var?</a>
             </div>
         </div>
     </div>
 
     <script>
-        // Check for error in URL params
-        const params = new URLSearchParams(window.location.search);
-        const error = params.get('error');
-        if (error) {
-            const errEl = document.getElementById('login-error');
-            const messages = {
-                'auth_failed': 'Discord ile giriş başarısız oldu. Lütfen tekrar deneyin.',
-                'no_code': 'Yetkilendirme kodu alınamadı.',
-                'session_expired': 'Oturumunuz sona erdi. Lütfen tekrar giriş yapın.'
-            };
-            errEl.textContent = messages[error] || 'Bir hata oluştu. Lütfen tekrar deneyin.';
-            errEl.classList.add('show');
+        const API = window.location.origin;
+
+        function switchTab(tab) {
+            document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+            document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+            document.getElementById('panel-login').classList.toggle('active', tab === 'login');
+            document.getElementById('panel-register').classList.toggle('active', tab === 'register');
+            hideMsg();
         }
 
-        // If already logged in, redirect to dashboard
-        fetch('/api/auth/me')
-            .then(r => r.json())
-            .then(data => {
-                if (data.user) {
-                    window.location.href = '/dashboard.html';
+        function showMsg(text, type) {
+            const el = document.getElementById('msg-box');
+            el.textContent = text;
+            el.className = 'msg ' + type;
+        }
+        function hideMsg() {
+            document.getElementById('msg-box').className = 'msg';
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const btn = document.getElementById('login-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Giriş yapılıyor...';
+            hideMsg();
+
+            try {
+                const res = await fetch(API + '/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        email: document.getElementById('login-email').value,
+                        password: document.getElementById('login-password').value
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showMsg('Giriş başarılı! Yönlendiriliyorsunuz...', 'success');
+                    setTimeout(() => window.location.href = '/dashboard.html', 800);
+                } else {
+                    showMsg(data.error || 'Giriş başarısız.', 'error');
                 }
-            })
+            } catch (err) {
+                showMsg('Bağlantı hatası. Lütfen tekrar deneyin.', 'error');
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Giriş Yap';
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const pw1 = document.getElementById('reg-password').value;
+            const pw2 = document.getElementById('reg-password2').value;
+            if (pw1 !== pw2) { showMsg('Şifreler eşleşmiyor.', 'error'); return; }
+
+            const btn = document.getElementById('register-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Kayıt olunuyor...';
+            hideMsg();
+
+            try {
+                const res = await fetch(API + '/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        username: document.getElementById('reg-username').value,
+                        email: document.getElementById('reg-email').value,
+                        password: pw1
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showMsg('Kayıt başarılı! Giriş yapabilirsiniz.', 'success');
+                    setTimeout(() => switchTab('login'), 1500);
+                } else {
+                    showMsg(data.error || 'Kayıt başarısız.', 'error');
+                }
+            } catch (err) {
+                showMsg('Bağlantı hatası. Lütfen tekrar deneyin.', 'error');
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Kayıt Ol';
+        }
+
+        // If already logged in, redirect
+        fetch(API + '/api/auth/me', { credentials: 'include' })
+            .then(r => r.json())
+            .then(d => { if (d.user) window.location.href = '/dashboard.html'; })
             .catch(() => {});
     </script>
 </body>

@@ -5130,73 +5130,29 @@ function savePremiumUsers(data) {
   fs.writeFileSync('premium_users.json', JSON.stringify(data, null, 2), 'utf8');
 }
 
-// --- OAUTH2 CONFIG ---
-const OAUTH2_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
-const OAUTH2_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const OAUTH2_REDIRECT_URI = process.env.OAUTH2_REDIRECT_URI || 'http://91.232.103.240:3001/api/auth/callback';
-const OAUTH2_SCOPES = 'identify guilds';
-
-function getOAuth2URL() {
-  return `https://discord.com/api/oauth2/authorize?client_id=${OAUTH2_CLIENT_ID}&redirect_uri=${encodeURIComponent(OAUTH2_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(OAUTH2_SCOPES)}`;
+// --- USERS DATABASE ---
+function loadUsers() {
+  try {
+    if (fs.existsSync('users.json')) {
+      return JSON.parse(fs.readFileSync('users.json', 'utf8'));
+    }
+  } catch (e) {}
+  return {};
 }
 
-function discordAPIRequest(urlPath, accessToken) {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'discord.com',
-      path: urlPath,
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'User-Agent': 'AntigravityBot/1.0'
-      }
-    };
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error('Invalid JSON from Discord API')); }
-      });
-    });
-    req.on('error', reject);
-    req.end();
-  });
+function saveUsers(data) {
+  fs.writeFileSync('users.json', JSON.stringify(data, null, 2), 'utf8');
 }
 
-function exchangeCode(code) {
-  return new Promise((resolve, reject) => {
-    const postData = new URLSearchParams({
-      client_id: OAUTH2_CLIENT_ID,
-      client_secret: OAUTH2_CLIENT_SECRET,
-      grant_type: 'authorization_code',
-      code: code,
-      redirect_uri: OAUTH2_REDIRECT_URI,
-      scope: OAUTH2_SCOPES
-    }).toString();
+function hashPassword(password, salt) {
+  if (!salt) salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+  return { hash, salt };
+}
 
-    const options = {
-      hostname: 'discord.com',
-      path: '/api/oauth2/token',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error('Invalid JSON from token exchange')); }
-      });
-    });
-    req.on('error', reject);
-    req.write(postData);
-    req.end();
-  });
+function verifyPassword(password, storedHash, storedSalt) {
+  const { hash } = hashPassword(password, storedSalt);
+  return hash === storedHash;
 }
 
 const API_PORT = process.env.PORT || process.env.API_PORT || 3001;
@@ -5219,62 +5175,105 @@ const apiServer = http.createServer((req, res) => {
 
   const urlPath = req.url.split('?')[0];
 
-  // --- AUTH ENDPOINTS (no session required) ---
-  if (req.method === 'GET' && urlPath === '/api/auth/login') {
-    res.writeHead(302, { 'Location': getOAuth2URL() });
-    res.end();
-    return;
-  }
-
-  if (req.method === 'GET' && urlPath === '/api/auth/callback') {
-    const urlParams = new URL(req.url, `http://localhost:${API_PORT}`).searchParams;
-    const code = urlParams.get('code');
-    if (!code) {
-      res.writeHead(302, { 'Location': '/login.html?error=no_code' });
-      res.end();
-      return;
-    }
-
-    exchangeCode(code).then(async (tokenData) => {
-      if (!tokenData.access_token) {
-        res.writeHead(302, { 'Location': '/login.html?error=auth_failed' });
-        res.end();
-        return;
-      }
-
+  // --- AUTH ENDPOINTS ---
+  
+  // POST /api/auth/register
+  if (req.method === 'POST' && urlPath === '/api/auth/register') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
       try {
-        const user = await discordAPIRequest('/api/users/@me', tokenData.access_token);
-        const userGuilds = await discordAPIRequest('/api/users/@me/guilds', tokenData.access_token);
-        
-        const sessionId = generateSessionId();
-        sessions.set(sessionId, {
-          userId: user.id,
-          username: user.username,
-          globalName: user.global_name || user.username,
-          avatar: user.avatar,
-          discriminator: user.discriminator,
-          accessToken: tokenData.access_token,
-          guilds: userGuilds,
-          createdAt: Date.now()
-        });
+        const { username, email, password } = JSON.parse(body);
+        if (!username || !email || !password) {
+          return sendJSON(400, { error: 'Tüm alanları doldurun.' });
+        }
+        if (username.length < 3 || username.length > 32) {
+          return sendJSON(400, { error: 'Kullanıcı adı 3-32 karakter olmalı.' });
+        }
+        if (password.length < 6) {
+          return sendJSON(400, { error: 'Şifre en az 6 karakter olmalı.' });
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          return sendJSON(400, { error: 'Geçerli bir e-posta adresi girin.' });
+        }
 
-        setSessionCookie(res, sessionId);
-        logEvent('INFO', 'Auth', `User ${user.username} (${user.id}) logged in via OAuth2`);
-        res.writeHead(302, { 'Location': '/dashboard.html' });
-        res.end();
+        const users = loadUsers();
+        const emailLower = email.toLowerCase();
+        
+        // Check if email already exists
+        const existingUser = Object.values(users).find(u => u.email === emailLower);
+        if (existingUser) {
+          return sendJSON(400, { error: 'Bu e-posta adresi zaten kayıtlı.' });
+        }
+
+        const userId = crypto.randomBytes(8).toString('hex');
+        const { hash, salt } = hashPassword(password);
+        
+        users[userId] = {
+          username: username,
+          email: emailLower,
+          passwordHash: hash,
+          passwordSalt: salt,
+          createdAt: new Date().toISOString(),
+          isPremium: false
+        };
+        
+        saveUsers(users);
+        logEvent('INFO', 'Auth', `New user registered: ${username} (${emailLower})`);
+        return sendJSON(200, { success: true });
       } catch (e) {
-        console.error('OAuth2 callback error:', e);
-        res.writeHead(302, { 'Location': '/login.html?error=auth_failed' });
-        res.end();
+        return sendJSON(400, { error: 'Geçersiz istek.' });
       }
-    }).catch((e) => {
-      console.error('Token exchange error:', e);
-      res.writeHead(302, { 'Location': '/login.html?error=auth_failed' });
-      res.end();
     });
     return;
   }
 
+  // POST /api/auth/login
+  if (req.method === 'POST' && urlPath === '/api/auth/login') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { email, password } = JSON.parse(body);
+        if (!email || !password) {
+          return sendJSON(400, { error: 'E-posta ve şifre gerekli.' });
+        }
+
+        const users = loadUsers();
+        const emailLower = email.toLowerCase();
+        
+        // Find user by email
+        const userEntry = Object.entries(users).find(([id, u]) => u.email === emailLower);
+        if (!userEntry) {
+          return sendJSON(401, { error: 'E-posta veya şifre hatalı.' });
+        }
+
+        const [userId, userData] = userEntry;
+        if (!verifyPassword(password, userData.passwordHash, userData.passwordSalt)) {
+          return sendJSON(401, { error: 'E-posta veya şifre hatalı.' });
+        }
+
+        // Create session
+        const sessionId = generateSessionId();
+        sessions.set(sessionId, {
+          userId: userId,
+          username: userData.username,
+          email: userData.email,
+          createdAt: Date.now()
+        });
+
+        setSessionCookie(res, sessionId);
+        logEvent('INFO', 'Auth', `User ${userData.username} (${emailLower}) logged in`);
+        return sendJSON(200, { success: true });
+      } catch (e) {
+        return sendJSON(400, { error: 'Geçersiz istek.' });
+      }
+    });
+    return;
+  }
+
+  // GET /api/auth/me
   if (req.method === 'GET' && urlPath === '/api/auth/me') {
     const session = getSessionFromCookie(req);
     if (!session) {
@@ -5283,19 +5282,20 @@ const apiServer = http.createServer((req, res) => {
     const premiumUsers = loadPremiumUsers();
     const isPremium = !!premiumUsers[session.userId];
     const premiumData = premiumUsers[session.userId] || null;
-    const avatarURL = session.avatar 
-      ? `https://cdn.discordapp.com/avatars/${session.userId}/${session.avatar}.png?size=128`
-      : `https://cdn.discordapp.com/embed/avatars/${parseInt(session.discriminator || '0') % 5}.png`;
+    
+    // Check if user is bot owner by matching email or hardcoded owner IDs
+    const users = loadUsers();
+    const userData = users[session.userId];
+    const isOwner = userData && (userData.email === 'admin@admin.com' || extraDevelopers.includes(session.userId));
     
     return sendJSON(200, {
       user: {
         id: session.userId,
         username: session.username,
-        globalName: session.globalName,
-        avatar: avatarURL,
+        email: session.email,
         isPremium: isPremium,
         premiumData: premiumData,
-        isOwner: isBotDeveloper(session.userId)
+        isOwner: isOwner
       }
     });
   }
