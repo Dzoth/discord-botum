@@ -5091,6 +5091,113 @@ defineCommand(['güvenlikprotokolü', 'guvenlikprotokolu'], 'security', async (m
 
 // ==================== API SERVER FOR WEBSITE INTERACTION ====================
 const http = require('http');
+const https = require('https');
+const crypto = require('crypto');
+
+// --- SESSION MANAGEMENT ---
+const sessions = new Map(); // sessionId -> { userId, username, avatar, discriminator, accessToken, guilds, createdAt }
+
+function generateSessionId() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function getSessionFromCookie(req) {
+  const cookieHeader = req.headers.cookie || '';
+  const match = cookieHeader.match(/ag_session=([^;]+)/);
+  if (!match) return null;
+  return sessions.get(match[1]) || null;
+}
+
+function setSessionCookie(res, sessionId) {
+  res.setHeader('Set-Cookie', `ag_session=${sessionId}; Path=/; HttpOnly; Max-Age=604800`);
+}
+
+function clearSessionCookie(res) {
+  res.setHeader('Set-Cookie', 'ag_session=; Path=/; HttpOnly; Max-Age=0');
+}
+
+// --- PREMIUM USERS ---
+function loadPremiumUsers() {
+  try {
+    if (fs.existsSync('premium_users.json')) {
+      return JSON.parse(fs.readFileSync('premium_users.json', 'utf8'));
+    }
+  } catch (e) {}
+  return {};
+}
+
+function savePremiumUsers(data) {
+  fs.writeFileSync('premium_users.json', JSON.stringify(data, null, 2), 'utf8');
+}
+
+// --- OAUTH2 CONFIG ---
+const OAUTH2_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+const OAUTH2_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
+const OAUTH2_REDIRECT_URI = process.env.OAUTH2_REDIRECT_URI || 'http://91.232.103.240:3001/api/auth/callback';
+const OAUTH2_SCOPES = 'identify guilds';
+
+function getOAuth2URL() {
+  return `https://discord.com/api/oauth2/authorize?client_id=${OAUTH2_CLIENT_ID}&redirect_uri=${encodeURIComponent(OAUTH2_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(OAUTH2_SCOPES)}`;
+}
+
+function discordAPIRequest(urlPath, accessToken) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'discord.com',
+      path: urlPath,
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'User-Agent': 'AntigravityBot/1.0'
+      }
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(new Error('Invalid JSON from Discord API')); }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+function exchangeCode(code) {
+  return new Promise((resolve, reject) => {
+    const postData = new URLSearchParams({
+      client_id: OAUTH2_CLIENT_ID,
+      client_secret: OAUTH2_CLIENT_SECRET,
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: OAUTH2_REDIRECT_URI,
+      scope: OAUTH2_SCOPES
+    }).toString();
+
+    const options = {
+      hostname: 'discord.com',
+      path: '/api/oauth2/token',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(new Error('Invalid JSON from token exchange')); }
+      });
+    });
+    req.on('error', reject);
+    req.write(postData);
+    req.end();
+  });
+}
 
 const API_PORT = process.env.PORT || process.env.API_PORT || 3001;
 const apiServer = http.createServer((req, res) => {
@@ -5112,8 +5219,118 @@ const apiServer = http.createServer((req, res) => {
 
   const urlPath = req.url.split('?')[0];
 
+  // --- AUTH ENDPOINTS (no session required) ---
+  if (req.method === 'GET' && urlPath === '/api/auth/login') {
+    res.writeHead(302, { 'Location': getOAuth2URL() });
+    res.end();
+    return;
+  }
+
+  if (req.method === 'GET' && urlPath === '/api/auth/callback') {
+    const urlParams = new URL(req.url, `http://localhost:${API_PORT}`).searchParams;
+    const code = urlParams.get('code');
+    if (!code) {
+      res.writeHead(302, { 'Location': '/login.html?error=no_code' });
+      res.end();
+      return;
+    }
+
+    exchangeCode(code).then(async (tokenData) => {
+      if (!tokenData.access_token) {
+        res.writeHead(302, { 'Location': '/login.html?error=auth_failed' });
+        res.end();
+        return;
+      }
+
+      try {
+        const user = await discordAPIRequest('/api/users/@me', tokenData.access_token);
+        const userGuilds = await discordAPIRequest('/api/users/@me/guilds', tokenData.access_token);
+        
+        const sessionId = generateSessionId();
+        sessions.set(sessionId, {
+          userId: user.id,
+          username: user.username,
+          globalName: user.global_name || user.username,
+          avatar: user.avatar,
+          discriminator: user.discriminator,
+          accessToken: tokenData.access_token,
+          guilds: userGuilds,
+          createdAt: Date.now()
+        });
+
+        setSessionCookie(res, sessionId);
+        logEvent('INFO', 'Auth', `User ${user.username} (${user.id}) logged in via OAuth2`);
+        res.writeHead(302, { 'Location': '/dashboard.html' });
+        res.end();
+      } catch (e) {
+        console.error('OAuth2 callback error:', e);
+        res.writeHead(302, { 'Location': '/login.html?error=auth_failed' });
+        res.end();
+      }
+    }).catch((e) => {
+      console.error('Token exchange error:', e);
+      res.writeHead(302, { 'Location': '/login.html?error=auth_failed' });
+      res.end();
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && urlPath === '/api/auth/me') {
+    const session = getSessionFromCookie(req);
+    if (!session) {
+      return sendJSON(200, { user: null });
+    }
+    const premiumUsers = loadPremiumUsers();
+    const isPremium = !!premiumUsers[session.userId];
+    const premiumData = premiumUsers[session.userId] || null;
+    const avatarURL = session.avatar 
+      ? `https://cdn.discordapp.com/avatars/${session.userId}/${session.avatar}.png?size=128`
+      : `https://cdn.discordapp.com/embed/avatars/${parseInt(session.discriminator || '0') % 5}.png`;
+    
+    return sendJSON(200, {
+      user: {
+        id: session.userId,
+        username: session.username,
+        globalName: session.globalName,
+        avatar: avatarURL,
+        isPremium: isPremium,
+        premiumData: premiumData,
+        isOwner: isBotDeveloper(session.userId)
+      }
+    });
+  }
+
+  if (req.method === 'GET' && urlPath === '/api/auth/logout') {
+    const cookieHeader = req.headers.cookie || '';
+    const match = cookieHeader.match(/ag_session=([^;]+)/);
+    if (match) {
+      const session = sessions.get(match[1]);
+      if (session) {
+        logEvent('INFO', 'Auth', `User ${session.username} (${session.userId}) logged out`);
+      }
+      sessions.delete(match[1]);
+    }
+    clearSessionCookie(res);
+    res.writeHead(302, { 'Location': '/login.html' });
+    res.end();
+    return;
+  }
+
+  // --- SERVE STATIC FILES ---
   if (req.method === 'GET' && !urlPath.startsWith('/api/')) {
-    let filePath = urlPath === '/' ? '/index.html' : urlPath;
+    // Login page is always accessible
+    let filePath = urlPath === '/' ? '/login.html' : urlPath;
+    
+    // Protect dashboard - require login
+    if (filePath === '/dashboard.html' || filePath === '/index.html') {
+      const session = getSessionFromCookie(req);
+      if (!session) {
+        res.writeHead(302, { 'Location': '/login.html' });
+        res.end();
+        return;
+      }
+    }
+
     const fullPath = path.join(__dirname, 'website', filePath);
     
     // Check if the file is inside the website directory to prevent path traversal
@@ -5643,6 +5860,32 @@ const apiServer = http.createServer((req, res) => {
           saveLimitler(limits);
           exportServerData();
           logEvent("INFO", "Limits", `Limits updated via website for role ${roleId}`);
+          return sendJSON(200, { success: true });
+        }
+
+        if (req.url === '/api/premium/toggle') {
+          const session = getSessionFromCookie(req);
+          if (!session || !isBotDeveloper(session.userId)) {
+            return sendJSON(403, { error: 'Bu işlem sadece bot sahibi tarafından yapılabilir.' });
+          }
+          const { userId, action } = params; // action: 'grant' or 'revoke'
+          if (!userId || !action) {
+            return sendJSON(400, { error: 'userId and action are required' });
+          }
+          const premiumUsers = loadPremiumUsers();
+          if (action === 'grant') {
+            premiumUsers[userId] = {
+              plan: 'lifetime',
+              activatedAt: new Date().toISOString(),
+              activatedBy: session.userId,
+              expiresAt: null
+            };
+            logEvent('INFO', 'Premium', `Premium granted to user ${userId} by ${session.username}`);
+          } else if (action === 'revoke') {
+            delete premiumUsers[userId];
+            logEvent('INFO', 'Premium', `Premium revoked from user ${userId} by ${session.username}`);
+          }
+          savePremiumUsers(premiumUsers);
           return sendJSON(200, { success: true });
         }
 

@@ -35,6 +35,77 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
     let isUpdatingUI = false;
     
+    // --- AUTH CHECK: Redirect to login if not authenticated ---
+    let currentUser = null;
+    
+    fetch(API_BASE + '/api/auth/me', { credentials: 'include' })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.user) {
+                window.location.href = '/login.html';
+                return;
+            }
+            currentUser = data.user;
+            
+            // Update header user info
+            const headerUserName = document.getElementById('header-user-name');
+            const headerUserAvatar = document.getElementById('header-user-avatar');
+            const dropdownUserName = document.getElementById('dropdown-user-name');
+            const dropdownUserAvatar = document.getElementById('dropdown-user-avatar');
+            const dropdownUserStatus = document.querySelector('.dropdown-user-status');
+            
+            if (headerUserName) {
+                headerUserName.innerHTML = currentUser.globalName || currentUser.username;
+                if (currentUser.isPremium) {
+                    headerUserName.innerHTML += ' <i class="fa-solid fa-crown" style="color: #faa81a; margin-left: 4px;" title="Premium Üye"></i>';
+                }
+            }
+            if (headerUserAvatar) headerUserAvatar.src = currentUser.avatar;
+            if (dropdownUserName) dropdownUserName.textContent = currentUser.globalName || currentUser.username;
+            if (dropdownUserAvatar) dropdownUserAvatar.src = currentUser.avatar;
+            if (dropdownUserStatus) {
+                if (currentUser.isPremium) {
+                    dropdownUserStatus.innerHTML = '<i class="fa-solid fa-crown" style="color: #faa81a;"></i> Premium';
+                } else {
+                    dropdownUserStatus.innerHTML = '<i class="fa-solid fa-user" style="color: #8e9297;"></i> Ücretsiz Plan';
+                }
+            }
+            
+            // Update subscription view
+            const subsView = document.getElementById('view-subscriptions');
+            if (subsView) {
+                if (currentUser.isPremium) {
+                    const nameEl = subsView.querySelector('p[style*="text-muted"]');
+                    if (nameEl) nameEl.textContent = `Süresiz, sınırsız erişim paketi sahibi: ${currentUser.globalName || currentUser.username}`;
+                } else {
+                    subsView.innerHTML = `
+                        <div class="view-header" style="margin-bottom: 20px;">
+                            <h3><i class="fa-solid fa-credit-card" style="color: var(--accent-gold);"></i> Aboneliklerim</h3>
+                            <p class="panel-subtitle">Aktif aboneliklerinizi ve faturalandırma detaylarınızı yönetin.</p>
+                        </div>
+                        <div class="card" style="padding: 30px; text-align: center; border-left: 4px solid var(--border-color);">
+                            <i class="fa-solid fa-lock" style="font-size: 2rem; color: var(--text-muted); margin-bottom: 15px;"></i>
+                            <h4 style="color: var(--text-white); margin-bottom: 8px;">Aktif Aboneliğiniz Yok</h4>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Premium özelliklere erişmek için bir plan satın alın.</p>
+                            <a href="https://discord.gg/erensi" target="_blank" class="btn btn-primary btn-glow" style="text-decoration: none;">Premium Satın Al</a>
+                        </div>
+                    `;
+                }
+            }
+
+            // Setup logout button
+            const logoutItem = document.getElementById('logout-btn');
+            if (logoutItem) {
+                logoutItem.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    window.location.href = '/api/auth/logout';
+                });
+            }
+        })
+        .catch(() => {
+            window.location.href = '/login.html';
+        });
+    
     // 1. DYNAMIC NAVIGATION
     const menuItems = document.querySelectorAll(".sidebar-menu .menu-item");
     const viewPanels = document.querySelectorAll(".views-container .view-panel");

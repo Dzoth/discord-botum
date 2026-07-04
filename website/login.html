@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity | Giriş Yap</title>
+    <meta name="description" content="Antigravity Discord Bot - Yönetim Paneline Giriş">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-main: #0d0e14;
+            --bg-card: rgba(32, 34, 44, 0.7);
+            --border-color: rgba(88, 101, 242, 0.15);
+            --text-white: #ffffff;
+            --text-muted: #8e9297;
+            --primary: #5865f2;
+            --primary-hover: #4752c4;
+            --primary-glow: rgba(88, 101, 242, 0.4);
+            --font-family: 'Plus Jakarta Sans', 'Outfit', sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-white);
+            font-family: var(--font-family);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Animated background */
+        .bg-animation {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+            overflow: hidden;
+        }
+
+        .bg-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            animation: float 8s ease-in-out infinite;
+        }
+
+        .bg-orb:nth-child(1) {
+            width: 400px; height: 400px;
+            background: #5865f2;
+            top: -100px; left: -100px;
+            animation-delay: 0s;
+        }
+
+        .bg-orb:nth-child(2) {
+            width: 350px; height: 350px;
+            background: #7289da;
+            bottom: -80px; right: -80px;
+            animation-delay: -3s;
+            animation-duration: 10s;
+        }
+
+        .bg-orb:nth-child(3) {
+            width: 250px; height: 250px;
+            background: #f1c40f;
+            top: 50%; left: 60%;
+            opacity: 0.12;
+            animation-delay: -5s;
+            animation-duration: 12s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(30px, -20px) scale(1.05); }
+            50% { transform: translate(-20px, 30px) scale(0.95); }
+            75% { transform: translate(15px, 15px) scale(1.02); }
+        }
+
+        /* Login container */
+        .login-container {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            animation: fadeUp 0.8s ease-out;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .login-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 50px 45px;
+            max-width: 420px;
+            width: 90vw;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 80px rgba(88, 101, 242, 0.08);
+        }
+
+        .login-logo {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            margin-bottom: 20px;
+            border: 3px solid rgba(88, 101, 242, 0.3);
+            box-shadow: 0 0 30px rgba(88, 101, 242, 0.2);
+            animation: pulse-glow 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(88, 101, 242, 0.2); }
+            50% { box-shadow: 0 0 40px rgba(88, 101, 242, 0.4); }
+        }
+
+        .login-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #fff, #c0c4ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .login-subtitle {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 35px;
+            line-height: 1.5;
+        }
+
+        .login-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+            padding: 16px 28px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            font-family: var(--font-family);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            box-shadow: 0 4px 20px var(--primary-glow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-btn::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .login-btn:hover {
+            background: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px var(--primary-glow);
+        }
+
+        .login-btn:hover::before {
+            left: 100%;
+        }
+
+        .login-btn:active {
+            transform: translateY(0);
+        }
+
+        .login-btn i {
+            font-size: 1.3rem;
+        }
+
+        .login-features {
+            margin-top: 30px;
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+        }
+
+        .login-feature {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .login-feature i {
+            color: var(--primary);
+            font-size: 1.1rem;
+            opacity: 0.7;
+        }
+
+        .login-feature span {
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-weight: 500;
+        }
+
+        .login-footer {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .login-footer a {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .login-footer a:hover {
+            color: var(--primary);
+        }
+
+        /* Error message */
+        .login-error {
+            background: rgba(237, 66, 69, 0.1);
+            border: 1px solid rgba(237, 66, 69, 0.3);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            color: #ed4245;
+            font-size: 0.85rem;
+            display: none;
+        }
+
+        .login-error.show {
+            display: block;
+            animation: shake 0.4s ease;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animation">
+        <div class="bg-orb"></div>
+        <div class="bg-orb"></div>
+        <div class="bg-orb"></div>
+    </div>
+
+    <div class="login-container">
+        <div class="login-card">
+            <img src="images/antigravity_logo.jpg" alt="Antigravity" class="login-logo">
+            <h1 class="login-title">Antigravity</h1>
+            <p class="login-subtitle">Yönetim paneline erişmek için<br>Discord hesabınızla giriş yapın.</p>
+
+            <div class="login-error" id="login-error"></div>
+
+            <a href="/api/auth/login" class="login-btn" id="login-btn">
+                <i class="fa-brands fa-discord"></i>
+                Discord ile Giriş Yap
+            </a>
+
+            <div class="login-features">
+                <div class="login-feature">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    <span>Güvenli</span>
+                </div>
+                <div class="login-feature">
+                    <i class="fa-solid fa-bolt"></i>
+                    <span>Hızlı</span>
+                </div>
+                <div class="login-feature">
+                    <i class="fa-solid fa-lock"></i>
+                    <span>Şifreli</span>
+                </div>
+            </div>
+
+            <div class="login-footer">
+                <a href="https://discord.gg/erensi" target="_blank">
+                    <i class="fa-solid fa-circle-question"></i> Yardıma mı ihtiyacın var?
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check for error in URL params
+        const params = new URLSearchParams(window.location.search);
+        const error = params.get('error');
+        if (error) {
+            const errEl = document.getElementById('login-error');
+            const messages = {
+                'auth_failed': 'Discord ile giriş başarısız oldu. Lütfen tekrar deneyin.',
+                'no_code': 'Yetkilendirme kodu alınamadı.',
+                'session_expired': 'Oturumunuz sona erdi. Lütfen tekrar giriş yapın.'
+            };
+            errEl.textContent = messages[error] || 'Bir hata oluştu. Lütfen tekrar deneyin.';
+            errEl.classList.add('show');
+        }
+
+        // If already logged in, redirect to dashboard
+        fetch('/api/auth/me')
+            .then(r => r.json())
+            .then(data => {
+                if (data.user) {
+                    window.location.href = '/dashboard.html';
+                }
+            })
+            .catch(() => {});
+    </script>
+</body>
+</html>
