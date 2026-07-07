@@ -906,6 +906,8 @@ async def on_presence_update(before, after):
     if after.bot:
         return
         
+    await check_and_update_guild_status_roles(after)
+    
     user_id_str = str(after.id)
     
     def get_game_activity(member):
@@ -1069,9 +1071,7 @@ async def on_member_update(before, after):
     
     await check_and_update_guild_status_roles(after)
 
-@bot.event
-async def on_presence_update(before, after):
-    await check_and_update_guild_status_roles(after)
+
 
 @bot.event
 async def on_audit_log_entry_create(entry):
@@ -2326,30 +2326,45 @@ async def acv_command(ctx, member: discord.Member = None):
     games = user_data.get("games", {})
     current_game = user_data.get("current_game")
 
-    current_game_details = "🎮 **Şu Anda Oynuyor:** Oyun oynamıyor.\n"
+    current_game_details = ""
     games_copy = games.copy()
 
-    # Aktif oynanan oyunu yakala
-    active_game = None
     for act in member.activities:
-        if act.type == discord.ActivityType.playing:
-            active_game = act
-            break
+        if isinstance(act, discord.Spotify):
+            current_game_details += f"🎵 **Spotify Dinliyor:** {act.title} - {act.artist}\n"
+        elif isinstance(act, discord.CustomActivity):
+            current_game_details += f"💭 **Durum:** {act.name}\n"
+        elif act.type == discord.ActivityType.playing:
+            session_time = 0
+            now_ts = int(datetime.datetime.now().timestamp())
+            if current_game and current_game.get("name") == act.name:
+                session_time = now_ts - current_game.get("start", now_ts)
+            elif hasattr(act, 'start') and act.start:
+                session_time = int(datetime.datetime.now(datetime.timezone.utc).timestamp() - act.start.timestamp())
+            
+            session_time = max(0, session_time)
+            games_copy[act.name] = games_copy.get(act.name, 0) + session_time
+            
+            session_min = session_time // 60
+            session_sec = session_time % 60
+            session_hr = session_min // 60
+            session_min = session_min % 60
+            
+            dur_str = ""
+            if session_hr > 0: dur_str += f"{session_hr}sa "
+            if session_min > 0 or session_hr > 0: dur_str += f"{session_min}dk "
+            dur_str += f"{session_sec}sn"
+            
+            current_game_details += f"🎮 **Oynuyor:** {act.name} (Bu oturumda: {dur_str})\n"
+        elif act.type == discord.ActivityType.listening:
+            current_game_details += f"🎧 **Dinliyor:** {act.name}\n"
+        elif act.type == discord.ActivityType.watching:
+            current_game_details += f"📺 **İzliyor:** {act.name}\n"
+        elif act.type == discord.ActivityType.streaming:
+            current_game_details += f"📡 **Yayında:** {act.name}\n"
 
-    if active_game:
-        session_time = 0
-        now_ts = int(datetime.datetime.now().timestamp())
-        if current_game and current_game.get("name") == active_game.name:
-            session_time = now_ts - current_game.get("start", now_ts)
-        elif active_game.start:
-            session_time = int(datetime.datetime.now(datetime.timezone.utc).timestamp() - active_game.start.timestamp())
-        
-        session_time = max(0, session_time)
-        games_copy[active_game.name] = games_copy.get(active_game.name, 0) + session_time
-        
-        session_min = session_time // 60
-        session_sec = session_time % 60
-        current_game_details = f"🎮 **Şu Anda Oynuyor:** {active_game.name} (Bu oturumda: {session_min}dk {session_sec}sn)\n"
+    if not current_game_details:
+        current_game_details = "🎮 **Şu Anda Oynuyor:** Oyun oynamıyor.\n"
 
     playtime_list = []
     for g_name, g_secs in games_copy.items():
