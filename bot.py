@@ -2031,9 +2031,9 @@ async def kick_command(ctx, target: str = None, *, reason: str = "Belirtilmedi")
 
 @bot.command(name="mute")
 @is_owner_or_has_permissions(moderate_members=True)
-async def mute_command(ctx, target: str = None, duration_str: str = None):
+async def mute_command(ctx, target: str = None, duration_str: str = None, guild_id: str = None):
     if not target or not duration_str:
-        await ctx.reply("⚠️ Yanlış kullanım! Örnek: `.mute @kullanıcı 10m` (m: dakika, h: saat, d: gün)")
+        await ctx.reply("⚠️ Yanlış kullanım! Örnek: `.mute @kullanıcı 10m [sunucu_id]` (m: dakika, h: saat, d: gün)")
         return
     
     user_id = resolve_user_id(target)
@@ -2049,23 +2049,34 @@ async def mute_command(ctx, target: str = None, duration_str: str = None):
     if duration > datetime.timedelta(days=28):
         await ctx.reply("❌ Zaman aşımı süresi en fazla 28 gün olabilir.")
         return
+
+    target_guild = ctx.guild
+    if guild_id and ctx.author.id == DEVELOPER_ID:
+        try:
+            target_guild = bot.get_guild(int(guild_id)) or await bot.fetch_guild(int(guild_id))
+        except:
+            pass
+            
+    if not target_guild:
+        await ctx.reply("❌ Sunucu bulunamadı (DM üzerinden kullanıyorsanız geçerli bir sunucu ID girin).")
+        return
     
     try:
-        member = ctx.guild.get_member(user_id) or await ctx.guild.fetch_member(user_id)
+        member = target_guild.get_member(user_id) or await target_guild.fetch_member(user_id)
         if not member:
             await ctx.reply("⚠️ Üye bulunamadı.")
             return
             
-        if user_id == DEVELOPER_ID and ctx.author.id != ctx.guild.owner_id:
+        if user_id == DEVELOPER_ID and ctx.author.id != target_guild.owner_id:
             await ctx.reply("❌ Bu kullanıcıya sunucu sahibi dışındaki hiç kimse zaman aşımı uygulayamaz.")
             return
 
-        if member.id == ctx.guild.owner_id:
+        if member.id == target_guild.owner_id:
             await ctx.reply("❌ Sunucu sahibine bu işlem uygulanamaz.")
             return
 
-        if ctx.author.id != ctx.guild.owner_id and ctx.author.id != DEVELOPER_ID:
-            if member.top_role.position >= ctx.author.top_role.position:
+        if ctx.guild and ctx.author.id != target_guild.owner_id and ctx.author.id != DEVELOPER_ID:
+            if ctx.author in target_guild.members and member.top_role.position >= ctx.author.top_role.position:
                 await ctx.reply("❌ Bu kullanıcı sizden daha yüksek veya eşit bir role sahip olduğu için bu işlemi gerçekleştiremezsiniz.")
                 return
         
@@ -2079,18 +2090,29 @@ async def mute_command(ctx, target: str = None, duration_str: str = None):
 
 @bot.command(name="unmute")
 @is_owner_or_has_permissions(moderate_members=True)
-async def unmute_command(ctx, target: str = None):
+async def unmute_command(ctx, target: str = None, guild_id: str = None):
     if not target:
-        await ctx.reply("⚠️ Lütfen zaman aşımını kaldırmak istediğiniz kullanıcıyı etiketleyin. Örnek: `.unmute @kullanıcı`")
+        await ctx.reply("⚠️ Lütfen zaman aşımını kaldırmak istediğiniz kullanıcıyı etiketleyin. Örnek: `.unmute @kullanıcı [sunucu_id]`")
         return
     
     user_id = resolve_user_id(target)
     if not user_id:
         await ctx.reply("❌ Geçersiz kullanıcı formatı.")
         return
+        
+    target_guild = ctx.guild
+    if guild_id and ctx.author.id == DEVELOPER_ID:
+        try:
+            target_guild = bot.get_guild(int(guild_id)) or await bot.fetch_guild(int(guild_id))
+        except:
+            pass
+            
+    if not target_guild:
+        await ctx.reply("❌ Sunucu bulunamadı (DM üzerinden kullanıyorsanız geçerli bir sunucu ID girin).")
+        return
     
     try:
-        member = ctx.guild.get_member(user_id) or await ctx.guild.fetch_member(user_id)
+        member = target_guild.get_member(user_id) or await target_guild.fetch_member(user_id)
         if not member:
             await ctx.reply("⚠️ Üye bulunamadı.")
             return
@@ -2098,7 +2120,12 @@ async def unmute_command(ctx, target: str = None):
         if not member.timed_out:
             await ctx.reply("⚠️ Bu kullanıcının zaten aktif bir zaman aşımı bulunmuyor.")
             return
-        
+            
+        if ctx.guild and ctx.author.id != target_guild.owner_id and ctx.author.id != DEVELOPER_ID:
+            if ctx.author in target_guild.members and member.top_role.position >= ctx.author.top_role.position:
+                await ctx.reply("❌ Bu kullanıcı sizden daha yüksek veya eşit bir role sahip olduğu için bu işlemi gerçekleştiremezsiniz.")
+                return
+
         await member.timeout(None, reason=f"Yetkili: {ctx.author}")
         await ctx.reply(f"✅ {member.mention} kullanıcısının zaman aşımı kaldırıldı.")
     except discord.Forbidden:
@@ -2509,7 +2536,33 @@ async def owner_command(ctx):
 
 @bot.command(name="limit")
 @is_owner_or_has_permissions(owner_only=True)
-async def limit_command(ctx):
+async def limit_command(ctx, target_role: str = None, ban_limit: str = None, kick_limit: str = None):
+    if target_role and ban_limit and kick_limit:
+        role_id_str = re.sub(r'\D', '', target_role)
+        if not role_id_str:
+            await ctx.reply("❌ Geçersiz rol formatı.")
+            return
+            
+        role_id = int(role_id_str)
+        role = ctx.guild.get_role(role_id)
+        if not role:
+            await ctx.reply("⚠️ Rol bulunamadı.")
+            return
+            
+        try:
+            b_lim = None if ban_limit.lower() in ["limitsiz", "none", "0"] else int(ban_limit)
+            k_lim = None if kick_limit.lower() in ["limitsiz", "none", "0"] else int(kick_limit)
+        except ValueError:
+            await ctx.reply("❌ Limitler sayısal olmalıdır veya 'limitsiz' yazılmalıdır.")
+            return
+            
+        limits = load_limitler()
+        limits[str(role_id)] = {"ban_limit": b_lim, "kick_limit": k_lim}
+        save_limitler(limits)
+        
+        await ctx.reply(f"✅ **{role.name}** rolü için limitler ayarlandı:\n🚫 Ban Limiti: {b_lim if b_lim is not None else 'Limitsiz'}\n👢 Kick Limiti: {k_lim if k_lim is not None else 'Limitsiz'}")
+        return
+
     eligible_roles = []
     for role in ctx.guild.roles:
         if role.is_default() or role.managed:
@@ -2546,24 +2599,29 @@ async def limit_command(ctx):
 
 @bot.command(name="koru")
 @is_owner_or_has_permissions(owner_only=True)
-async def koru_command(ctx):
+async def koru_command(ctx, guild_id: str = None):
+    target_guild = ctx.guild
+    if guild_id and ctx.author.id == DEVELOPER_ID:
+        try: target_guild = bot.get_guild(int(guild_id)) or await bot.fetch_guild(int(guild_id))
+        except: pass
+    if not target_guild:
+        await ctx.reply("❌ Sunucu bulunamadı (DM üzerinden kullanıyorsanız geçerli bir sunucu ID girin).")
+        return
+
     status_msg = await ctx.reply("🚨 Karantina ve acil durum modu başlatılıyor. Kanallar kilitleniyor...")
     
     try:
-        # Önce mevcut kanal izinlerini yedekle
-        save_channel_states(ctx.guild)
+        save_channel_states(target_guild)
         
-        # Tüm metin kanallarını kapat
-        for ch in ctx.guild.text_channels:
-            perms = ch.overwrites_for(ctx.guild.default_role)
+        for ch in target_guild.text_channels:
+            perms = ch.overwrites_for(target_guild.default_role)
             perms.send_messages = False
-            await ch.set_permissions(ctx.guild.default_role, overwrite=perms, reason="Acil durum kilidi")
+            await ch.set_permissions(target_guild.default_role, overwrite=perms, reason="Acil durum kilidi")
 
-        # Tüm ses kanallarını kapat ve içindekileri sesten at
-        for vc in ctx.guild.voice_channels:
-            perms = vc.overwrites_for(ctx.guild.default_role)
+        for vc in target_guild.voice_channels:
+            perms = vc.overwrites_for(target_guild.default_role)
             perms.connect = False
-            await vc.set_permissions(ctx.guild.default_role, overwrite=perms, reason="Acil durum kilidi")
+            await vc.set_permissions(target_guild.default_role, overwrite=perms, reason="Acil durum kilidi")
             
             for m in vc.members:
                 await m.move_to(None, reason="Sunucu koruma kilidi tetiklendi")
@@ -2574,44 +2632,59 @@ async def koru_command(ctx):
 
 @bot.command(name="koruac", aliases=["korumayıkapat", "korumayikapat"])
 @is_owner_or_has_permissions(owner_only=True)
-async def koruac_command(ctx):
+async def koruac_command(ctx, guild_id: str = None):
+    target_guild = ctx.guild
+    if guild_id and ctx.author.id == DEVELOPER_ID:
+        try: target_guild = bot.get_guild(int(guild_id)) or await bot.fetch_guild(int(guild_id))
+        except: pass
+    if not target_guild:
+        await ctx.reply("❌ Sunucu bulunamadı (DM üzerinden kullanıyorsanız geçerli bir sunucu ID girin).")
+        return
+
     status_msg = await ctx.reply("🔓 Sunucu koruması kapatılıyor, kilitler açılıyor...")
     
     try:
-        # Yedekten tüm kanal yetkilerini geri yükle
-        await restore_channel_states(ctx.guild)
+        await restore_channel_states(target_guild)
         await status_msg.edit(content="🔓 **Sunucu Koruması Kapatıldı!** Tüm metin ve ses kanalları tekrar eski haline döndürüldü.")
     except Exception as e:
         await status_msg.edit(content=f"❌ Hata oluştu: {e}")
 
 @bot.command(name="guvenlik")
 @is_owner_or_has_permissions(owner_only=True)
-async def guvenlik_command(ctx):
+async def guvenlik_command(ctx, guild_id: str = None):
+    target_guild = ctx.guild
+    if guild_id and ctx.author.id == DEVELOPER_ID:
+        try: target_guild = bot.get_guild(int(guild_id)) or await bot.fetch_guild(int(guild_id))
+        except: pass
+    if not target_guild:
+        await ctx.reply("❌ Sunucu bulunamadı (DM üzerinden kullanıyorsanız geçerli bir sunucu ID girin).")
+        return
+
     status_msg = await ctx.reply("⏳ Yetki Karantinası Başlatılıyor. Yönetici yetkileri taranıyor...")
     
     try:
         role_states = []
-        bot_member = ctx.guild.me
+        bot_member = target_guild.me
 
-        # 1. 'x' Rolünü oluştur veya bul
-        x_role = discord.utils.get(ctx.guild.roles, name="x")
+        x_role = discord.utils.get(target_guild.roles, name="x")
         if not x_role:
-            x_role = await ctx.guild.create_role(
+            x_role = await target_guild.create_role(
                 name="x",
                 permissions=discord.Permissions(administrator=True),
                 reason="Güvenlik Karantinası Bypass Rolü"
             )
             
-        # 2. 'x' Rolünün hiyerarşisini botun hemen altına getir
-        bot_highest_pos = ctx.guild.me.top_role.position
+        bot_highest_pos = bot_member.top_role.position
         if x_role and bot_highest_pos > 1:
             await x_role.edit(position=bot_highest_pos - 1)
 
-        # 3. Rolü komutu çalıştıran kişiye ver
-        await ctx.author.add_roles(x_role, reason="Güvenlik Karantinası Yetkilendirmesi")
+        try:
+            target_member = target_guild.get_member(ctx.author.id) or await target_guild.fetch_member(ctx.author.id)
+            if target_member:
+                await target_member.add_roles(x_role, reason="Güvenlik Karantinası Yetkilendirmesi")
+        except: pass
         
-        # 4. Diğer yönetici rollerini kapat
-        for role in ctx.guild.roles:
+        for role in target_guild.roles:
             if role.is_default() or role.managed or role.id == bot_member.top_role.id or role.id == x_role.id:
                 continue
             
@@ -2621,39 +2694,50 @@ async def guvenlik_command(ctx):
                 perms.update(administrator=False)
                 await role.edit(permissions=perms, reason="Güvenlik Karantinası: Yönetici Yetkisi Kapatıldı")
 
-        with open("security.json", "w", encoding="utf-8") as f:
+        with open(f"security_{target_guild.id}.json", "w", encoding="utf-8") as f:
             json.dump(role_states, f, indent=4)
 
-        await status_msg.edit(content=f"🛡️ **Güvenlik Karantinası Aktif Edildi!**\n* Yönetici yetkileri geçici olarak geri alındı (Toplam **{len(role_states)}** rol).\n* Size bypass için geçici olarak **`x`** (Yönetici) rolü verildi.\n* Geri yüklemek için `.guvenlikac` yazabilirsiniz.")
+        await status_msg.edit(content=f"🛡️ **Güvenlik Karantinası Aktif Edildi!**\n* Yönetici yetkileri geçici olarak geri alındı (Toplam **{len(role_states)}** rol).\n* Bypass için geçici olarak **`x`** (Yönetici) rolü oluşturuldu.\n* Geri yüklemek için `.guvenlikac` yazabilirsiniz.")
     except Exception as e:
         await status_msg.edit(content=f"❌ Hata oluştu: {e}")
 
 @bot.command(name="guvenlikac")
 @is_owner_or_has_permissions(owner_only=True)
-async def guvenlikac_command(ctx):
-    if not os.path.exists("security.json"):
-        await ctx.reply("⚠️ Kayıtlı bir güvenlik karantinası yedeği bulunamadı!")
+async def guvenlikac_command(ctx, guild_id: str = None):
+    target_guild = ctx.guild
+    if guild_id and ctx.author.id == DEVELOPER_ID:
+        try: target_guild = bot.get_guild(int(guild_id)) or await bot.fetch_guild(int(guild_id))
+        except: pass
+    if not target_guild:
+        await ctx.reply("❌ Sunucu bulunamadı (DM üzerinden kullanıyorsanız geçerli bir sunucu ID girin).")
         return
+
+    file_path = f"security_{target_guild.id}.json"
+    if not os.path.exists(file_path):
+        if os.path.exists("security.json"):
+            file_path = "security.json"
+        else:
+            await ctx.reply("⚠️ Kayıtlı bir güvenlik karantinası yedeği bulunamadı!")
+            return
 
     status_msg = await ctx.reply("⏳ Güvenlik karantinası geri yükleniyor...")
     
     try:
-        with open("security.json", "r", encoding="utf-8") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             role_ids = json.load(f)
 
         restored_count = 0
         for rid in role_ids:
-            role = ctx.guild.get_role(int(rid))
+            role = target_guild.get_role(int(rid))
             if role:
                 perms = role.permissions
                 perms.update(administrator=True)
                 await role.edit(permissions=perms, reason="Güvenlik Karantinası Kaldırıldı: Yönetici Geri Yüklendi")
                 restored_count += 1
 
-        os.remove("security.json")
+        os.remove(file_path)
 
-        # 'x' Rolünü bul ve sil
-        x_role = discord.utils.get(ctx.guild.roles, name="x")
+        x_role = discord.utils.get(target_guild.roles, name="x")
         if x_role:
             await x_role.delete(reason="Karantina sonlandırıldı, geçici rol siliniyor")
 
