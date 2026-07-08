@@ -3692,12 +3692,14 @@ class TopluAlTargetRoleSelect(discord.ui.RoleSelect):
         
         await interaction.response.defer()
         
-        # Üye önbelleğini (cache) güncelle, böylece kimse atlanmaz
-        if not interaction.guild.chunked:
-            await interaction.guild.chunk()
-            
-        members_with_source = self.source_role.members
-        members_to_process = [m for m in members_with_source if target_role in m.roles]
+        members_to_process = []
+        
+        # Sadece önbelleği değil, doğrudan API'den tüm üyeleri çek
+        async for member in interaction.guild.fetch_members(limit=None):
+            # source_role ve target_role'ün ID'lerini karşılaştır (güvenlik için)
+            member_role_ids = [r.id for r in member.roles]
+            if self.source_role.id in member_role_ids and target_role.id in member_role_ids:
+                members_to_process.append(member)
         
         if not members_to_process:
             await interaction.message.edit(content=f"❌ {self.source_role.mention} rolüne sahip olup da {target_role.mention} rolü olan kimse bulunamadı.", view=None)
