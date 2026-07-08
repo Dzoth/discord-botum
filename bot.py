@@ -3523,50 +3523,48 @@ async def ozel_command(ctx):
         color=discord.Color.blurple()
     )
     
-    tum_komutlar = (
-        "**🛡️ Yetkili & Mod**\n"
-        "`.ban` `.kick` `.mute` `.unmute`\n"
-        "`.lock` `.unlock` `.sil` `.sicil`\n"
-        "`.e` `.k` `.vip` `.rolver` `.rolal`\n"
-        "`.limit` `.owner` `.yardim`\n\n"
-        "**💰 Ekonomi & OwO**\n"
-        "`.coin` `.daily` `.cf` `.ws` `.bj`\n"
-        "`.wh` `.zoo` `.sell` `.send`\n"
-        "`.profile` `.top`\n\n"
-        "**🎮 Genel & Müzik**\n"
-        "`.spo` `.acv` `.adamasmaca`\n"
-        "`.play` `.stop`"
-    )
+    # (tum_komutlar kaldırıldı)
     
     bana_ozeller = (
-        "`.yaz <kanal> <mesaj>`\n"
-        "Bot adına mesaj gönderir.\n\n"
-        "`.adminver <rol> [sunucu]`\n"
-        "Role Yönetici yetkisi verir.\n\n"
-        "`.roller [sunucu]`\n"
-        "Sunucu rollerini listeler.\n\n"
-        "`.olustur [sunucu]`\n"
-        "Yeni bir rol oluşturur.\n\n"
-        "`.del [sunucu]`\n"
-        "Rol/kanal silme paneli açar.\n\n"
-        "`.ust <rol> [sunucu]`\n"
-        "Rol sırasını değiştirir.\n\n"
-        "`.güvenlikprotokolü`\n"
-        "Sunucuyu karantinaya alır.\n\n"
-        "`.protokolüaç`\n"
-        "Karantinayı kaldırır.\n\n"
-        "`.ban <@üye> <sunucu> [sebep]`\n"
-        "Belirtilen sunucudan üyeyi banlar.\n\n"
-        "`.unban <id> <sunucu>`\n"
-        "Belirtilen sunucudan banı kaldırır.\n\n"
-        "`.rolver <@üye> [sunucu]`\n"
-        "Belirtilen sunucuda rol verme menüsü açar.\n\n"
-        "`.rolal <@üye> [sunucu]`\n"
-        "Belirtilen sunucuda rol alma menüsü açar."
+        "`.yaz <kanal_id> <mesaj>`\n"
+        "Belirtilen kanala botun adıyla mesaj gönderir (DM veya sunucuda kullanılabilir).\n\n"
+        "`.rolver <kullanıcı> <rol> [sunucu_id]`\n"
+        "Kullanıcıya rol verir. Sunucu ID girilirse sunucu dışından da verilebilir.\n\n"
+        "`.rolal <kullanıcı> <rol> [sunucu_id]`\n"
+        "Kullanıcıdan rol geri alır. Sunucu ID girilirse sunucu dışından da yapılabilir.\n\n"
+        "`.ban <kullanıcı> [sunucu_id]`\n"
+        "Kullanıcıyı yasaklar. Sunucu ID girilirse o sunucudan yasaklar.\n\n"
+        "`.unban <kullanıcı_id> [sunucu_id]`\n"
+        "Kullanıcının yasağını kaldırır. Sunucu ID girilirse o sunucudan kaldırır.\n\n"
+        "`.mute <kullanıcı> <süre> [sunucu_id]`\n"
+        "Kullanıcıyı susturur. Sunucu ID girilirse o sunucuda susturur.\n\n"
+        "`.unmute <kullanıcı> [sunucu_id]`\n"
+        "Kullanıcının susturmasını kaldırır. Sunucu ID girilirse o sunucuda kaldırır.\n\n"
+        "`.üst <taşınacak_rol_id> [sunucu_id]`\n"
+        "Rolü taşımak için butonlar ve hedef rol seçimi içeren bir arayüz açar. Sunucu ID girilirse o sunucuda yapar.\n\n"
+        "`.koru`\n"
+        "Acil durum korumasını açar (tüm kanalları kilitler).\n\n"
+        "`.korumayıkapat / .koruac`\n"
+        "Acil durum korumasını kapatır (kanal kilitlerini kaldırır).\n\n"
+        "`.guvenlik [sunucu_id]`\n"
+        "Sunucu yönetici rollerinin yetkilerini karantinaya alır.\n\n"
+        "`.guvenlikkapat / .guvenlikac [sunucu_id]`\n"
+        "Güvenlik nedeniyle kapatılan Yönetici yetkilerini geri yükler.\n\n"
+        "`.adminver <rol_id> [sunucu_id]`\n"
+        "Belirtilen role manuel olarak Yönetici yetkisi verir.\n\n"
+        "`.roller [sunucu_id]`\n"
+        "Belirtilen sunucunun tüm rollerini ve yetkilerini listeler.\n\n"
+        "`.oluştur [sunucu_id]`\n"
+        "Belirtilen sunucuda yeni rol oluşturmak için bir form (modal) açar.\n\n"
+        "`.del [sunucu_id]`\n"
+        "Belirtilen sunucudan rol, kanal veya kategori silmek için bir form (modal) açar.\n\n"
+        "`.limit <rol_id> <ban_limit> <kick_limit>`\n"
+        "Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar."
     )
     
-    embed.add_field(name="📖 Tüm Genel Komutlar", value=tum_komutlar, inline=True)
-    embed.add_field(name="🛠️ Geliştiriciye Özel Komutlar", value=bana_ozeller, inline=True)
+    embed.description = bana_ozeller
+    embed.title = "🛠️ Bot Geliştirici Özel Komutları"
+    embed.clear_fields()
     
     try:
         await ctx.author.send(embed=embed)
