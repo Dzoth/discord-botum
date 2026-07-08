@@ -3692,6 +3692,11 @@ class TopluAlTargetRoleSelect(discord.ui.RoleSelect):
         
         await interaction.response.defer()
         
+        # Botun yetki kontrolü
+        if target_role >= interaction.guild.me.top_role:
+            await interaction.message.edit(content=f"❌ **HATA:** {target_role.mention} rolü benim rolümden daha yüksekte veya aynı hizada! Lütfen sunucu ayarlarından benim rolümü hedef rolden daha yukarı taşıyın.", view=None)
+            return
+            
         members_to_process = []
         
         # Sadece önbelleği değil, doğrudan API'den tüm üyeleri çek
@@ -3705,17 +3710,23 @@ class TopluAlTargetRoleSelect(discord.ui.RoleSelect):
             await interaction.message.edit(content=f"❌ {self.source_role.mention} rolüne sahip olup da {target_role.mention} rolü olan kimse bulunamadı.", view=None)
             return
             
-        await interaction.message.edit(content=f"⏳ İşlem başlatıldı: {len(members_to_process)} kişiden {target_role.mention} rolü alınıyor...", view=None)
+        await interaction.message.edit(content=f"⏳ İşlem başlatıldı: {len(members_to_process)} kişiden {target_role.mention} rolü alınıyor... (Discord sınırlarına takılmamak için biraz sürebilir)", view=None)
         
         success_count = 0
+        fail_count = 0
         for member in members_to_process:
             try:
                 await member.remove_roles(target_role, reason=f".al komutu ile {interaction.user} tarafından toplu rol alma")
                 success_count += 1
-            except Exception:
-                pass
+            except Exception as e:
+                fail_count += 1
+                print(f"Toplu al hatası ({member.id}): {e}")
                 
-        await interaction.message.edit(content=f"✅ İşlem tamamlandı! {self.source_role.mention} rolündeki toplam {success_count} kişiden {target_role.mention} rolü alındı.", view=None)
+        sonuc_mesaji = f"✅ İşlem tamamlandı! {self.source_role.mention} rolündeki toplam **{success_count}** kişiden {target_role.mention} rolü alındı."
+        if fail_count > 0:
+            sonuc_mesaji += f"\n⚠️ **{fail_count}** kişiden rol alınamadı! (Bu kişilerin rolü/yetkisi botun yetkisinden daha yüksek olabilir veya sunucu sahibi olabilirler.)"
+            
+        await interaction.message.edit(content=sonuc_mesaji, view=None)
 
 class TopluAlSourceRoleSelect(discord.ui.RoleSelect):
     def __init__(self, executor_id):
