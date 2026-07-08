@@ -3692,6 +3692,10 @@ class TopluAlTargetRoleSelect(discord.ui.RoleSelect):
         
         await interaction.response.defer()
         
+        # Üye önbelleğini (cache) güncelle, böylece kimse atlanmaz
+        if not interaction.guild.chunked:
+            await interaction.guild.chunk()
+            
         members_with_source = self.source_role.members
         members_to_process = [m for m in members_with_source if target_role in m.roles]
         
