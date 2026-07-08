@@ -3677,8 +3677,69 @@ async def sil_command(ctx, amount: int = None):
     msg = await ctx.send(f"🗑️ **{len(deleted)}** adet mesaj başarıyla silindi.")
     await msg.delete(delay=5)
 
-# --- YENİ EKLENEN KAYIT, GÜVENLİK VE GELİŞTİRİCİ KOMUTLARI ---
+# --- TOPLU ROL ALMA (.al komutu) ---
+class TopluAlTargetRoleSelect(discord.ui.RoleSelect):
+    def __init__(self, source_role, executor_id):
+        self.source_role = source_role
+        self.executor_id = executor_id
+        super().__init__(placeholder=f"Hangi rol ALINACAK?", min_values=1, max_values=1)
 
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.executor_id:
+            return await interaction.response.send_message("⚠️ Bu menüyü sadece komutu başlatan kişi kullanabilir.", ephemeral=True)
+            
+        target_role = self.values[0]
+        
+        await interaction.response.defer()
+        
+        members_with_source = self.source_role.members
+        members_to_process = [m for m in members_with_source if target_role in m.roles]
+        
+        if not members_to_process:
+            await interaction.message.edit(content=f"❌ {self.source_role.mention} rolüne sahip olup da {target_role.mention} rolü olan kimse bulunamadı.", view=None)
+            return
+            
+        await interaction.message.edit(content=f"⏳ İşlem başlatıldı: {len(members_to_process)} kişiden {target_role.mention} rolü alınıyor...", view=None)
+        
+        success_count = 0
+        for member in members_to_process:
+            try:
+                await member.remove_roles(target_role, reason=f".al komutu ile {interaction.user} tarafından toplu rol alma")
+                success_count += 1
+            except Exception:
+                pass
+                
+        await interaction.message.edit(content=f"✅ İşlem tamamlandı! {self.source_role.mention} rolündeki toplam {success_count} kişiden {target_role.mention} rolü alındı.", view=None)
+
+class TopluAlSourceRoleSelect(discord.ui.RoleSelect):
+    def __init__(self, executor_id):
+        self.executor_id = executor_id
+        super().__init__(placeholder="Kimin rollerini düzenleyeceğiz? (Hedef Kitleyi Seçin)", min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.executor_id:
+            return await interaction.response.send_message("⚠️ Bu menüyü sadece komutu başlatan kişi kullanabilir.", ephemeral=True)
+            
+        source_role = self.values[0]
+        
+        view2 = discord.ui.View(timeout=180)
+        view2.add_item(TopluAlTargetRoleSelect(source_role, self.executor_id))
+        
+        await interaction.response.edit_message(content=f"👥 Hedef kitle seçildi: {source_role.mention}\nŞimdi bu kitledeki herkesten **ALINACAK** rolü seçin:", view=view2)
+
+@bot.command(name="al")
+@is_owner_or_has_permissions(administrator=True)
+async def al_command(ctx):
+    if not ctx.guild:
+        await ctx.reply("❌ Bu menü arayüzü yalnızca sunucu içinde kullanılabilir.")
+        return
+
+    view = discord.ui.View(timeout=180)
+    view.add_item(TopluAlSourceRoleSelect(ctx.author.id))
+    
+    await ctx.reply(f"👥 **Toplu Rol Alma Aracı**\nİlk olarak hangi roldeki üyelerden rol almak istediğinizi aşağıdaki menüden seçin:", view=view)
+
+# --- YENİ EKLENEN KAYIT, GÜVENLİK VE GELİŞTİRİCİ KOMUTLARI ---
 # 1. Kayıt Sistemi Kurulumu (kayitkur)
 class KayitKurChannelSelect(discord.ui.ChannelSelect):
     def __init__(self, male_role_id, female_role_id, executor_id):
