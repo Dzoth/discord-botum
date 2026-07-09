@@ -3149,6 +3149,18 @@ async def paraver_command(ctx, user_input: str, amount: int, guild_id: int = Non
         
     await ctx.reply(mesaj)
 
+@bot.command(name="resetcoins")
+@is_developer()
+async def resetcoins_command(ctx):
+    sifirlanan = 0
+    for uid, user in coinData.items():
+        if uid != str(ctx.author.id):
+            if user['balance'] > 0:
+                user['balance'] = 0
+                sifirlanan += 1
+    save_coin_data()
+    await ctx.reply(f"✅ Başarılı! Senin dışındaki toplam **{sifirlanan}** kişinin haksız kazandığı coinler tamamen **0'a** eşitlendi.")
+
 @bot.command(name="daily", aliases=["günlük", "gunluk"])
 async def daily_command(ctx):
     user = get_user_data(ctx.author.id)
