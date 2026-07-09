@@ -2534,7 +2534,9 @@ async def yardim_command(ctx):
               "`.e @üye` / `.k @üye` : Erkek / Kız olarak üyeyi kaydeder.\n"
               "`.vip @üye` : Üyeye buton arayüzü ile VIP rolü tanımlar.\n"
               "`.rolver` / `.rolal` : Üyeye rol atama veya rolden çıkarma menüsü açar.\n"
-              "`.al` : Belirli bir role sahip tüm üyelerden toplu olarak rol alır.",
+              "`.al` : Belirli bir role sahip tüm üyelerden toplu olarak rol alır.\n"
+              "`.kayitkur` : Sunucu içi erkek/kız kayıt sistemini kurar.\n"
+              "`.engelle` : Sunucu genelinde link/GIF filtresini açar/kapatır.",
         inline=False
     )
     embed.add_field(
@@ -2558,7 +2560,10 @@ async def yardim_command(ctx):
               "`.acv [@üye]` : Detaylı oyun oynama sürelerini ve giriş serisini raporlar.\n"
               "`.adamasmaca` : Bulunduğunuz kanalda adam asmaca oyunu başlatır.\n"
               "`.play` : Ses kanalında şarkı arama ve oynatma menüsü açar.\n"
-              "`.stop` : Çalan şarkıyı durdurur ve ses kanalından ayrılır.",
+              "`.stop` : Çalan şarkıyı durdurur ve ses kanalından ayrılır.\n"
+              "`.odakur` : Geçici ses kanalı (Private Room) oluşturur.\n"
+              "`.wb` : Etkileşimli butonlarla eğlenceli beyaz tahta çizer.\n"
+              "`.kiss / .hug / .pat / .slap / .kill` : Etiketlenen kişiye anime GIF'li tepki verir.",
         inline=False
     )
     embed.set_footer(text="Ön ek (prefix) her zaman nokta (.) olmak zorundadır.")
@@ -3668,7 +3673,15 @@ async def ozel_command(ctx):
         "`.paraver <kullanıcı_id_veya_etiket> <miktar> [sunucu_id]`\n"
         "Belirtilen kullanıcıya anında (sınırsız) coin basar.\n\n"
         "`.resetcoins`\n"
-        "Geliştirici hariç herkesin coin bakiyesini tek tuşla 0'a sıfırlar."
+        "Geliştirici hariç herkesin coin bakiyesini tek tuşla 0'a sıfırlar.\n\n"
+        "`.guild <özel_etiket>`\n"
+        "Botun eklendiği tüm sunucuları gösterir ve etiketler.\n\n"
+        "`.güvenlikprotokolü / .protokolüaç`\n"
+        "Sunucuyu tamamen karantinaya alır / açar.\n\n"
+        "`.sysinfo`\n"
+        "VDS sistem bilgisini (CPU, RAM vb.) gösterir.\n\n"
+        "`.güncelle`\n"
+        "Github'dan güncellemeyi çeker ve botu yeniden başlatır."
     )
     
     embed.description = bana_ozeller
