@@ -2524,6 +2524,7 @@ async def yardim_command(ctx):
     embed.add_field(
         name="🛡️ Yetkili / Moderatör Komutları",
         value="`.ban @üye [sebep]` : Üyeyi sunucudan yasaklar.\n"
+              "`.unban <kullanıcı_id>` : Kullanıcının yasağını kaldırır.\n"
               "`.kick @üye [sebep]` : Üyeyi sunucudan atar.\n"
               "`.mute @üye <süre>` : Üyeyi susturur (örn: 10m, 1h).\n"
               "`.unmute @üye` : Üyenin susturmasını kaldırır.\n"
