@@ -1147,9 +1147,11 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   const newChannel = newState.channel;
 
   // --- TempVoice Join-to-Create Logic ---
-  if (newChannel && (newChannel.name === 'Özel Ses' || newChannel.name === '🔊 Özel Ses' || newChannel.name === 'özelsesacıptakılın' || newChannel.name === '🔊 özelsesacıptakılın' || newChannel.name.toLowerCase() === 'tempvoice')) {
-      try {
-          const category = newChannel.parent;
+  if (newChannel) {
+      const lowerName = newChannel.name.toLowerCase();
+      if (lowerName === 'özel ses' || lowerName === '🔊 özel ses' || lowerName === 'özelsesacıptakılın' || lowerName === '🔊 özelsesacıptakılın' || lowerName === 'tempvoice' || lowerName.includes('özel ses') || lowerName.includes('ozel ses')) {
+          try {
+              const category = newChannel.parent;
           const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
           const tempChannel = await guild.channels.create({
               name: `${member.user.username}'s Channel`,
@@ -1227,6 +1229,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
           }
       } catch (err) {
           console.error("Error creating temp voice channel:", err);
+      }
       }
   }
 
