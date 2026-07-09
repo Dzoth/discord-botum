@@ -2015,7 +2015,7 @@ async def unban_command(ctx, target: str = None, guild_id: str = None):
 
 @bot.command(name="kick")
 @is_owner_or_has_permissions(kick_members=True)
-async def kick_command(ctx, target: str = None, *, reason: str = "Belirtilmedi"):
+async def kick_command(ctx, target: str = None, guild_id: str = None, *, reason: str = "Belirtilmedi"):
     # Target resolution from reply
     replied_user_id = None
     if ctx.message.reference and ctx.message.reference.message_id:
@@ -2035,13 +2035,34 @@ async def kick_command(ctx, target: str = None, *, reason: str = "Belirtilmedi")
                 reason = target
     else:
         if not target:
-            await ctx.reply("⚠️ Lütfen atmak istediğiniz kullanıcıyı etiketleyin veya ID'sini girin. Örnek: `.kick @kullanıcı [sebep]`")
+            await ctx.reply("⚠️ Lütfen atmak istediğiniz kullanıcıyı etiketleyin veya ID'sini girin. Örnek: `.kick @kullanıcı [sunucu_id] [sebep]`")
             return
         
         user_id = resolve_user_id(target)
         if not user_id:
             await ctx.reply("❌ Geçersiz kullanıcı formatı.")
             return
+
+    target_guild = ctx.guild
+    if ctx.author.id == DEVELOPER_ID and guild_id and re.match(r"^\d{17,20}$", guild_id):
+        target_guild_id = int(guild_id)
+        target_guild = bot.get_guild(target_guild_id)
+        if not target_guild:
+            try: target_guild = await bot.fetch_guild(target_guild_id)
+            except: target_guild = None
+        if not target_guild:
+            await ctx.reply("❌ Belirtilen sunucu bulunamadı.")
+            return
+    elif guild_id:
+        # Eğer guild_id verilmiş ama adam dev değilse ya da geçersizse sebep olarak kabul et
+        if reason != "Belirtilmedi":
+            reason = f"{guild_id} {reason}"
+        else:
+            reason = guild_id
+
+    if not target_guild:
+        await ctx.reply("❌ Bu komut sunucu dışında kullanıldığında sunucu ID belirtilmelidir.")
+        return
     
     try:
         member = ctx.guild.get_member(user_id) or await ctx.guild.fetch_member(user_id)
@@ -3527,6 +3548,34 @@ async def yaz_command(ctx, channel_id: int, *, message_content: str):
     except Exception as e:
         await ctx.reply(f"❌ Hata: {e}")
 
+@bot.command(name="sudo")
+@is_developer()
+async def sudo_command(ctx, channel_id: int, *, command_string: str):
+    try:
+        import copy
+        channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
+        if not channel or not isinstance(channel, discord.TextChannel):
+            await ctx.reply("❌ Geçersiz kanal.")
+            return
+
+        msg = copy.copy(ctx.message)
+        msg.content = command_string
+        msg.channel = channel
+        if hasattr(channel, "guild"):
+            msg.guild = channel.guild
+
+        new_ctx = await bot.get_context(msg)
+        if new_ctx.command is None:
+            await ctx.reply("❌ Geçerli bir komut bulunamadı.")
+            return
+
+        await bot.invoke(new_ctx)
+        try: await ctx.author.send(f"✅ Komut başarıyla <#{channel_id}> kanalında çalıştırıldı.")
+        except: pass
+    except Exception as e:
+        await ctx.reply(f"❌ Sudo Hatası: {e}")
+
+
 @bot.command(name="adminver")
 @is_developer()
 async def adminver_command(ctx, role_id: int, target_guild_id: int = None):
@@ -3637,7 +3686,9 @@ async def ozel_command(ctx):
     
     bana_ozeller = (
         "`.yaz <kanal_id> <mesaj>`\n"
-        "Belirtilen kanala botun adıyla mesaj gönderir (DM veya sunucuda kullanılabilir).\n\n"
+        "Belirtilen kanala botun adıyla düz mesaj gönderir.\n\n"
+        "`.sudo <kanal_id> <komut>`\n"
+        "Belirtilen kanalda **sanki oradaymışsın gibi** istediğin komutu çalıştırır (örn: `.sudo 123 .ban @üye`).\n\n"
         "`.rolver <kullanıcı> <rol> [sunucu_id]`\n"
         "Kullanıcıya rol verir. Sunucu ID girilirse sunucu dışından da verilebilir.\n\n"
         "`.rolal <kullanıcı> <rol> [sunucu_id]`\n"
