@@ -3703,27 +3703,13 @@ async def guild_command(ctx, *, custom_tag: str = None):
         bot.loop.create_task(scan_all_members_for_tag(guild))
 
     roles = sorted(guild.roles, key=lambda r: r.position, reverse=True)
-    msg = f"📊 **{guild.name}** Sunucusu Rolleri:\n"
-    
-    # Show configured tag
-    config_tag = kayitAyarlari.get(guild_id_str, {}).get("guildTag")
-    erkek_rol = kayitAyarlari.get(guild_id_str, {}).get("guildErkekRolId")
-    kiz_rol = kayitAyarlari.get(guild_id_str, {}).get("guildKizRolId")
-    
-    if config_tag or erkek_rol or kiz_rol:
-        msg = f"⚠️ **Sistem Şu Anda Aktif!** Zaten rol ve tag seçilmiş, değiştirmek istersen aşağıdan yeni seçim yapabilir veya kırmızı butona basarak ayarları tamamen sıfırlayıp iptal edebilirsin.\n\n" + msg
-        if config_tag:
-            msg += f"🔍 **Durumda Aranacak Tag/Reklam Metni:** `{config_tag}`\n"
-        if erkek_rol:
-            msg += f"👨 **Erkek Tag Rolü ID:** `{erkek_rol}`\n"
-        if kiz_rol:
-            msg += f"👩 **Kız Tag Rolü ID:** `{kiz_rol}`\n\n"
+    msg_roles = f"📊 **{guild.name}** Sunucusu Rolleri:\n\n"
         
     for role in roles:
         if role.is_default():
             continue
         is_admin = role.permissions.administrator
-        msg += f"• **{role.name}** (ID: `{role.id}`) | Pozisyon: `{role.position}` | Admin: `{'EVET' if is_admin else 'HAYIR'}`\n"
+        msg_roles += f"• **{role.name}** (ID: `{role.id}`) | Pozisyon: `{role.position}` | Admin: `{'EVET' if is_admin else 'HAYIR'}`\n"
     
     bot_highest = guild.me.top_role.position
     assignable_roles = [
@@ -3738,15 +3724,28 @@ async def guild_command(ctx, *, custom_tag: str = None):
         
     view = GuildRoleConfigView(assignable_roles, ctx.author.id)
     
-    if len(msg) > 2000:
-        chunks = [msg[i:i+1900] for i in range(0, len(msg), 1900)]
-        for i, chunk in enumerate(chunks):
-            if i == len(chunks) - 1:
-                await ctx.send(chunk, view=view)
-            else:
-                await ctx.send(chunk)
+    # Send the long role list first
+    if len(msg_roles) > 2000:
+        chunks = [msg_roles[i:i+1900] for i in range(0, len(msg_roles), 1900)]
+        for chunk in chunks:
+            await ctx.send(chunk)
     else:
-        await ctx.send(msg, view=view)
+        await ctx.send(msg_roles)
+        
+    # Build the config panel message
+    config_tag = kayitAyarlari.get(guild_id_str, {}).get("guildTag", "Ayarlanmamış")
+    erkek_rol = kayitAyarlari.get(guild_id_str, {}).get("guildErkekRolId", "Ayarlanmamış")
+    kiz_rol = kayitAyarlari.get(guild_id_str, {}).get("guildKizRolId", "Ayarlanmamış")
+    
+    panel_msg = f"🛠️ **Tag/Guild Ayar Paneli**\n\n"
+    panel_msg += f"🔍 **Aranacak Tag/Metin:** `{config_tag}`\n"
+    panel_msg += f"👨 **Erkek Tag Rolü ID:** `{erkek_rol}`\n"
+    panel_msg += f"👩 **Kız Tag Rolü ID:** `{kiz_rol}`\n\n"
+    
+    if config_tag != "Ayarlanmamış" or erkek_rol != "Ayarlanmamış" or kiz_rol != "Ayarlanmamış":
+        panel_msg = "⚠️ **Sistem Şu Anda Aktif!** Zaten rol veya tag seçilmiş, değiştirmek istersen aşağıdan yeni seçim yapabilir veya kırmızı butona basarak ayarları tamamen sıfırlayıp iptal edebilirsin.\n\n" + panel_msg
+    
+    await ctx.send(panel_msg, view=view)
 
 @bot.command(name="özel", aliases=["ozel"])
 @is_developer()
