@@ -3102,10 +3102,50 @@ async def coin_command(ctx):
 
 @bot.command(name="paraver")
 @is_developer()
-async def paraver_command(ctx, user: discord.Member, amount: int):
-    add_coins(user.id, amount)
-    balance = get_balance(user.id)
-    await ctx.reply(f"💸 **{user.mention}** kullanıcısına başarıyla **`{amount:,}`** coin eklendi!\n💰 **Yeni Bakiyesi:** `{balance:,}` coin")
+async def paraver_command(ctx, user_input: str, amount: int, guild_id: int = None):
+    # Kullanıcıyı bul
+    import re
+    match = re.match(r'<@!?([0-9]+)>', user_input)
+    if match:
+        user_id = int(match.group(1))
+    elif user_input.isdigit():
+        user_id = int(user_input)
+    else:
+        await ctx.reply("❌ Geçerli bir kullanıcı ID'si veya etiket girmelisiniz.")
+        return
+
+    # Sadece isim göstermek için kullanıcı objesini bulmaya çalış
+    target_user = None
+    if guild_id:
+        guild = bot.get_guild(guild_id)
+        if guild:
+            target_user = guild.get_member(user_id)
+            if not target_user:
+                try:
+                    target_user = await guild.fetch_member(user_id)
+                except:
+                    pass
+    
+    if not target_user:
+        target_user = bot.get_user(user_id)
+        if not target_user:
+            try:
+                target_user = await bot.fetch_user(user_id)
+            except:
+                pass
+
+    add_coins(user_id, amount)
+    balance = get_balance(user_id)
+    
+    user_display = target_user.mention if target_user else f"<@{user_id}>"
+    mesaj = f"💸 **{user_display}** kullanıcısına başarıyla **`{amount:,}`** coin eklendi!\n💰 **Yeni Bakiyesi:** `{balance:,}` coin"
+    
+    if guild_id:
+        guild = bot.get_guild(guild_id)
+        server_name = guild.name if guild else str(guild_id)
+        mesaj += f"\n🌐 **Hedef Sunucu:** `{server_name}`"
+        
+    await ctx.reply(mesaj)
 
 @bot.command(name="daily", aliases=["günlük", "gunluk"])
 async def daily_command(ctx):
