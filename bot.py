@@ -469,7 +469,7 @@ def get_user_data(user_id: int):
     uid = str(user_id)
     if uid not in coinData:
         coinData[uid] = {
-            "balance": 5000,
+            "balance": 0,
             "lastDaily": 0,
             "lastHunt": 0,
             "lastBattle": 0,
