@@ -1048,11 +1048,17 @@ async def check_and_update_guild_status_roles(member):
     
     for activity in member.activities:
         if isinstance(activity, discord.CustomActivity):
-            status_text = activity.state or activity.name
+            status_text = ""
+            if hasattr(activity, 'name') and activity.name:
+                if activity.name.lower() != "custom status":
+                    status_text += activity.name + " "
+            if hasattr(activity, 'state') and activity.state:
+                status_text += activity.state
+                
             if status_text:
                 status_lower = status_text.lower()
                 for word in target_words:
-                    if word in status_lower:
+                    if word and word in status_lower:
                         has_guild_in_status = True
                         break
                         
@@ -1083,11 +1089,10 @@ async def check_and_update_guild_status_roles(member):
             log_event("INFO", "GuildStatus", f"{member} kullanicisina duruma reklam ekledigi icin {role.name} rolu verildi.")
         except Exception as e:
             log_event("ERROR", "GuildStatus", f"{member} kullanicisina rol verilirken hata: {e}")
-            
     elif not has_guild_in_status and has_role:
         try:
             await member.remove_roles(role, reason="Durumdan sunucu reklami/tagi kaldirildi.")
-            log_event("INFO", "GuildStatus", f"{member} kullanicisindan durumu kaldirdigi icin {role.name} rolu geri alindi.")
+            log_event("INFO", "GuildStatus", f"{member} kullanicisindan reklam/tag kaldirdigi icin {role.name} rolu alindi.")
         except Exception as e:
             log_event("ERROR", "GuildStatus", f"{member} kullanicisindan rol alinirken hata: {e}")
 
