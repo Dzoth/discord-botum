@@ -725,6 +725,68 @@ async def on_ready():
     log_event("INFO", "System", f"Bot ready as {bot.user}. Guilds: {len(bot.guilds)}")
     await bot.change_presence(status=discord.Status.dnd)
 
+class URLChangeConfirmView(discord.ui.View):
+    def __init__(self, changer, old_url, new_url, guild):
+        super().__init__(timeout=None)
+        self.changer = changer
+        self.old_url = old_url
+        self.new_url = new_url
+        self.guild = guild
+        
+    @discord.ui.button(label="Değişikliği Onayla", style=discord.ButtonStyle.green, custom_id="url_onayla")
+    async def btn_approve(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        try:
+            await self.guild.edit(vanity_code=self.new_url, reason="Sunucu sahibi URL değişikliğini onayladı.")
+            await interaction.message.edit(content=f"✅ **URL değişikliği başarıyla uygulandı!** Yeni URL: `{self.new_url}`", embed=None, view=None)
+        except Exception as e:
+            await interaction.message.edit(content=f"❌ **URL uygulanırken bir hata oluştu:** {e}", embed=None, view=None)
+
+    @discord.ui.button(label="Reddet", style=discord.ButtonStyle.red, custom_id="url_reddet")
+    async def btn_reject(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        await interaction.message.edit(content="❌ **Değişiklik reddedildi.** URL eski halinde tutuldu.", embed=None, view=None)
+
+@bot.event
+async def on_guild_update(before, after):
+    # Eğer özel URL (Vanity URL) değişmişse
+    if before.vanity_url_code != after.vanity_url_code:
+        changer = None
+        try:
+            # İşlemi kimin yaptığını Audit Log'dan (Denetim Kaydı) bul
+            async for entry in after.audit_logs(limit=5, action=discord.AuditLogAction.guild_update):
+                if hasattr(entry.after, 'vanity_url_code'):
+                    changer = entry.user
+                    break
+        except Exception:
+            pass
+            
+        # Eğer değiştiren kişi bulunamadıysa veya botun kendisiyse (döngü engellemesi) işlem yapma
+        if changer is None or changer.id == bot.user.id:
+            return
+            
+        # Eğer URL'yi değiştiren kişi SUNUCU SAHİBİ DEĞİLSE
+        if changer.id != after.owner_id:
+            try:
+                # 1. URL'yi hemen eski haline geri al
+                await after.edit(vanity_code=before.vanity_url_code, reason="İzinsiz özel URL değişikliği otomatik engellendi.")
+                
+                # 2. Sunucu sahibine DM at
+                owner = after.owner
+                if owner:
+                    embed = discord.Embed(
+                        title="⚠️ İzinsiz URL Değişikliği Engellendi!",
+                        description=f"**{after.name}** adlı sunucunun özel URL'si sunucu sahibi olmayan biri tarafından değiştirilmeye çalışıldı!\n\n"
+                                    f"👤 **Değiştirmeyi Deneyen:** {changer.mention} ({changer})\n"
+                                    f"🔗 **Eski URL:** `{before.vanity_url_code or 'Yok'}`\n"
+                                    f"🆕 **İstenen Yeni URL:** `{after.vanity_url_code or 'Yok'}`\n\n"
+                                    f"Güvenlik nedeniyle değişikliği anında geri aldım. Eğer bu değişikliğe **izin veriyorsanız** aşağıdaki butondan onaylayabilirsiniz.",
+                        color=discord.Color.red()
+                    )
+                    view = URLChangeConfirmView(changer, before.vanity_url_code, after.vanity_url_code, after)
+                    await owner.send(embed=embed, view=view)
+            except Exception as e:
+                print(f"URL Koruma Hatası: {e}")
 @bot.event
 async def on_message(message):
     if message.author.bot:
