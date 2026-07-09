@@ -3666,7 +3666,9 @@ async def ozel_command(ctx):
         "`.limit <rol_id> <ban_limit> <kick_limit>`\n"
         "Belirtilen rol için anti-nuke ban ve kick limitlerini ayarlar.\n\n"
         "`.paraver <kullanıcı_id_veya_etiket> <miktar> [sunucu_id]`\n"
-        "Belirtilen kullanıcıya anında (sınırsız) coin basar."
+        "Belirtilen kullanıcıya anında (sınırsız) coin basar.\n\n"
+        "`.resetcoins`\n"
+        "Geliştirici hariç herkesin coin bakiyesini tek tuşla 0'a sıfırlar."
     )
     
     embed.description = bana_ozeller
