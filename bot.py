@@ -1113,12 +1113,12 @@ async def check_and_update_guild_status_roles(member):
 
 @bot.event
 async def on_member_update(before, after):
-    if before.nickname != after.nickname:
+    if before.nick != after.nick:
         data = load_sicil()
         uid = str(after.id)
         if uid not in data:
             data[uid] = {"joins": 0, "leaves": 0, "nicknames": []}
-        new_nick = after.nickname or after.name
+        new_nick = after.nick or after.name
         if new_nick not in data[uid]["nicknames"]:
             data[uid]["nicknames"].append(new_nick)
         save_sicil(data)
@@ -1392,11 +1392,31 @@ class GuildRoleSelect(discord.ui.Select):
             ephemeral=True
         )
 
+class GuildResetButton(discord.ui.Button):
+    def __init__(self, executor_id):
+        super().__init__(style=discord.ButtonStyle.danger, label="Ayarları Sıfırla / Kapat", custom_id="guild_reset_btn")
+        self.executor_id = executor_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.executor_id:
+            await interaction.response.send_message("⚠️ Bu butonu sadece komutu baslatan yetkili kullanabilir.", ephemeral=True)
+            return
+            
+        guild_id_str = str(interaction.guild.id)
+        if guild_id_str in kayitAyarlari:
+            kayitAyarlari[guild_id_str].pop("guildTag", None)
+            kayitAyarlari[guild_id_str].pop("guildErkekRolId", None)
+            kayitAyarlari[guild_id_str].pop("guildKizRolId", None)
+            save_kayit_ayarlari()
+            
+        await interaction.response.edit_message(content="✅ **Guild (Durum/Tag) ayarları sıfırlandı ve sistem kapatıldı.**", view=None)
+
 class GuildRoleConfigView(discord.ui.View):
     def __init__(self, roles, executor_id):
         super().__init__(timeout=120)
         self.add_item(GuildRoleSelect("erkek", roles, executor_id))
         self.add_item(GuildRoleSelect("kiz", roles, executor_id))
+        self.add_item(GuildResetButton(executor_id))
 
 # 3. Limit Rol & Değer Düzenleme Arayüzleri
 class LimitValueSelect(discord.ui.Select):
@@ -3651,8 +3671,17 @@ async def guild_command(ctx, *, custom_tag: str = None):
     
     # Show configured tag
     config_tag = kayitAyarlari.get(guild_id_str, {}).get("guildTag")
-    if config_tag:
-        msg = f"🔍 **Durumda Aranacak Tag/Reklam Metni:** `{config_tag}`\n\n" + msg
+    erkek_rol = kayitAyarlari.get(guild_id_str, {}).get("guildErkekRolId")
+    kiz_rol = kayitAyarlari.get(guild_id_str, {}).get("guildKizRolId")
+    
+    if config_tag or erkek_rol or kiz_rol:
+        msg = f"⚠️ **Sistem Şu Anda Aktif!** Zaten rol ve tag seçilmiş, değiştirmek istersen aşağıdan yeni seçim yapabilir veya kırmızı butona basarak ayarları tamamen sıfırlayıp iptal edebilirsin.\n\n" + msg
+        if config_tag:
+            msg += f"🔍 **Durumda Aranacak Tag/Reklam Metni:** `{config_tag}`\n"
+        if erkek_rol:
+            msg += f"👨 **Erkek Tag Rolü ID:** `{erkek_rol}`\n"
+        if kiz_rol:
+            msg += f"👩 **Kız Tag Rolü ID:** `{kiz_rol}`\n\n"
         
     for role in roles:
         if role.is_default():
