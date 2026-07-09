@@ -1053,7 +1053,12 @@ async def check_and_update_guild_status_roles(member):
                 if activity.name.lower() != "custom status":
                     status_text += activity.name + " "
             if hasattr(activity, 'state') and activity.state:
-                status_text += activity.state
+                status_text += activity.state + " "
+            if hasattr(activity, 'emoji') and activity.emoji:
+                if activity.emoji.name:
+                    status_text += activity.emoji.name + " "
+            
+            print(f"[DEBUG-GUILD] User: {member.name}, CustomStatus: '{status_text}', Targets: {target_words}")
                 
             if status_text:
                 status_lower = status_text.lower()
