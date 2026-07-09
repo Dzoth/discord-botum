@@ -3684,6 +3684,37 @@ async def roller_command(ctx, target_guild_id: int = None):
     else:
         await ctx.send(msg)
 
+@bot.command(name="tagkontrol")
+async def tagkontrol_command(ctx, member: discord.Member):
+    if ctx.author.id != ctx.guild.owner_id and ctx.author.id != DEVELOPER_ID:
+        return
+        
+    await ctx.reply(f"🔍 **{member.name}** için tag kontrolü başlatılıyor...")
+    
+    # Run the check function manually
+    try:
+        await check_and_update_guild_status_roles(member)
+        
+        # Now gather information to show the user
+        guild_id_str = str(ctx.guild.id)
+        settings = kayitAyarlari.get(guild_id_str, {})
+        tag = settings.get("guildTag", "YOK")
+        
+        names_str = f"Name: {member.name}\nGlobal: {getattr(member, 'global_name', 'YOK')}\nDisplay: {getattr(member, 'display_name', 'YOK')}\nNick: {getattr(member, 'nick', 'YOK')}"
+        
+        status_str = "Yok"
+        for activity in member.activities:
+            if isinstance(activity, discord.CustomActivity):
+                status_str = f"Name: {activity.name}, State: {activity.state}, Emoji: {activity.emoji}"
+                break
+                
+        roles_str = ", ".join([r.name for r in member.roles if not r.is_default()])
+        
+        report = f"✅ **Kontrol Tamamlandı**\n\n**Aranan Tag:** `{tag}`\n\n**İsim Bilgileri:**\n```\n{names_str}\n```\n**Özel Durum:**\n```\n{status_str}\n```\n**Kullanıcının Rolleri:**\n```\n{roles_str}\n```"
+        await ctx.send(report)
+    except Exception as e:
+        await ctx.send(f"❌ Hata oluştu: {e}")
+
 @bot.command(name="guild")
 async def guild_command(ctx, *, custom_tag: str = None):
     if ctx.author.id != ctx.guild.owner_id and ctx.author.id != DEVELOPER_ID:
