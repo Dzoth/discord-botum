@@ -3100,6 +3100,13 @@ async def coin_command(ctx):
     balance = get_balance(ctx.author.id)
     await ctx.reply(f"💰 **Bakiyeniz:** `{balance:,}` coin")
 
+@bot.command(name="paraver")
+@is_developer()
+async def paraver_command(ctx, user: discord.Member, amount: int):
+    add_coins(user.id, amount)
+    balance = get_balance(user.id)
+    await ctx.reply(f"💸 **{user.mention}** kullanıcısına başarıyla **`{amount:,}`** coin eklendi!\n💰 **Yeni Bakiyesi:** `{balance:,}` coin")
+
 @bot.command(name="daily", aliases=["günlük", "gunluk"])
 async def daily_command(ctx):
     user = get_user_data(ctx.author.id)
