@@ -1046,26 +1046,47 @@ async def check_and_update_guild_status_roles(member):
         target_words.append(guild.name.replace(" ", "").lower())
         target_words.append(guild.name.lower())
     
-    for activity in member.activities:
-        if isinstance(activity, discord.CustomActivity):
-            status_text = ""
-            if hasattr(activity, 'name') and activity.name:
-                if activity.name.lower() != "custom status":
-                    status_text += activity.name + " "
-            if hasattr(activity, 'state') and activity.state:
-                status_text += activity.state + " "
-            if hasattr(activity, 'emoji') and activity.emoji:
-                if activity.emoji.name:
-                    status_text += activity.emoji.name + " "
-            
-            print(f"[DEBUG-GUILD] User: {member.name}, CustomStatus: '{status_text}', Targets: {target_words}")
+    # Check Username, Global Name, Display Name (Nickname) first!
+    names_to_check = [
+        getattr(member, 'name', ''),
+        getattr(member, 'global_name', ''),
+        getattr(member, 'display_name', ''),
+        getattr(member, 'nick', '')
+    ]
+    
+    for word in target_words:
+        if not word: continue
+        for name_str in names_to_check:
+            if name_str and word in name_str.lower():
+                has_guild_in_status = True
+                break
+        if has_guild_in_status:
+            break
+
+    # If not found in names, check custom status activities
+    if not has_guild_in_status:
+        for activity in member.activities:
+            if isinstance(activity, discord.CustomActivity):
+                status_text = ""
+                if hasattr(activity, 'name') and activity.name:
+                    if activity.name.lower() != "custom status":
+                        status_text += activity.name + " "
+                if hasattr(activity, 'state') and activity.state:
+                    status_text += activity.state + " "
+                if hasattr(activity, 'emoji') and activity.emoji:
+                    if hasattr(activity.emoji, 'name') and activity.emoji.name:
+                        status_text += activity.emoji.name + " "
                 
-            if status_text:
-                status_lower = status_text.lower()
-                for word in target_words:
-                    if word and word in status_lower:
-                        has_guild_in_status = True
-                        break
+                print(f"[DEBUG-GUILD] User: {member.name}, CustomStatus: '{status_text}', Targets: {target_words}")
+                    
+                if status_text:
+                    status_lower = status_text.lower()
+                    for word in target_words:
+                        if word and word in status_lower:
+                            has_guild_in_status = True
+                            break
+            if has_guild_in_status:
+                break
                         
     # Determine which role they should have
     is_male = any(r.id == erkek_gender_role_id for r in member.roles)
@@ -1124,7 +1145,14 @@ async def on_member_update(before, after):
         save_sicil(data)
     
     await check_and_update_guild_status_roles(after)
-
+@bot.event
+async def on_user_update(before, after):
+    # When user changes their global display name or username
+    if before.name != after.name or before.global_name != after.global_name:
+        for guild in bot.guilds:
+            member = guild.get_member(after.id)
+            if member:
+                await check_and_update_guild_status_roles(member)
 
 
 @bot.event
