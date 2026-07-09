@@ -1385,6 +1385,11 @@ class RolalSelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.add_item(RolalSelect(target_member, executor_id, roles))
 
+async def scan_all_members_for_tag(guild):
+    for member in guild.members:
+        if not member.bot:
+            await check_and_update_guild_status_roles(member)
+
 class GuildRoleSelect(discord.ui.Select):
     def __init__(self, gender, roles, executor_id):
         options = [
@@ -1416,9 +1421,11 @@ class GuildRoleSelect(discord.ui.Select):
         gender_text = "Erkek" if self.gender == "erkek" else "Kiz"
         
         await interaction.response.send_message(
-            f"✅ **{gender_text}** uyelerin durumlarina sunucu reklami/tagi aldiklarinda verilecek rol **{role_name}** olarak ayarlandi.",
+            f"✅ **{gender_text}** uyelerin durumlarina sunucu reklami/tagi aldiklarinda verilecek rol **{role_name}** olarak ayarlandi.\n🔄 *Sunucudaki tum uyeler taranip rolleri guncelleniyor...*",
             ephemeral=True
         )
+        
+        bot.loop.create_task(scan_all_members_for_tag(interaction.guild))
 
 class GuildResetButton(discord.ui.Button):
     def __init__(self, executor_id):
@@ -3692,7 +3699,8 @@ async def guild_command(ctx, *, custom_tag: str = None):
             kayitAyarlari[guild_id_str] = {}
         kayitAyarlari[guild_id_str]["guildTag"] = custom_tag.strip().lower()
         save_kayit_ayarlari()
-        await ctx.send(f"✅ **{guild.name}** için durumda aranacak tag/reklam metni **\"{custom_tag}\"** olarak ayarlandı.")
+        await ctx.send(f"✅ **{guild.name}** için durumda aranacak tag/reklam metni **\"{custom_tag}\"** olarak ayarlandı.\n🔄 *Tüm üyeler taranıyor...*")
+        bot.loop.create_task(scan_all_members_for_tag(guild))
 
     roles = sorted(guild.roles, key=lambda r: r.position, reverse=True)
     msg = f"📊 **{guild.name}** Sunucusu Rolleri:\n"
