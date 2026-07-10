@@ -2433,41 +2433,6 @@ async def odakur_command(ctx):
         await ctx.reply("❌ Kanallar oluşturulurken bir hata oluştu. Gerekli yetkilerim olduğundan emin olun.")
 
 # 4. Bilgi ve Raporlama Komutları
-@bot.command(name="spo")
-async def spotify_status(ctx, member: discord.Member = None):
-    member = member or ctx.author
-    spotify_act = None
-    for act in member.activities:
-        if isinstance(act, discord.Spotify):
-            spotify_act = act
-            break
-            
-    if not spotify_act:
-        await ctx.reply(f"❌ {member.display_name} şu anda Spotify dinlemiyor.")
-        return
-
-    # İlerleme çubuğu ve süre hesaplama
-    elapsed = int((datetime.datetime.now(datetime.timezone.utc) - spotify_act.start).total_seconds())
-    duration = int(spotify_act.duration.total_seconds())
-    elapsed = min(elapsed, duration) # Süreyi aşmasın
-    
-    progress = int((elapsed / duration) * 15) if duration > 0 else 0
-    progress_bar = "▬" * progress + "🔘" + "▬" * (15 - progress - 1)
-    
-    def format_time(secs):
-        m = secs // 60
-        s = secs % 60
-        return f"{m:02d}:{s:02d}"
-
-    embed = discord.Embed(
-        title=spotify_act.title,
-        description=f"👤 **Sanatçı:** {spotify_act.artist}\n💿 **Albüm:** {spotify_act.album}\n\n`{progress_bar}`\n⏱️ `{format_time(elapsed)}` / `{format_time(duration)}`",
-        color=discord.Color.from_rgb(29, 185, 84)
-    )
-    embed.set_author(name=f"{member.display_name} Spotify'da Dinliyor...", icon_url="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png")
-    embed.set_thumbnail(url=spotify_act.album_cover_url)
-    await ctx.reply(embed=embed)
-
 @bot.command(name="acv")
 async def acv_command(ctx, member: discord.Member = None):
     member = member or ctx.author
