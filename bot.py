@@ -3118,14 +3118,81 @@ async def adamasmaca_command(ctx):
     await ctx.reply(f"🎮 **Adam Asmaca Oyunu Başladı!**\nKelime: `{display}` (Kelime {len(random_word)} harfli)\n💡 *Tahmin etmek için doğrudan tek bir harf yazın.*\n" + HANGMAN_STAGES[0])
 
 # --- ROL YAPMA / EĞLENCE KOMUTLARI ---
+ACTION_GIF_FALLBACKS = {
+    "kiss": [
+        "https://media.tenor.com/OXCV_qL-V60AAAAC/anime-kiss.gif",
+        "https://media.tenor.com/ueEABWH-IkEAAAAC/anime-kiss-couple.gif",
+        "https://media.tenor.com/Lh7kShCb8OEAAAAC/anime-kiss.gif",
+    ],
+    "hug": [
+        "https://media.tenor.com/OXCV_qL-V60AAAAC/anime-hug.gif",
+        "https://media.tenor.com/7yc2GRBI9ksAAAAC/anime-hug.gif",
+        "https://media.tenor.com/JFPCbwdGJcgAAAAC/anime-hug.gif",
+    ],
+    "pat": [
+        "https://media.tenor.com/E6fMkQRZBsUAAAAC/pat-anime.gif",
+        "https://media.tenor.com/sGBsEh5OHUYAAAAC/anime-pat.gif",
+        "https://media.tenor.com/3TPoerIE7OEAAAAC/head-pat.gif",
+    ],
+    "slap": [
+        "https://media.tenor.com/Ws6Dm1ZR4MgAAAAC/anime-slap.gif",
+        "https://media.tenor.com/UaajgIjJbS4AAAAC/slap-anime.gif",
+        "https://media.tenor.com/MVhgkbVgjYMAAAAC/anime-slap.gif",
+    ],
+    "kill": [
+        "https://media.tenor.com/DFBXMgeZzEMAAAAC/anime-kill.gif",
+        "https://media.tenor.com/OmSCPFHlRNoAAAAC/anime-die.gif",
+        "https://media.tenor.com/0C7gKAAzFMwAAAAC/anime-death.gif",
+    ],
+}
+
+ACTION_COLORS = {
+    "kiss": discord.Color.from_rgb(255, 105, 180),  # Hot pink
+    "hug": discord.Color.from_rgb(255, 182, 193),   # Light pink
+    "pat": discord.Color.from_rgb(255, 223, 186),    # Peach
+    "slap": discord.Color.from_rgb(255, 69, 0),      # Red-orange
+    "kill": discord.Color.from_rgb(139, 0, 0),       # Dark red
+}
+
+async def fetch_action_gif(action_name):
+    """Fetch anime GIF from nekos.life API, fallback to hardcoded list"""
+    api_map = {
+        "kiss": "kiss",
+        "hug": "hug",
+        "pat": "pat",
+        "slap": "slap",
+        "kill": "slap",  # nekos.life doesn't have kill, use slap as base
+    }
+    endpoint = api_map.get(action_name, "hug")
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://nekos.life/api/v2/img/{endpoint}", timeout=aiohttp.ClientTimeout(total=3)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data.get("url")
+    except Exception:
+        pass
+    # Fallback
+    return random.choice(ACTION_GIF_FALLBACKS.get(action_name, ACTION_GIF_FALLBACKS["hug"]))
+
 async def execute_action(ctx, target_str, cmd_name, action_cfg):
     target_id = resolve_user_id(target_str) if target_str else None
+    gif_url = await fetch_action_gif(cmd_name)
+    color = ACTION_COLORS.get(cmd_name, discord.Color.blurple())
     
     if not target_id or target_id == ctx.author.id:
-        await ctx.reply(action_cfg["self"])
+        embed = discord.Embed(description=action_cfg["self"], color=color)
+        embed.set_image(url=gif_url)
+        await ctx.reply(embed=embed)
         return
-        
-    await ctx.reply(f"💞 {ctx.author.mention}, <@{target_id}> {action_cfg['text']}")
+    
+    embed = discord.Embed(
+        description=f"💞 {ctx.author.mention}, <@{target_id}> {action_cfg['text']}",
+        color=color
+    )
+    embed.set_image(url=gif_url)
+    await ctx.reply(embed=embed)
 
 @bot.command(name="kiss")
 async def kiss_command(ctx, target: str = None):
