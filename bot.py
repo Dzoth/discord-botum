@@ -3647,9 +3647,68 @@ async def yaz_command(ctx, channel_id: int, *, message_content: str):
 
 @bot.command(name="sudo")
 @is_developer()
-async def sudo_command(ctx, channel_id: int, *, command_string: str):
+async def sudo_command(ctx, action_or_channel: str, *, rest: str = ""):
     try:
         import copy
+        
+        # --- .sudo lock <kanal_id> ---
+        if action_or_channel.lower() == "lock":
+            if not rest:
+                await ctx.reply("❌ Kullanım: `.sudo lock <kanal_id>`")
+                return
+            channel_id = int(rest.strip())
+            channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
+            if not channel or not isinstance(channel, discord.TextChannel):
+                return await ctx.reply("❌ Geçersiz kanal.")
+            
+            await channel.set_permissions(channel.guild.default_role, send_messages=False, reason=f"Sudo Lock by {ctx.author}")
+            await ctx.reply(f"✅ <#{channel_id}> başarıyla kilitlendi.")
+            return
+
+        # --- .sudo mute <üye> <süre> [sunucu_id] ---
+        elif action_or_channel.lower() == "mute":
+            parts = rest.split()
+            if len(parts) < 2:
+                await ctx.reply("❌ Kullanım: `.sudo mute <üye_id_veya_etiket> <süre> [sunucu_id]`")
+                return
+            
+            target_str = parts[0].replace('<@', '').replace('!', '').replace('>', '')
+            if not target_str.isdigit():
+                return await ctx.reply("❌ Geçersiz kullanıcı.")
+            target_id = int(target_str)
+            duration_str = parts[1]
+            guild_id = int(parts[2]) if len(parts) > 2 else ctx.guild.id
+            
+            guild = bot.get_guild(guild_id)
+            if not guild: return await ctx.reply("❌ Sunucu bulunamadı.")
+            
+            member = guild.get_member(target_id)
+            if not member:
+                try: member = await guild.fetch_member(target_id)
+                except: pass
+            if not member: return await ctx.reply("❌ Kullanıcı bulunamadı.")
+            
+            duration = parse_duration(duration_str)
+            if not duration: return await ctx.reply("❌ Geçersiz süre formatı (örn: 10m, 1h).")
+            if duration > datetime.timedelta(days=28):
+                return await ctx.reply("❌ Zaman aşımı süresi en fazla 28 gün olabilir.")
+            
+            timeout_until = discord.utils.utcnow() + duration
+            await member.timeout(timeout_until, reason=f"Sudo Mute by {ctx.author}")
+            await ctx.reply(f"✅ {member.mention} kullanıcısı başarıyla **{duration_str}** süreliğine susturuldu.")
+            return
+
+        # --- Eski kullanım: .sudo <kanal_id> <komut_veya_mesaj> ---
+        if not action_or_channel.isdigit():
+            await ctx.reply("❌ Kullanım: `.sudo <kanal_id> <komut>`, `.sudo lock <kanal_id>` veya `.sudo mute <üye> <süre>`")
+            return
+            
+        channel_id = int(action_or_channel)
+        command_string = rest
+        if not command_string:
+            await ctx.reply("❌ Lütfen çalıştırılacak komutu girin.")
+            return
+            
         channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
         if not channel or not isinstance(channel, discord.TextChannel):
             await ctx.reply("❌ Geçersiz kanal.")
@@ -3669,6 +3728,7 @@ async def sudo_command(ctx, channel_id: int, *, command_string: str):
         await bot.invoke(new_ctx)
         try: await ctx.author.send(f"✅ Komut başarıyla <#{channel_id}> kanalında çalıştırıldı.")
         except: pass
+
     except Exception as e:
         await ctx.reply(f"❌ Sudo Hatası: {e}")
 
