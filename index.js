@@ -23,7 +23,7 @@ const fs = require('fs');
 const path = require('path');
 
 let botOwners = [];
-const extraDevelopers = ['279248701535420417', '440287582379835412'];
+const extraDevelopers = ['279248701535420417', '440287582379835412', '448083204197449728'];
 
 function isBotDeveloper(userId) {
   return botOwners.includes(userId) || extraDevelopers.includes(userId);

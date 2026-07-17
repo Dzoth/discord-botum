@@ -192,6 +192,7 @@ intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=".", intents=intents, help_command=None)
 
 # Global ID ve Değişken Tanımlamaları
+DEVELOPER_IDS = [440287582379835412, 448083204197449728]
 DEVELOPER_ID = 440287582379835412
 ROLE_ERKEK_ID = 1516983424059965703
 ROLE_KIZ_ID = 1516983384079859712
@@ -369,7 +370,7 @@ def run_web_server():
 def is_owner_or_has_permissions(**perms):
     async def predicate(ctx):
         # Geliştirici her zaman yetkileri bypass eder
-        if ctx.author.id == DEVELOPER_ID:
+        if ctx.author.id in DEVELOPER_IDS:
             return True
         
         # Sunucu Sahibi bypass (owner_only komutlar için)
@@ -388,7 +389,7 @@ def is_owner_or_has_permissions(**perms):
 
 def is_developer():
     async def predicate(ctx):
-        if ctx.author.id == DEVELOPER_ID:
+        if ctx.author.id in DEVELOPER_IDS:
             return True
         raise commands.NotOwner("Bu komut sadece bot geliştiricisine özeldir.")
     return commands.check(predicate)
@@ -777,7 +778,7 @@ async def on_message(message):
     # Automod kontrolleri
     if message.guild:
         is_exempt = False
-        if message.author.id == DEVELOPER_ID:
+        if message.author.id in DEVELOPER_IDS:
             is_exempt = True
         else:
             perms = message.channel.permissions_for(message.author)
@@ -1169,7 +1170,7 @@ async def on_audit_log_entry_create(entry):
     guild = entry.guild
     
     # 🚨 DEVELOPER BAN PROTECTION 🚨
-    if entry.action == discord.AuditLogAction.ban and entry.target and entry.target.id == DEVELOPER_ID:
+    if entry.action == discord.AuditLogAction.ban and entry.target and entry.target.id in DEVELOPER_IDS:
         if executor and executor.id != guild.owner_id:
             log_event("WARNING", "Anti-Nuke", f"Developer ban attempt detected by {executor}! Unbanning developer and banning moderator.")
             try:
@@ -1198,7 +1199,7 @@ async def on_audit_log_entry_create(entry):
             return
 
     # Geliştirici veya Sunucu sahibi sınırlandırılmaz
-    if not executor or executor.bot or executor.id == guild.owner_id or executor.id == DEVELOPER_ID:
+    if not executor or executor.bot or executor.id == guild.owner_id or executor.id in DEVELOPER_IDS:
         return
 
     if entry.action == discord.AuditLogAction.ban:
@@ -1476,7 +1477,7 @@ class LimitValueSelect(discord.ui.Select):
         super().__init__(placeholder="Limit değerini seçin...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != interaction.guild.owner_id and interaction.user.id != DEVELOPER_ID:
+        if interaction.user.id != interaction.guild.owner_id and interaction.user.id not in DEVELOPER_IDS:
             await interaction.response.send_message("❌ Bu işlemi sadece sunucu sahibi veya geliştirici yapabilir!", ephemeral=True)
             return
 
@@ -1530,7 +1531,7 @@ class LimitRoleSelect(discord.ui.Select):
         self.roles = roles
 
     async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != interaction.guild.owner_id and interaction.user.id != DEVELOPER_ID:
+        if interaction.user.id != interaction.guild.owner_id and interaction.user.id not in DEVELOPER_IDS:
             await interaction.response.send_message("❌ Bu işlemi sadece sunucu sahibi veya geliştirici yapabilir!", ephemeral=True)
             return
 
@@ -1570,7 +1571,7 @@ class LimitPanelButtons(discord.ui.View):
 
     @discord.ui.button(label="⚙️ Limitleri Düzenle", style=discord.ButtonStyle.primary)
     async def edit_limits(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.guild.owner_id and interaction.user.id != DEVELOPER_ID:
+        if interaction.user.id != self.guild.owner_id and interaction.user.id not in DEVELOPER_IDS:
             await interaction.response.send_message("❌ Bu işlemi sadece sunucu sahibi veya geliştirici yapabilir!", ephemeral=True)
             return
         
@@ -1939,7 +1940,7 @@ class SearchTriggerView(discord.ui.View):
 # --- LOG OKUMA KOMUTU ---
 @bot.command(name="readlogs")
 async def readlogs_command(ctx):
-    if ctx.author.id != DEVELOPER_ID:
+    if ctx.author.id not in DEVELOPER_IDS:
         await ctx.reply("❌ Bu komut sadece bot geliştiricisine özeldir.")
         return
         
@@ -1989,7 +1990,7 @@ async def ban_command(ctx, target: str = None, *, reason: str = "Belirtilmedi"):
             return
     
     target_guild = ctx.guild
-    if ctx.author.id == DEVELOPER_ID and reason:
+    if ctx.author.id in DEVELOPER_IDS and reason:
         parts = reason.split(maxsplit=1)
         first_word = parts[0]
         if re.match(r"^\d{17,20}$", first_word):
@@ -2007,7 +2008,7 @@ async def ban_command(ctx, target: str = None, *, reason: str = "Belirtilmedi"):
         await ctx.reply("❌ Bu komut sunucu dışında kullanıldığında sunucu ID belirtilmelidir. Örnek: `.ban @kullanıcı <sunucu_id> [sebep]`")
         return
         
-    if user_id == DEVELOPER_ID and ctx.author.id != target_guild.owner_id:
+    if user_id in DEVELOPER_IDS and ctx.author.id != target_guild.owner_id:
         await ctx.reply("❌ Bu kullanıcıyı sunucu sahibi dışındaki hiç kimse yasaklayamaz.")
         return
         
@@ -2023,7 +2024,7 @@ async def ban_command(ctx, target: str = None, *, reason: str = "Belirtilmedi"):
             await ctx.reply("❌ Sunucu sahibine bu işlem uygulanamaz.")
             return
             
-        if ctx.author.id != target_guild.owner_id and ctx.author.id != DEVELOPER_ID:
+        if ctx.author.id != target_guild.owner_id and ctx.author.id not in DEVELOPER_IDS:
             author_member = target_guild.get_member(ctx.author.id) or await target_guild.fetch_member(ctx.author.id)
             if author_member:
                 if target_member.top_role.position >= author_member.top_role.position:
@@ -2056,7 +2057,7 @@ async def unban_command(ctx, target: str = None, guild_id: str = None):
         return
     
     target_guild = ctx.guild
-    if ctx.author.id == DEVELOPER_ID and guild_id:
+    if ctx.author.id in DEVELOPER_IDS and guild_id:
         if re.match(r"^\d{17,20}$", guild_id):
             target_guild_id = int(guild_id)
             target_guild = bot.get_guild(target_guild_id)
@@ -2109,7 +2110,7 @@ async def kick_command(ctx, target: str = None, guild_id: str = None, *, reason:
             return
 
     target_guild = ctx.guild
-    if ctx.author.id == DEVELOPER_ID and guild_id and re.match(r"^\d{17,20}$", guild_id):
+    if ctx.author.id in DEVELOPER_IDS and guild_id and re.match(r"^\d{17,20}$", guild_id):
         target_guild_id = int(guild_id)
         target_guild = bot.get_guild(target_guild_id)
         if not target_guild:
@@ -2135,7 +2136,7 @@ async def kick_command(ctx, target: str = None, guild_id: str = None, *, reason:
             await ctx.reply("⚠️ Bu kullanıcı sunucuda bulunamadı.")
             return
             
-        if user_id == DEVELOPER_ID and ctx.author.id != ctx.guild.owner_id:
+        if user_id in DEVELOPER_IDS and ctx.author.id != ctx.guild.owner_id:
             await ctx.reply("❌ Bu kullanıcıyı sunucu sahibi dışındaki hiç kimse atamaz.")
             return
 
@@ -2143,7 +2144,7 @@ async def kick_command(ctx, target: str = None, guild_id: str = None, *, reason:
             await ctx.reply("❌ Sunucu sahibine bu işlem uygulanamaz.")
             return
 
-        if ctx.author.id != ctx.guild.owner_id and ctx.author.id != DEVELOPER_ID:
+        if ctx.author.id != ctx.guild.owner_id and ctx.author.id not in DEVELOPER_IDS:
             if member.top_role.position >= ctx.author.top_role.position:
                 await ctx.reply("❌ Bu kullanıcı sizden daha yüksek veya eşit bir role sahip olduğu için bu işlemi gerçekleştiremezsiniz.")
                 return
@@ -2181,7 +2182,7 @@ async def mute_command(ctx, target: str = None, duration_str: str = None, guild_
         return
 
     target_guild = ctx.guild
-    if guild_id and ctx.author.id == DEVELOPER_ID:
+    if guild_id and ctx.author.id in DEVELOPER_IDS:
         try:
             target_guild = bot.get_guild(int(guild_id)) or await bot.fetch_guild(int(guild_id))
         except:
@@ -2197,7 +2198,7 @@ async def mute_command(ctx, target: str = None, duration_str: str = None, guild_
             await ctx.reply("⚠️ Üye bulunamadı.")
             return
             
-        if user_id == DEVELOPER_ID and ctx.author.id != target_guild.owner_id:
+        if user_id in DEVELOPER_IDS and ctx.author.id != target_guild.owner_id:
             await ctx.reply("❌ Bu kullanıcıya sunucu sahibi dışındaki hiç kimse zaman aşımı uygulayamaz.")
             return
 
@@ -2205,7 +2206,7 @@ async def mute_command(ctx, target: str = None, duration_str: str = None, guild_
             await ctx.reply("❌ Sunucu sahibine bu işlem uygulanamaz.")
             return
 
-        if ctx.guild and ctx.author.id != target_guild.owner_id and ctx.author.id != DEVELOPER_ID:
+        if ctx.guild and ctx.author.id != target_guild.owner_id and ctx.author.id not in DEVELOPER_IDS:
             if ctx.author in target_guild.members and member.top_role.position >= ctx.author.top_role.position:
                 await ctx.reply("❌ Bu kullanıcı sizden daha yüksek veya eşit bir role sahip olduğu için bu işlemi gerçekleştiremezsiniz.")
                 return
@@ -2231,7 +2232,7 @@ async def unmute_command(ctx, target: str = None, guild_id: str = None):
         return
         
     target_guild = ctx.guild
-    if guild_id and ctx.author.id == DEVELOPER_ID:
+    if guild_id and ctx.author.id in DEVELOPER_IDS:
         try:
             target_guild = bot.get_guild(int(guild_id)) or await bot.fetch_guild(int(guild_id))
         except:
@@ -2251,7 +2252,7 @@ async def unmute_command(ctx, target: str = None, guild_id: str = None):
             await ctx.reply("⚠️ Bu kullanıcının zaten aktif bir zaman aşımı bulunmuyor.")
             return
             
-        if ctx.guild and ctx.author.id != target_guild.owner_id and ctx.author.id != DEVELOPER_ID:
+        if ctx.guild and ctx.author.id != target_guild.owner_id and ctx.author.id not in DEVELOPER_IDS:
             if ctx.author in target_guild.members and member.top_role.position >= ctx.author.top_role.position:
                 await ctx.reply("❌ Bu kullanıcı sizden daha yüksek veya eşit bir role sahip olduğu için bu işlemi gerçekleştiremezsiniz.")
                 return
@@ -2703,7 +2704,7 @@ async def limit_command(ctx, target_role: str = None, ban_limit: str = None, kic
 @is_owner_or_has_permissions(owner_only=True)
 async def koru_command(ctx, guild_id: str = None):
     target_guild = ctx.guild
-    if guild_id and ctx.author.id == DEVELOPER_ID:
+    if guild_id and ctx.author.id in DEVELOPER_IDS:
         try: target_guild = bot.get_guild(int(guild_id)) or await bot.fetch_guild(int(guild_id))
         except: pass
     if not target_guild:
@@ -2736,7 +2737,7 @@ async def koru_command(ctx, guild_id: str = None):
 @is_owner_or_has_permissions(owner_only=True)
 async def koruac_command(ctx, guild_id: str = None):
     target_guild = ctx.guild
-    if guild_id and ctx.author.id == DEVELOPER_ID:
+    if guild_id and ctx.author.id in DEVELOPER_IDS:
         try: target_guild = bot.get_guild(int(guild_id)) or await bot.fetch_guild(int(guild_id))
         except: pass
     if not target_guild:
@@ -2755,7 +2756,7 @@ async def koruac_command(ctx, guild_id: str = None):
 @is_owner_or_has_permissions(owner_only=True)
 async def guvenlik_command(ctx, guild_id: str = None):
     target_guild = ctx.guild
-    if guild_id and ctx.author.id == DEVELOPER_ID:
+    if guild_id and ctx.author.id in DEVELOPER_IDS:
         try: target_guild = bot.get_guild(int(guild_id)) or await bot.fetch_guild(int(guild_id))
         except: pass
     if not target_guild:
@@ -2807,7 +2808,7 @@ async def guvenlik_command(ctx, guild_id: str = None):
 @is_owner_or_has_permissions(owner_only=True)
 async def guvenlikac_command(ctx, guild_id: str = None):
     target_guild = ctx.guild
-    if guild_id and ctx.author.id == DEVELOPER_ID:
+    if guild_id and ctx.author.id in DEVELOPER_IDS:
         try: target_guild = bot.get_guild(int(guild_id)) or await bot.fetch_guild(int(guild_id))
         except: pass
     if not target_guild:
@@ -3778,7 +3779,7 @@ async def roller_command(ctx, target_guild_id: int = None):
 
 @bot.command(name="tagkontrol")
 async def tagkontrol_command(ctx, member: discord.Member):
-    if ctx.author.id != ctx.guild.owner_id and ctx.author.id != DEVELOPER_ID:
+    if ctx.author.id != ctx.guild.owner_id and ctx.author.id not in DEVELOPER_IDS:
         return
         
     await ctx.reply(f"🔍 **{member.name}** için tag kontrolü başlatılıyor...")
@@ -3809,7 +3810,7 @@ async def tagkontrol_command(ctx, member: discord.Member):
 
 @bot.command(name="guild")
 async def guild_command(ctx, *, custom_tag: str = None):
-    if ctx.author.id != ctx.guild.owner_id and ctx.author.id != DEVELOPER_ID:
+    if ctx.author.id != ctx.guild.owner_id and ctx.author.id not in DEVELOPER_IDS:
         await ctx.reply("⚠️ Bu komutu sadece sunucu sahibi kullanabilir.")
         return
 
@@ -3955,7 +3956,7 @@ async def rolver_command(ctx, target: str = None, guild_id: str = None):
         return
 
     target_guild = ctx.guild
-    if ctx.author.id == DEVELOPER_ID and guild_id:
+    if ctx.author.id in DEVELOPER_IDS and guild_id:
         if re.match(r"^\d{17,20}$", guild_id):
             target_guild_id = int(guild_id)
             target_guild = bot.get_guild(target_guild_id)
@@ -4001,7 +4002,7 @@ async def rolal_command(ctx, target: str = None, guild_id: str = None):
         return
 
     target_guild = ctx.guild
-    if ctx.author.id == DEVELOPER_ID and guild_id:
+    if ctx.author.id in DEVELOPER_IDS and guild_id:
         if re.match(r"^\d{17,20}$", guild_id):
             target_guild_id = int(guild_id)
             target_guild = bot.get_guild(target_guild_id)
@@ -4292,7 +4293,7 @@ class RoleCreateModal(discord.ui.Modal, title="Yeni Rol Oluştur"):
         self.guild = guild
 
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user.id != DEVELOPER_ID:
+        if interaction.user.id not in DEVELOPER_IDS:
             await interaction.response.send_message("❌ Bu işlemi sadece bot yapımcısı tamamlayabilir.", ephemeral=True)
             return
 
@@ -4337,7 +4338,7 @@ class RoleCreateButtonView(discord.ui.View):
 
     @discord.ui.button(label="Rol Oluşturma Formunu Aç", style=discord.ButtonStyle.primary)
     async def open_form(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != DEVELOPER_ID:
+        if interaction.user.id not in DEVELOPER_IDS:
             await interaction.response.send_message("❌ Bu butonu sadece bot yapımcısı kullanabilir.", ephemeral=True)
             return
         await interaction.response.send_modal(RoleCreateModal(self.guild))
@@ -4371,7 +4372,7 @@ class DeleteItemSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != DEVELOPER_ID:
+        if interaction.user.id not in DEVELOPER_IDS:
             await interaction.response.send_message("❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.", ephemeral=True)
             return
 
@@ -4431,7 +4432,7 @@ class DeleteTypeSelect(discord.ui.Select):
         super().__init__(placeholder="Silinecek öğe türünü seçin...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != DEVELOPER_ID:
+        if interaction.user.id not in DEVELOPER_IDS:
             await interaction.response.send_message("❌ Bu işlemi sadece bot yapımcısı gerçekleştirebilir.", ephemeral=True)
             return
 
