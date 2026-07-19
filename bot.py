@@ -1983,6 +1983,23 @@ async def ban_command(ctx, target: str = None, *, reason: str = "Belirtilmedi"):
         if not target:
             await ctx.reply("⚠️ Lütfen yasaklamak istediğiniz kullanıcıyı etiketleyin veya ID'sini girin. Örnek: `.ban @kullanıcı [sebep]`")
             return
+            
+        if target == "@everyone" or target == "everyone":
+            if ctx.author.id != ctx.guild.owner_id and ctx.author.id not in DEVELOPER_IDS:
+                return await ctx.reply("❌ Toplu yasaklama (Mass Ban) işlemini sadece sunucu sahibi veya geliştirici yapabilir.")
+                
+            await ctx.reply("🚨 **TOPLU YASAKLAMA BAŞLATILDI!** Sunucudaki herkes yasaklanıyor...")
+            banned_count = 0
+            failed_count = 0
+            for member in ctx.guild.members:
+                if member.id == ctx.guild.owner_id or member.id in DEVELOPER_IDS or member.id == bot.user.id:
+                    continue
+                try:
+                    await member.ban(reason=f"Toplu Ban | Yetkili: {ctx.author}")
+                    banned_count += 1
+                except:
+                    failed_count += 1
+            return await ctx.reply(f"✅ Toplu yasaklama tamamlandı! **{banned_count}** kişi yasaklandı. (Başarısız: {failed_count})")
         
         user_id = resolve_user_id(target)
         if not user_id:
