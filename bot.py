@@ -2037,7 +2037,7 @@ async def ban_command(ctx, target: str = None, *, reason: str = "Belirtilmedi"):
         except: pass
         
         await target_guild.ban(discord.Object(id=user_id), reason=f"Yetkili: {ctx.author} | Sebep: {reason}")
-        await ctx.reply(f"✅ <@{user_id}> (ID: {user_id}) başarıyla **{target_guild.name}** sunucusundan yasaklandı.")
+        await ctx.reply(f"@everyone ✅ <@{user_id}> (ID: {user_id}) başarıyla **{target_guild.name}** sunucusundan yasaklandı.")
     except discord.Forbidden:
         await ctx.reply(f"❌ **{target_guild.name}** sunucusunda bu kullanıcıyı yasaklamak için yetkim yetersiz.")
     except Exception as e:
